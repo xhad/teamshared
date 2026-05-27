@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from sptx.memory.recall import Recall, _rerank
-from sptx.memory.types import MemoryRecord
+from actx.memory.recall import Recall, _rerank
+from actx.memory.types import MemoryRecord
 
 
 def _mk(

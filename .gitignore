@@ -25,13 +25,14 @@ htmlcov/
 coverage.xml
 *.cover
 
-# sptx local state (tokens, keys, distill queue)
-.sptx/
+# actx local state (tokens, keys, distill queue)
+.actx/
 data/
 infra/data/
 
 .DS_Store
 .idea/
 .vscode/
+.cursor/
 
 agent-tools/

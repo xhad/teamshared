@@ -16,14 +16,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastmcp import Client, FastMCP
 
-from sptx.memory.types import RecallResult
-from sptx.server.state import ServerState, clear_state, set_state
-from sptx.server.tools import register_tools
+from actx.memory.types import RecallResult
+from actx.server.state import ServerState, clear_state, set_state
+from actx.server.tools import register_tools
 
 
 @pytest.fixture
 def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
-    mcp = FastMCP(name="sptx-test")
+    mcp = FastMCP(name="actx-test")
     register_tools(mcp)
 
     working = MagicMock()

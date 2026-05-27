@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from sptx.distill.prompts import SUMMARIZER_SYSTEM, build_user_message
-from sptx.distill.summarizer import SummarizerError, _parse_json
+from actx.distill.prompts import SUMMARIZER_SYSTEM, build_user_message
+from actx.distill.summarizer import SummarizerError, _parse_json
 
 
 def test_build_user_message_includes_agent_and_topic() -> None:

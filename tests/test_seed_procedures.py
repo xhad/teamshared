@@ -1,12 +1,12 @@
 """Sanity-check the bundled starter procedures.
 
-These are loaded into every fresh deployment via ``sptx seed`` so they have
+These are loaded into every fresh deployment via ``actx seed`` so they have
 to be parseable, non-empty, and uniquely named.
 """
 
 from __future__ import annotations
 
-from sptx.seed.procedures import STARTER_PROCEDURES
+from actx.seed.procedures import STARTER_PROCEDURES
 
 
 def test_all_names_unique() -> None:
@@ -16,7 +16,7 @@ def test_all_names_unique() -> None:
 
 def test_every_procedure_has_required_fields() -> None:
     for name, description, steps_md, tags in STARTER_PROCEDURES:
-        assert name and name.startswith("sptx.")
+        assert name and name.startswith("actx.")
         assert description
         assert steps_md.startswith("# ")
         assert "ritual" in tags or "recall" in tags

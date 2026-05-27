@@ -13,15 +13,15 @@ services:
     network_mode: host
     ports: !reset []
     environment:
-      SPTX_PG_HOST: 127.0.0.1
-      SPTX_PG_PORT: ${SPTX_PG_PORT:-5432}
-      SPTX_REDIS_URL: redis://127.0.0.1:6379/0
-      SPTX_OLLAMA_BASE_URL: http://127.0.0.1:11434
+      ACTX_PG_HOST: 127.0.0.1
+      ACTX_PG_PORT: ${ACTX_PG_PORT:-5432}
+      ACTX_REDIS_URL: redis://127.0.0.1:6379/0
+      ACTX_OLLAMA_BASE_URL: http://127.0.0.1:11434
 
   distiller:
     network_mode: host
     environment:
-      SPTX_PG_HOST: 127.0.0.1
-      SPTX_PG_PORT: ${SPTX_PG_PORT:-5432}
-      SPTX_REDIS_URL: redis://127.0.0.1:6379/0
-      SPTX_OLLAMA_BASE_URL: http://127.0.0.1:11434
+      ACTX_PG_HOST: 127.0.0.1
+      ACTX_PG_PORT: ${ACTX_PG_PORT:-5432}
+      ACTX_REDIS_URL: redis://127.0.0.1:6379/0
+      ACTX_OLLAMA_BASE_URL: http://127.0.0.1:11434

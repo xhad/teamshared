@@ -1,13 +1,13 @@
-# sptx
+# actx
 
 Multi-pillar agent memory, exposed as an MCP server. One shared brain for
 Cursor agent, Hermes, OpenClaw, and anything else that speaks MCP.
 
 By default `memory_recall` and `memory_episodes_list` are **unscoped on
 durable pillars** (semantic, episodic, procedural): every agent on the same
-sptx deployment sees every other agent's writes. This is the team-wide
+actx deployment sees every other agent's writes. This is the team-wide
 context-sharing model — point all your teammates' agents at one Tailnet-
-exposed sptx, mint a token per `(human, agent)` pair, and everyone reads
+exposed actx, mint a token per `(human, agent)` pair, and everyone reads
 the same brain. Working memory is the one exception: it stays caller-scoped
 because it's per-session conversation buffer, not durable knowledge.
 
@@ -20,17 +20,19 @@ The pillars (see [`plan.md`](plan.md)):
 - **Semantic** — Mem0-backed facts, preferences, user profiles.
 - **Episodic** — Mem0-backed timeline of summarized sessions.
 - **Procedural** — Postgres-backed versioned, agent-callable skills.
+- **Graph** — optional Neo4j-backed explicit relationships (`memory_graph_*`).
 
 ```mermaid
 flowchart LR
-  Cursor[Cursor] -->|MCP HTTP| sptx
-  Hermes[Hermes] -->|MCP HTTP| sptx
-  OpenClaw[OpenClaw] -->|MCP HTTP| sptx
-  subgraph sptx [sptx server]
+  Cursor[Cursor] -->|MCP HTTP| actx
+  Hermes[Hermes] -->|MCP HTTP| actx
+  OpenClaw[OpenClaw] -->|MCP HTTP| actx
+  subgraph actx [actx server]
     Tools[MCP tools]
     Tools --> Working[(Redis)]
     Tools --> Mem0[Mem0]
     Tools --> Procs[(Postgres)]
+    Tools -.->|optional| Neo4j[(Neo4j)]
     Mem0 --> PG[(pgvector)]
   end
 ```
@@ -38,23 +40,23 @@ flowchart LR
 ## Quick start
 
 ```bash
-# 1. Bring up Postgres + Redis + sptx server + distiller
+# 1. Bring up Postgres + Redis + actx server + distiller
 cp .env.example .env   # then edit (esp. OPENAI_API_KEY)
 docker compose -f infra/docker-compose.yml up -d --build
 
 # 2. Apply migrations
-docker compose -f infra/docker-compose.yml run --rm server sptx migrate
+docker compose -f infra/docker-compose.yml run --rm server actx migrate
 
 # 3. Mint a token for each agent
-docker compose -f infra/docker-compose.yml run --rm server sptx token mint cursor
-docker compose -f infra/docker-compose.yml run --rm server sptx token mint hermes
-docker compose -f infra/docker-compose.yml run --rm server sptx token mint openclaw
+docker compose -f infra/docker-compose.yml run --rm server actx token mint cursor
+docker compose -f infra/docker-compose.yml run --rm server actx token mint hermes
+docker compose -f infra/docker-compose.yml run --rm server actx token mint openclaw
 
 # 4. Probe health
 curl -fsS http://localhost:8077/health | jq
 ```
 
-**Ollama in Docker:** set `SPTX_EMBED_PROVIDER` / `SPTX_LLM_PROVIDER` to `ollama` in `.env` and
+**Ollama in Docker:** set `ACTX_EMBED_PROVIDER` / `ACTX_LLM_PROVIDER` to `ollama` in `.env` and
 run Ollama on the host. The image installs the `ollama` Python client Mem0 needs at startup.
 
 - **macOS / Docker Desktop:** `make build` — compose sets `host.docker.internal` via `extra_hosts`.
@@ -67,11 +69,11 @@ run Ollama on the host. The image installs the `ollama` Python client Mem0 needs
 
 ## Connect your agents
 
-Snippets live in [`src/sptx/clients/`](src/sptx/clients):
+Snippets live in [`src/actx/clients/`](src/actx/clients):
 
-- [Cursor](src/sptx/clients/cursor.mcp.json)
-- [Hermes](src/sptx/clients/hermes.config.yaml)
-- [OpenClaw](src/sptx/clients/openclaw.md)
+- [Cursor](src/actx/clients/cursor.mcp.json)
+- [Hermes](src/actx/clients/hermes.config.yaml)
+- [OpenClaw](src/actx/clients/openclaw.md)
 
 Each agent gets its own bearer token so memory writes are attributable.
 
@@ -102,11 +104,11 @@ pip install -e '.[dev]'
 # In one terminal: backing stores
 docker compose -f infra/docker-compose.yml up -d postgres redis
 
-sptx migrate
-sptx token mint dev
-sptx serve --transport http       # uses .env
+actx migrate
+actx token mint dev
+actx serve --transport http       # uses .env
 # or, for direct stdio debugging:
-sptx serve --transport stdio
+actx serve --transport stdio
 ```
 
 ## Deploying
@@ -122,14 +124,14 @@ Two reference topologies live in [`infra/`](infra):
   [`railway.distiller.toml`](infra/railway.distiller.toml). Bearer auth on
   a public domain replaces Tailscale.
 
-Both are starting points; sptx is just an HTTP/MCP service plus a worker,
+Both are starting points; actx is just an HTTP/MCP service plus a worker,
 so it'll run anywhere that can host two containers and reach Postgres +
 Redis.
 
 ## Layout
 
 ```
-src/sptx/
+src/actx/
   config.py            settings (env-driven)
   auth.py              per-agent bearer tokens + middleware
   logging.py           structlog setup
@@ -147,7 +149,7 @@ src/sptx/
     app.py             FastMCP + Starlette assembly
     tools.py           @mcp.tool definitions
     state.py           shared per-process singletons
-  cli.py               `sptx` entrypoint (typer)
+  cli.py               `actx` entrypoint (typer)
   clients/             config snippets per agent
 infra/
   Dockerfile
@@ -155,7 +157,7 @@ infra/
   migrations/001_init.sql
   tailscale.example.md
   telemetry.py         optional OTel hooks
-  seed/                bundled starter procedures (`sptx seed`)
+  seed/                bundled starter procedures (`actx seed`)
 infra/
   Dockerfile
   docker-compose.yml
@@ -176,12 +178,12 @@ tests/                 pytest suite
 - **Telemetry**: install `pip install '.[otel]'` and set
   `OTEL_EXPORTER_OTLP_ENDPOINT`. Spans are emitted for every ASGI request.
 - **Eval**: `python eval/run.py` against a running server (set
-  `SPTX_EVAL_URL`/`SPTX_EVAL_TOKEN`). `--in-memory` runs the framework
+  `ACTX_EVAL_URL`/`ACTX_EVAL_TOKEN`). `--in-memory` runs the framework
   against a fake bag-of-words retriever -- useful for CI structure checks but
   not for real recall quality.
 - **Cross-agent smoke**: `python scripts/smoke_cross_agent.py --in-memory`
-  for CI; live with `SPTX_SMOKE_URL`/`SPTX_SMOKE_TOKEN_CURSOR`/`SPTX_SMOKE_TOKEN_HERMES`.
-- **Graph store (Neo4j)**: opt-in. Set `SPTX_NEO4J_ENABLED=true`, uncomment the
+  for CI; live with `ACTX_SMOKE_URL`/`ACTX_SMOKE_TOKEN_CURSOR`/`ACTX_SMOKE_TOKEN_HERMES`.
+- **Graph store (Neo4j)**: opt-in. Set `ACTX_NEO4J_ENABLED=true`, uncomment the
   `neo4j` service in `infra/docker-compose.yml`, and install the extra:
   `pip install '.[neo4j]'`. Exposes `memory_graph_relate` and `memory_graph_related`.
 

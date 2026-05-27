@@ -1,4 +1,4 @@
-# Exposing sptx over Tailscale
+# Exposing actx over Tailscale
 
 The intended production topology: one always-on host runs the compose stack;
 every agent (laptop, desktop, phone) reaches it over Tailscale. No public
@@ -14,9 +14,9 @@ token per agent.
    ```
 2. Bring up the stack:
    ```bash
-   cd sptx
+   cd actx
    docker compose -f infra/docker-compose.yml up -d --build
-   docker compose -f infra/docker-compose.yml run --rm server sptx migrate
+   docker compose -f infra/docker-compose.yml run --rm server actx migrate
    ```
 3. Expose the MCP port over Tailscale Serve (HTTPS terminated by Tailscale):
    ```bash
@@ -32,15 +32,15 @@ sudo tailscale up
 ```
 
 Mint a per-agent token on the host and paste it into the agent's MCP config.
-See [`src/sptx/clients/`](../src/sptx/clients) for the exact snippets.
+See [`src/actx/clients/`](../src/actx/clients) for the exact snippets.
 
 ## Renewing tokens
 
 Tokens are static. To rotate, run on the host:
 
 ```bash
-sptx token revoke <prefix>
-sptx token mint <agent>
+actx token revoke <prefix>
+actx token mint <agent>
 ```
 
 …then update the new value in that agent's config.

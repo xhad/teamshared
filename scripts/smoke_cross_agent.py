@@ -11,12 +11,12 @@ read" behavior, hermes will only see hermes' writes and this smoke fails.
 
 Run mode 1 -- against a live HTTP server (recommended):
 
-    sptx token mint cursor
-    sptx token mint hermes
+    actx token mint cursor
+    actx token mint hermes
     # Paste the tokens into env:
-    export SPTX_SMOKE_URL=http://localhost:8077/mcp/
-    export SPTX_SMOKE_TOKEN_CURSOR=sptx_...
-    export SPTX_SMOKE_TOKEN_HERMES=sptx_...
+    export ACTX_SMOKE_URL=http://localhost:8077/mcp/
+    export ACTX_SMOKE_TOKEN_CURSOR=actx_...
+    export ACTX_SMOKE_TOKEN_HERMES=actx_...
     python scripts/smoke_cross_agent.py
 
 Run mode 2 -- in-memory (no server, mocked stores). Useful for CI:
@@ -102,13 +102,13 @@ async def _run_in_memory() -> int:
 
     from fastmcp import FastMCP
 
-    from sptx.config import Settings
-    from sptx.memory.recall import Recall
-    from sptx.memory.types import MemoryRecord
-    from sptx.server.state import ServerState, clear_state, set_state
-    from sptx.server.tools import register_tools
+    from actx.config import Settings
+    from actx.memory.recall import Recall
+    from actx.memory.types import MemoryRecord
+    from actx.server.state import ServerState, clear_state, set_state
+    from actx.server.tools import register_tools
 
-    mcp = FastMCP(name="sptx-smoke")
+    mcp = FastMCP(name="actx-smoke")
     register_tools(mcp)
 
     seen_writes: list[dict[str, Any]] = []
@@ -280,12 +280,12 @@ def main() -> None:
         rc = asyncio.run(_run_in_memory())
         sys.exit(rc)
 
-    url = os.environ.get("SPTX_SMOKE_URL")
-    cursor_token = os.environ.get("SPTX_SMOKE_TOKEN_CURSOR")
-    hermes_token = os.environ.get("SPTX_SMOKE_TOKEN_HERMES")
+    url = os.environ.get("ACTX_SMOKE_URL")
+    cursor_token = os.environ.get("ACTX_SMOKE_TOKEN_CURSOR")
+    hermes_token = os.environ.get("ACTX_SMOKE_TOKEN_HERMES")
     if not (url and cursor_token and hermes_token):
         print(
-            "Missing SPTX_SMOKE_URL / SPTX_SMOKE_TOKEN_CURSOR / SPTX_SMOKE_TOKEN_HERMES "
+            "Missing ACTX_SMOKE_URL / ACTX_SMOKE_TOKEN_CURSOR / ACTX_SMOKE_TOKEN_HERMES "
             "(or pass --in-memory)."
         )
         sys.exit(2)

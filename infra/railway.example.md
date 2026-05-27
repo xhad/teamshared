@@ -1,17 +1,17 @@
-# Deploying sptx on Railway
+# Deploying actx on Railway
 
 Compose stack →  four Railway services in one project. No Tailscale, no
-self-hosted TLS, no Caddy. Bearer-token auth in [`sptx.auth`](../src/sptx/auth.py)
+self-hosted TLS, no Caddy. Bearer-token auth in [`actx.auth`](../src/actx/auth.py)
 is what protects the public endpoint, so don't disable it.
 
 ```
 ┌────────────────┐  ┌──────────┐  ┌──────────────┐  ┌────────────┐
-│ pgvector       │  │ Redis    │  │ sptx-server  │  │ sptx-      │
+│ pgvector       │  │ Redis    │  │ actx-server  │  │ actx-      │
 │ (template)     │  │ (template│  │ (Dockerfile) │  │ distiller  │
 │                │  │  )       │  │  public ✓    │  │ (Dockerfile│
 │  DATABASE_URL  │  │ REDIS_URL│  │  /data vol   │  │   command  │
 │                │  │          │  │  pre-deploy  │  │   override)│
-│                │  │          │  │  sptx migrate│  │            │
+│                │  │          │  │  actx migrate│  │            │
 └────────┬───────┘  └─────┬────┘  └──────┬───────┘  └─────┬──────┘
          │                │              │                │
          └────────────────┴──────────────┴────────────────┘
@@ -31,12 +31,12 @@ is what protects the public endpoint, so don't disable it.
 
 2. **Redis**: deploy Railway's official Redis template. No customization needed.
 
-## 2. Deploy `sptx-server`
+## 2. Deploy `actx-server`
 
 1. New service → "Deploy from GitHub repo" → pick this repo.
 2. **Settings → Source**: set the *Custom config file path* to
    `/infra/railway.server.toml`. That single file pins the Dockerfile path,
-   healthcheck, and pre-deploy `sptx migrate` so this guide doesn't drift
+   healthcheck, and pre-deploy `actx migrate` so this guide doesn't drift
    from reality.
 3. **Settings → Volumes**: attach a 1 GB volume mounted at `/data`. This is
    where `tokens.json` lives — without it your bearer tokens evaporate on
@@ -48,32 +48,32 @@ is what protects the public endpoint, so don't disable it.
 
    | Var | Value |
    |---|---|
-   | `SPTX_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
-   | `SPTX_REDIS_URL` | `${{Redis.REDIS_URL}}` |
-   | `SPTX_TOKENS_FILE` | `/data/tokens.json` |
+   | `ACTX_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
+   | `ACTX_REDIS_URL` | `${{Redis.REDIS_URL}}` |
+   | `ACTX_TOKENS_FILE` | `/data/tokens.json` |
    | `OPENAI_API_KEY` | *(your key)* |
-   | `SPTX_EMBED_MODEL` | `text-embedding-3-small` *(default; only override if you want a different embedding model)* |
-   | `SPTX_LLM_MODEL` | `gpt-4o-mini` *(default)* |
+   | `ACTX_EMBED_MODEL` | `text-embedding-3-small` *(default; only override if you want a different embedding model)* |
+   | `ACTX_LLM_MODEL` | `gpt-4o-mini` *(default)* |
 
    `PORT` is injected by Railway automatically; `Settings.port` reads it as
-   a fallback so you don't need `SPTX_PORT`.
+   a fallback so you don't need `ACTX_PORT`.
 
 6. Deploy. The pre-deploy hook applies migrations idempotently; the main
-   process is `sptx serve --transport http`.
+   process is `actx serve --transport http`.
 
-## 3. Deploy `sptx-distiller`
+## 3. Deploy `actx-distiller`
 
 1. New service → same GitHub repo.
 2. **Settings → Source**: custom config file path
    `/infra/railway.distiller.toml`. (Different toml because the start
-   command is `sptx worker`, no public port, no healthcheck.)
-3. **Variables**: same as the server *minus* `SPTX_TOKENS_FILE` (the
+   command is `actx worker`, no public port, no healthcheck.)
+3. **Variables**: same as the server *minus* `ACTX_TOKENS_FILE` (the
    distiller doesn't read tokens):
 
    | Var | Value |
    |---|---|
-   | `SPTX_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
-   | `SPTX_REDIS_URL` | `${{Redis.REDIS_URL}}` |
+   | `ACTX_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
+   | `ACTX_REDIS_URL` | `${{Redis.REDIS_URL}}` |
    | `OPENAI_API_KEY` | *(your key)* |
 
 4. Deploy. The distiller polls the `working:distill:queue` Redis list and
@@ -81,20 +81,20 @@ is what protects the public endpoint, so don't disable it.
 
 ## 4. Mint tokens
 
-After the first successful deploy of `sptx-server`:
+After the first successful deploy of `actx-server`:
 
 ```bash
 # install Railway CLI: https://docs.railway.app/develop/cli
 railway link                       # pick this project
-railway run --service sptx-server sptx token mint cursor
-railway run --service sptx-server sptx token mint hermes
-railway run --service sptx-server sptx token mint openclaw
+railway run --service actx-server actx token mint cursor
+railway run --service actx-server actx token mint hermes
+railway run --service actx-server actx token mint openclaw
 ```
 
 Each call prints the raw token once. Paste it into the agent's MCP config
-(see [`src/sptx/clients/`](../src/sptx/clients) for snippets) — replace
+(see [`src/actx/clients/`](../src/actx/clients) for snippets) — replace
 `https://memory.tailXXXX.ts.net/mcp` with your Railway public domain
-(`https://sptx-server-production.up.railway.app/mcp`).
+(`https://actx-server-production.up.railway.app/mcp`).
 
 ## 5. Verify
 
@@ -118,8 +118,8 @@ A subsequent `memory_remember` settles it.
   stateless, all state lives in Postgres/Redis. Just don't run multiple
   distiller replicas; the queue is `BLPOP`-based and one consumer is the
   intended topology.
-- **Rotating tokens**: same as anywhere — `sptx token revoke <prefix>`
-  then `sptx token mint <agent>` over `railway run`, push the new token
+- **Rotating tokens**: same as anywhere — `actx token revoke <prefix>`
+  then `actx token mint <agent>` over `railway run`, push the new token
   to the agent.
 - **Costs**: a single-replica server + distiller + pgvector + Redis on
   Railway's Hobby plan runs around $5–15/mo depending on Mem0 churn.

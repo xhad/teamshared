@@ -9,8 +9,8 @@ import fakeredis.aioredis
 import pytest
 import pytest_asyncio
 
-from sptx.memory import working as working_mod
-from sptx.memory.working import DISTILL_QUEUE_KEY, WorkingMemory
+from actx.memory import working as working_mod
+from actx.memory.working import DISTILL_QUEUE_KEY, WorkingMemory
 
 
 @pytest_asyncio.fixture

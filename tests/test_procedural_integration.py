@@ -3,7 +3,7 @@
 Run against the dev compose stack::
 
     docker compose -f infra/docker-compose.yml up -d postgres
-    sptx migrate
+    actx migrate
     pytest -m integration tests/test_procedural_integration.py
 """
 
@@ -15,17 +15,17 @@ from collections.abc import AsyncIterator
 import pytest
 import pytest_asyncio
 
-from sptx.memory.procedural import ProceduralStore
+from actx.memory.procedural import ProceduralStore
 
 pytestmark = pytest.mark.integration
 
 
 def _dsn() -> str:
-    user = os.environ.get("SPTX_PG_USER", "sptx")
-    password = os.environ.get("SPTX_PG_PASSWORD", "sptx")
-    host = os.environ.get("SPTX_PG_HOST", "localhost")
-    port = os.environ.get("SPTX_PG_PORT", "5432")
-    db = os.environ.get("SPTX_PG_DB", "sptx")
+    user = os.environ.get("ACTX_PG_USER", "actx")
+    password = os.environ.get("ACTX_PG_PASSWORD", "actx")
+    host = os.environ.get("ACTX_PG_HOST", "localhost")
+    port = os.environ.get("ACTX_PG_PORT", "5432")
+    db = os.environ.get("ACTX_PG_DB", "actx")
     return f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
 

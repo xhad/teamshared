@@ -6,10 +6,10 @@ checks the documented ``expect_any`` strings against the returned content.
 
 Two run modes:
 
-- Live HTTP (recommended). Requires a running ``sptx serve`` and a token::
+- Live HTTP (recommended). Requires a running ``actx serve`` and a token::
 
-    export SPTX_EVAL_URL=http://localhost:8077/mcp/
-    export SPTX_EVAL_TOKEN=sptx_...
+    export ACTX_EVAL_URL=http://localhost:8077/mcp/
+    export ACTX_EVAL_TOKEN=actx_...
     python eval/run.py
 
 - In-memory MCP without backing stores. The fake retriever is a simple
@@ -117,13 +117,13 @@ async def _main_in_memory(scenarios_path: Path) -> int:
 
     from fastmcp import FastMCP
 
-    from sptx.config import Settings
-    from sptx.memory.recall import Recall
-    from sptx.memory.types import MemoryRecord
-    from sptx.server.state import ServerState, clear_state, set_state
-    from sptx.server.tools import register_tools
+    from actx.config import Settings
+    from actx.memory.recall import Recall
+    from actx.memory.types import MemoryRecord
+    from actx.server.state import ServerState, clear_state, set_state
+    from actx.server.tools import register_tools
 
-    mcp = FastMCP(name="sptx-eval")
+    mcp = FastMCP(name="actx-eval")
     register_tools(mcp)
 
     store: list[dict[str, Any]] = []
@@ -195,10 +195,10 @@ def main() -> None:
     if args.in_memory:
         sys.exit(asyncio.run(_main_in_memory(args.scenarios)))
 
-    url = os.environ.get("SPTX_EVAL_URL")
-    token = os.environ.get("SPTX_EVAL_TOKEN")
+    url = os.environ.get("ACTX_EVAL_URL")
+    token = os.environ.get("ACTX_EVAL_TOKEN")
     if not (url and token):
-        print("Missing SPTX_EVAL_URL / SPTX_EVAL_TOKEN (or pass --in-memory).")
+        print("Missing ACTX_EVAL_URL / ACTX_EVAL_TOKEN (or pass --in-memory).")
         sys.exit(2)
     sys.exit(asyncio.run(_main_http(url, token, args.scenarios)))
 

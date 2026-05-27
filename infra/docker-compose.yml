@@ -1,27 +1,27 @@
-# sptx local/dev stack.
+# actx local/dev stack.
 #
 # Bring up:   docker compose -f infra/docker-compose.yml up -d
-# Migrate:    docker compose -f infra/docker-compose.yml run --rm server sptx migrate
-# Mint token: docker compose -f infra/docker-compose.yml run --rm server sptx token mint cursor
+# Migrate:    docker compose -f infra/docker-compose.yml run --rm server actx migrate
+# Mint token: docker compose -f infra/docker-compose.yml run --rm server actx token mint cursor
 #
 # Production deployment is the same image, fronted by Tailscale Serve or
 # Caddy/Traefik for TLS. See infra/tailscale.example.md.
 
-name: sptx
+name: actx
 
 services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: ${SPTX_PG_USER:-sptx}
-      POSTGRES_PASSWORD: ${SPTX_PG_PASSWORD:-sptx}
-      POSTGRES_DB: ${SPTX_PG_DB:-sptx}
+      POSTGRES_USER: ${ACTX_PG_USER:-actx}
+      POSTGRES_PASSWORD: ${ACTX_PG_PASSWORD:-actx}
+      POSTGRES_DB: ${ACTX_PG_DB:-actx}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "${SPTX_PG_PORT:-5432}:5432"
+      - "${ACTX_PG_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${SPTX_PG_USER:-sptx} -d ${SPTX_PG_DB:-sptx}"]
+      test: ["CMD-SHELL", "pg_isready -U ${ACTX_PG_USER:-actx} -d ${ACTX_PG_DB:-actx}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -51,25 +51,25 @@ services:
       redis:
         condition: service_healthy
     environment:
-      SPTX_PG_HOST: postgres
-      SPTX_PG_PORT: 5432
-      SPTX_PG_USER: ${SPTX_PG_USER:-sptx}
-      SPTX_PG_PASSWORD: ${SPTX_PG_PASSWORD:-sptx}
-      SPTX_PG_DB: ${SPTX_PG_DB:-sptx}
-      SPTX_REDIS_URL: redis://redis:6379/0
-      SPTX_TOKENS_FILE: /data/tokens.json
-      SPTX_AUTH_DISABLED: ${SPTX_AUTH_DISABLED:-false}
+      ACTX_PG_HOST: postgres
+      ACTX_PG_PORT: 5432
+      ACTX_PG_USER: ${ACTX_PG_USER:-actx}
+      ACTX_PG_PASSWORD: ${ACTX_PG_PASSWORD:-actx}
+      ACTX_PG_DB: ${ACTX_PG_DB:-actx}
+      ACTX_REDIS_URL: redis://redis:6379/0
+      ACTX_TOKENS_FILE: /data/tokens.json
+      ACTX_AUTH_DISABLED: ${ACTX_AUTH_DISABLED:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      SPTX_EMBED_PROVIDER: ${SPTX_EMBED_PROVIDER:-openai}
-      SPTX_EMBED_MODEL: ${SPTX_EMBED_MODEL:-text-embedding-3-small}
-      SPTX_EMBED_DIMS: ${SPTX_EMBED_DIMS:-1536}
-      SPTX_LLM_PROVIDER: ${SPTX_LLM_PROVIDER:-openai}
-      SPTX_LLM_MODEL: ${SPTX_LLM_MODEL:-gpt-4o-mini}
-      SPTX_OLLAMA_BASE_URL: ${SPTX_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      ACTX_EMBED_PROVIDER: ${ACTX_EMBED_PROVIDER:-openai}
+      ACTX_EMBED_MODEL: ${ACTX_EMBED_MODEL:-text-embedding-3-small}
+      ACTX_EMBED_DIMS: ${ACTX_EMBED_DIMS:-1536}
+      ACTX_LLM_PROVIDER: ${ACTX_LLM_PROVIDER:-openai}
+      ACTX_LLM_MODEL: ${ACTX_LLM_MODEL:-gpt-4o-mini}
+      ACTX_OLLAMA_BASE_URL: ${ACTX_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     volumes:
-      - sptxdata:/data
+      - actxdata:/data
     ports:
-      - "${SPTX_PORT:-8077}:8077"
+      - "${ACTX_PORT:-8077}:8077"
 
   distiller:
     build:
@@ -83,29 +83,29 @@ services:
       redis:
         condition: service_healthy
     environment:
-      SPTX_PG_HOST: postgres
-      SPTX_PG_PORT: 5432
-      SPTX_PG_USER: ${SPTX_PG_USER:-sptx}
-      SPTX_PG_PASSWORD: ${SPTX_PG_PASSWORD:-sptx}
-      SPTX_PG_DB: ${SPTX_PG_DB:-sptx}
-      SPTX_REDIS_URL: redis://redis:6379/0
-      SPTX_TOKENS_FILE: /data/tokens.json
+      ACTX_PG_HOST: postgres
+      ACTX_PG_PORT: 5432
+      ACTX_PG_USER: ${ACTX_PG_USER:-actx}
+      ACTX_PG_PASSWORD: ${ACTX_PG_PASSWORD:-actx}
+      ACTX_PG_DB: ${ACTX_PG_DB:-actx}
+      ACTX_REDIS_URL: redis://redis:6379/0
+      ACTX_TOKENS_FILE: /data/tokens.json
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      SPTX_EMBED_PROVIDER: ${SPTX_EMBED_PROVIDER:-openai}
-      SPTX_EMBED_MODEL: ${SPTX_EMBED_MODEL:-text-embedding-3-small}
-      SPTX_EMBED_DIMS: ${SPTX_EMBED_DIMS:-1536}
-      SPTX_LLM_PROVIDER: ${SPTX_LLM_PROVIDER:-openai}
-      SPTX_LLM_MODEL: ${SPTX_LLM_MODEL:-gpt-4o-mini}
-      SPTX_OLLAMA_BASE_URL: ${SPTX_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      ACTX_EMBED_PROVIDER: ${ACTX_EMBED_PROVIDER:-openai}
+      ACTX_EMBED_MODEL: ${ACTX_EMBED_MODEL:-text-embedding-3-small}
+      ACTX_EMBED_DIMS: ${ACTX_EMBED_DIMS:-1536}
+      ACTX_LLM_PROVIDER: ${ACTX_LLM_PROVIDER:-openai}
+      ACTX_LLM_MODEL: ${ACTX_LLM_MODEL:-gpt-4o-mini}
+      ACTX_OLLAMA_BASE_URL: ${ACTX_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     volumes:
-      - sptxdata:/data
-    command: ["sptx", "worker"]
+      - actxdata:/data
+    command: ["actx", "worker"]
 
-  # Optional: enable when SPTX_NEO4J_ENABLED=true and you want the relationship graph.
+  # Optional: enable when ACTX_NEO4J_ENABLED=true and you want the relationship graph.
   # neo4j:
   #   image: neo4j:5
   #   environment:
-  #     NEO4J_AUTH: ${SPTX_NEO4J_USER:-neo4j}/${SPTX_NEO4J_PASSWORD:-neo4j}
+  #     NEO4J_AUTH: ${ACTX_NEO4J_USER:-neo4j}/${ACTX_NEO4J_PASSWORD:-neo4j}
   #   ports:
   #     - "7474:7474"
   #     - "7687:7687"
@@ -115,5 +115,5 @@ services:
 volumes:
   pgdata:
   redisdata:
-  sptxdata:
+  actxdata:
   # neo4jdata:

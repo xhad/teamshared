@@ -6,13 +6,13 @@ import os
 
 import pytest
 
-from sptx.config import Settings, get_settings
+from actx.config import Settings, get_settings
 
 
 def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in list(os.environ):
         if (
-            key.startswith("SPTX_")
+            key.startswith("ACTX_")
             or key in {"PORT", "DATABASE_URL"}
         ):
             monkeypatch.delenv(key, raising=False)
@@ -26,15 +26,15 @@ def test_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.embed_provider == "openai"
     assert s.embed_dims == 1536
     assert s.pg_dsn.startswith("postgresql://")
-    assert s.mem0_collection == "sptx_memories"
+    assert s.mem0_collection == "actx_memories"
     assert s.pg_dsn_override is None
 
 
 def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     _clear_env(monkeypatch)
-    monkeypatch.setenv("SPTX_PORT", "9090")
-    monkeypatch.setenv("SPTX_EMBED_PROVIDER", "ollama")
-    monkeypatch.setenv("SPTX_EMBED_DIMS", "768")
+    monkeypatch.setenv("ACTX_PORT", "9090")
+    monkeypatch.setenv("ACTX_EMBED_PROVIDER", "ollama")
+    monkeypatch.setenv("ACTX_EMBED_DIMS", "768")
     s = Settings(_env_file=None)
     assert s.port == 9090
     assert s.embed_provider == "ollama"
@@ -44,8 +44,8 @@ def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_settings_port_falls_back_to_unprefixed_PORT(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Railway/Render/Fly/Heroku inject ``$PORT``; sptx must honor it without
-    a per-platform shim. ``SPTX_PORT`` keeps precedence when both are set so
+    """Railway/Render/Fly/Heroku inject ``$PORT``; actx must honor it without
+    a per-platform shim. ``ACTX_PORT`` keeps precedence when both are set so
     intentional overrides aren't silently shadowed.
     """
     _clear_env(monkeypatch)
@@ -54,12 +54,12 @@ def test_settings_port_falls_back_to_unprefixed_PORT(
     assert s.port == 4242
 
 
-def test_settings_sptx_port_wins_over_PORT(
+def test_settings_actx_port_wins_over_PORT(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_env(monkeypatch)
     monkeypatch.setenv("PORT", "4242")
-    monkeypatch.setenv("SPTX_PORT", "9090")
+    monkeypatch.setenv("ACTX_PORT", "9090")
     s = Settings(_env_file=None)
     assert s.port == 9090
 
@@ -75,16 +75,16 @@ def test_settings_pg_dsn_override_hydrates_parts(
     """
     _clear_env(monkeypatch)
     monkeypatch.setenv(
-        "SPTX_PG_DSN",
-        "postgresql://railway-user:s3cret@db.railway.internal:6543/sptx_prod",
+        "ACTX_PG_DSN",
+        "postgresql://railway-user:s3cret@db.railway.internal:6543/actx_prod",
     )
     s = Settings(_env_file=None)
-    assert s.pg_dsn == "postgresql://railway-user:s3cret@db.railway.internal:6543/sptx_prod"
+    assert s.pg_dsn == "postgresql://railway-user:s3cret@db.railway.internal:6543/actx_prod"
     assert s.pg_user == "railway-user"
     assert s.pg_password == "s3cret"
     assert s.pg_host == "db.railway.internal"
     assert s.pg_port == 6543
-    assert s.pg_db == "sptx_prod"
+    assert s.pg_db == "actx_prod"
 
 
 def test_settings_database_url_alias_works(
@@ -109,7 +109,7 @@ def test_settings_pg_dsn_url_decodes_credentials(
     """
     _clear_env(monkeypatch)
     monkeypatch.setenv(
-        "SPTX_PG_DSN",
+        "ACTX_PG_DSN",
         "postgresql://user%40corp:p%40ss%2Fword@h:5432/d",
     )
     s = Settings(_env_file=None)
@@ -121,6 +121,6 @@ def test_settings_rejects_non_postgres_scheme(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_env(monkeypatch)
-    monkeypatch.setenv("SPTX_PG_DSN", "mysql://u:p@h:3306/d")
+    monkeypatch.setenv("ACTX_PG_DSN", "mysql://u:p@h:3306/d")
     with pytest.raises(ValueError, match="postgres"):
         Settings(_env_file=None)
