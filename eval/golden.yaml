@@ -1,0 +1,64 @@
+# Golden recall set.
+#
+# Each entry is a small scenario: a list of `seeds` to write, then `probes`
+# (queries + expected substrings that should appear in the top-k recall).
+# The runner (`eval/run.py`) writes each seed via `memory_remember`, then runs
+# each probe through `memory_recall` and checks whether the expected substring
+# appears in any of the returned record contents.
+
+scenarios:
+  - name: vector-db-preference
+    description: A stated preference should resurface on a related query.
+    seeds:
+      - kind: preference
+        content: "User prefers pgvector over Pinecone for vector storage."
+        subject: user
+        tags: [preference, vectordb]
+    probes:
+      - query: "Which vector database does the user like?"
+        expect_any:
+          - "pgvector"
+      - query: "vector store preference"
+        expect_any:
+          - "pgvector"
+
+  - name: deploy-decision
+    description: A captured decision should be recallable from a related query.
+    seeds:
+      - kind: fact
+        content: "We will deploy via GitHub Actions, not Vercel."
+        tags: [decision, deploy]
+      - kind: fact
+        content: "Production builds run on ubuntu-latest runners."
+        tags: [deploy]
+    probes:
+      - query: "How do we deploy via Vercel or GitHub?"
+        expect_any:
+          - "GitHub Actions"
+      - query: "Where does the build run?"
+        expect_any:
+          - "ubuntu-latest"
+
+  - name: contact-info
+    description: A user-provided fact should be exact-recallable.
+    seeds:
+      - kind: fact
+        content: "The on-call PagerDuty email is oncall@example.com."
+        subject: oncall
+        tags: [contact]
+    probes:
+      - query: "What's the on-call email?"
+        expect_any:
+          - "oncall@example.com"
+
+  - name: project-name
+    description: A name should resurface on synonym queries.
+    seeds:
+      - kind: fact
+        content: "The shared memory service is called sptx."
+        subject: sptx
+        tags: [project]
+    probes:
+      - query: "What is the name of our memory service?"
+        expect_any:
+          - "sptx"
