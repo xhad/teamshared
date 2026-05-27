@@ -54,6 +54,17 @@ docker compose -f infra/docker-compose.yml run --rm server sptx token mint openc
 curl -fsS http://localhost:8077/health | jq
 ```
 
+**Ollama in Docker:** set `SPTX_EMBED_PROVIDER` / `SPTX_LLM_PROVIDER` to `ollama` in `.env` and
+run Ollama on the host. The image installs the `ollama` Python client Mem0 needs at startup.
+
+- **macOS / Docker Desktop:** `make build` — compose sets `host.docker.internal` via `extra_hosts`.
+- **Linux (host Ollama):** if `curl` from the server container to Ollama times out, use host
+  networking for server + distiller:
+
+  ```bash
+  make build-ollama-host
+  ```
+
 ## Connect your agents
 
 Snippets live in [`src/sptx/clients/`](src/sptx/clients):

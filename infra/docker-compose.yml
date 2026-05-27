@@ -43,6 +43,8 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,6 +75,8 @@ services:
     build:
       context: ..
       dockerfile: infra/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
