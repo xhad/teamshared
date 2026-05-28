@@ -1,4 +1,4 @@
--- actx 001: bootstrap schema for procedural memory and audit.
+-- teamshared 001: bootstrap schema for procedural memory and audit.
 --
 -- The Mem0 schema is owned by Mem0 itself and created automatically the first
 -- time the server connects. This file covers everything we own directly:

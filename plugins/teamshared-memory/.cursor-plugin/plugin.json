@@ -1,0 +1,15 @@
+{
+  "name": "teamshared-memory",
+  "displayName": "teamshared Memory",
+  "version": "0.1.0",
+  "description": "Connect Cursor to the teamshared shared-memory MCP server with wiring, usage rules, and copy-paste client snippets for Hermes and Claude.",
+  "author": {
+    "name": "Sapien"
+  },
+  "license": "MIT",
+  "keywords": ["teamshared", "mcp", "memory", "agent-memory", "shared-brain"],
+  "category": "developer-tools",
+  "tags": ["mcp", "memory", "teamshared"],
+  "rules": "./rules/",
+  "skills": "./skills/"
+}

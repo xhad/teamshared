@@ -11,12 +11,12 @@ read" behavior, hermes will only see hermes' writes and this smoke fails.
 
 Run mode 1 -- against a live HTTP server (recommended):
 
-    actx token mint cursor
-    actx token mint hermes
+    teamshared token mint cursor
+    teamshared token mint hermes
     # Paste the tokens into env:
-    export ACTX_SMOKE_URL=http://localhost:8077/mcp/
-    export ACTX_SMOKE_TOKEN_CURSOR=actx_...
-    export ACTX_SMOKE_TOKEN_HERMES=actx_...
+    export TEAMSHARED_SMOKE_URL=http://localhost:8077/mcp/
+    export TEAMSHARED_SMOKE_TOKEN_CURSOR=teamshared_...
+    export TEAMSHARED_SMOKE_TOKEN_HERMES=teamshared_...
     python scripts/smoke_cross_agent.py
 
 Run mode 2 -- in-memory (no server, mocked stores). Useful for CI:
@@ -102,13 +102,13 @@ async def _run_in_memory() -> int:
 
     from fastmcp import FastMCP
 
-    from actx.config import Settings
-    from actx.memory.recall import Recall
-    from actx.memory.types import MemoryRecord
-    from actx.server.state import ServerState, clear_state, set_state
-    from actx.server.tools import register_tools
+    from teamshared.config import Settings
+    from teamshared.memory.recall import Recall
+    from teamshared.memory.types import MemoryRecord
+    from teamshared.server.state import ServerState, clear_state, set_state
+    from teamshared.server.tools import register_tools
 
-    mcp = FastMCP(name="actx-smoke")
+    mcp = FastMCP(name="teamshared-smoke")
     register_tools(mcp)
 
     seen_writes: list[dict[str, Any]] = []
@@ -169,6 +169,7 @@ async def _run_in_memory() -> int:
             settings=Settings(_env_file=None),
             tokens=MagicMock(),
             working=working,
+            agent_state=MagicMock(),
             semantic_episodic=semantic,
             procedural=procedural,
             recall=recall,
@@ -280,12 +281,12 @@ def main() -> None:
         rc = asyncio.run(_run_in_memory())
         sys.exit(rc)
 
-    url = os.environ.get("ACTX_SMOKE_URL")
-    cursor_token = os.environ.get("ACTX_SMOKE_TOKEN_CURSOR")
-    hermes_token = os.environ.get("ACTX_SMOKE_TOKEN_HERMES")
+    url = os.environ.get("TEAMSHARED_SMOKE_URL")
+    cursor_token = os.environ.get("TEAMSHARED_SMOKE_TOKEN_CURSOR")
+    hermes_token = os.environ.get("TEAMSHARED_SMOKE_TOKEN_HERMES")
     if not (url and cursor_token and hermes_token):
         print(
-            "Missing ACTX_SMOKE_URL / ACTX_SMOKE_TOKEN_CURSOR / ACTX_SMOKE_TOKEN_HERMES "
+            "Missing TEAMSHARED_SMOKE_URL / TEAMSHARED_SMOKE_TOKEN_CURSOR / TEAMSHARED_SMOKE_TOKEN_HERMES "
             "(or pass --in-memory)."
         )
         sys.exit(2)

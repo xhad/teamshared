@@ -1,4 +1,4 @@
-# Exposing actx over Tailscale
+# Exposing teamshared over Tailscale
 
 The intended production topology: one always-on host runs the compose stack;
 every agent (laptop, desktop, phone) reaches it over Tailscale. No public
@@ -14,9 +14,9 @@ token per agent.
    ```
 2. Bring up the stack:
    ```bash
-   cd actx
+   cd teamshared
    docker compose -f infra/docker-compose.yml up -d --build
-   docker compose -f infra/docker-compose.yml run --rm server actx migrate
+   docker compose -f infra/docker-compose.yml run --rm server teamshared migrate
    ```
 3. Expose the MCP port over Tailscale Serve (HTTPS terminated by Tailscale):
    ```bash
@@ -32,15 +32,15 @@ sudo tailscale up
 ```
 
 Mint a per-agent token on the host and paste it into the agent's MCP config.
-See [`src/actx/clients/`](../src/actx/clients) for the exact snippets.
+See [`src/teamshared/clients/`](../src/teamshared/clients) for the exact snippets.
 
 ## Renewing tokens
 
 Tokens are static. To rotate, run on the host:
 
 ```bash
-actx token revoke <prefix>
-actx token mint <agent>
+teamshared token revoke <prefix>
+teamshared token mint <agent>
 ```
 
 …then update the new value in that agent's config.

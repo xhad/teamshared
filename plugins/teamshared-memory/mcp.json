@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "teamshared-memory": {
+      "url": "${env:TEAMSHARED_URL}",
+      "headers": {
+        "Authorization": "Bearer ${env:TEAMSHARED_TOKEN}"
+      }
+    }
+  }
+}

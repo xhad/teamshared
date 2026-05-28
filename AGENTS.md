@@ -1,27 +1,27 @@
-# Working on actx
+# Working on teamshared
 
 Conventions for anything that edits this repo (you, future me, an agent).
 
 ## Architecture in one paragraph
 
-`actx` is an MCP server. Each MCP tool in [`src/actx/server/tools.py`](src/actx/server/tools.py)
-is a thin façade over one of the four pillars in [`src/actx/memory/`](src/actx/memory).
+`teamshared` is an MCP server. Each MCP tool in [`src/teamshared/server/tools.py`](src/teamshared/server/tools.py)
+is a thin façade over one of the four pillars in [`src/teamshared/memory/`](src/teamshared/memory).
 The server fetches its shared resources (Redis client, Mem0 instance, Postgres
-pool) through [`actx.server.state.get_state()`](src/actx/server/state.py).
+pool) through [`teamshared.server.state.get_state()`](src/teamshared/server/state.py).
 The distillation worker is a separate process that reads a Redis queue,
-calls an LLM via [`actx.distill.summarizer`](src/actx/distill/summarizer.py),
+calls an LLM via [`teamshared.distill.summarizer`](src/teamshared/distill/summarizer.py),
 and writes back through the same Mem0 instance.
 
 ## Hard rules
 
 - **No business logic in tool functions.** Tool bodies do (1) resolve agent
-  identity, (2) call into `actx.memory.*`, (3) return a JSON-serializable dict.
+  identity, (2) call into `teamshared.memory.*`, (3) return a JSON-serializable dict.
 - **Mem0 is sync.** Always `await loop.run_in_executor(...)` around its calls.
 - **Add tests before extending the tool surface.** A new tool without a test
   in `tests/` is a regression risk.
 - **Imports at the top of the file.** No inline imports inside functions
-  except inside `actx/cli.py` (where heavy server deps are lazy-loaded so
-  `actx token mint` stays fast) and inside FastMCP lifespan handlers where
+  except inside `teamshared/cli.py` (where heavy server deps are lazy-loaded so
+  `teamshared token mint` stays fast) and inside FastMCP lifespan handlers where
   circular imports otherwise occur.
 - **Exhaustive `match` on `MemoryKind` and `MemoryScope`.** When you add a new
   variant, update every match/switch and rerun mypy.
@@ -32,7 +32,7 @@ and writes back through the same Mem0 instance.
 - **Mem0 returns cosine distance in `score`.** The pgvector backend stores
  *distance* (smaller = better) but `score_and_rank` treats it as similarity
  and silently drops the closest matches below `threshold=0.1`. In
- [`actx/memory/semantic.py`](src/actx/memory/semantic.py) we work around it
+ [`teamshared/memory/semantic.py`](src/teamshared/memory/semantic.py) we work around it
  by passing `threshold=0`, over-fetching with a high `top_k`, and converting
  via `1 - distance` at the boundary. Don't remove that flip without also
  re-checking `score_and_rank` upstream.
@@ -52,9 +52,9 @@ and writes back through the same Mem0 instance.
 
 ## Adding a memory tool
 
-1. Define the schema in [`actx/memory/types.py`](src/actx/memory/types.py).
+1. Define the schema in [`teamshared/memory/types.py`](src/teamshared/memory/types.py).
 2. Add the pillar method (e.g. `WorkingMemory.foo(...)`) with a focused test.
-3. Add the tool in [`actx/server/tools.py`](src/actx/server/tools.py) using
+3. Add the tool in [`teamshared/server/tools.py`](src/teamshared/server/tools.py) using
    typed `Annotated[..., Field(description=...)]` parameters so MCP clients
    get clean descriptors.
 4. Update `README.md`'s tool table.
@@ -68,10 +68,10 @@ docker compose -f infra/docker-compose.yml up -d postgres redis
 pytest -m integration                   # hits real Postgres + Redis
 ```
 
-Integration tests require `ACTX_PG_*` and `ACTX_REDIS_URL` to point at the
+Integration tests require `TEAMSHARED_PG_*` and `TEAMSHARED_REDIS_URL` to point at the
 compose stack (defaults match).
 
-On this machine, actx publishes Postgres on **host port 5433** (`ACTX_PG_PORT=5433`
+On this machine, teamshared publishes Postgres on **host port 5433** (`TEAMSHARED_PG_PORT=5433`
 in `.env`) because `poq-monorepo-postgres-1` already binds 5432. The
 container-internal port stays 5432, so service-to-service traffic over the
 compose network is unaffected — only host-side tools (`pytest -m integration`,
@@ -80,18 +80,18 @@ compose network is unaffected — only host-side tools (`pytest -m integration`,
 Always invoke compose via `make`, or pass `--env-file .env` explicitly.
 `docker compose -f infra/docker-compose.yml ...` without `--env-file` silently
 ignores the repo-root `.env` and falls back to the hardcoded defaults
-(including `ACTX_PG_PORT=5432`, which then collides with `poq`). The Makefile
+(including `TEAMSHARED_PG_PORT=5432`, which then collides with `poq`). The Makefile
 wraps this via `COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml`.
 
 ## Migrations
 
 SQL files in [`infra/migrations/`](infra/migrations) are applied in lexical
-order by `actx migrate` and recorded in `actx_migrations`. Never rewrite an
+order by `teamshared migrate` and recorded in `teamshared_migrations`. Never rewrite an
 applied migration; add a new one.
 
 ## Releasing
 
-Bump `version` in [`pyproject.toml`](pyproject.toml) and `src/actx/__init__.py`,
+Bump `version` in [`pyproject.toml`](pyproject.toml) and `src/teamshared/__init__.py`,
 then `git tag v<x.y.z>`. CI (when added in phase 7) will build and push the
 image.
 

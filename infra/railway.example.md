@@ -1,17 +1,17 @@
-# Deploying actx on Railway
+# Deploying teamshared on Railway
 
 Compose stack →  four Railway services in one project. No Tailscale, no
-self-hosted TLS, no Caddy. Bearer-token auth in [`actx.auth`](../src/actx/auth.py)
+self-hosted TLS, no Caddy. Bearer-token auth in [`teamshared.auth`](../src/teamshared/auth.py)
 is what protects the public endpoint, so don't disable it.
 
 ```
 ┌────────────────┐  ┌──────────┐  ┌──────────────┐  ┌────────────┐
-│ pgvector       │  │ Redis    │  │ actx-server  │  │ actx-      │
+│ pgvector       │  │ Redis    │  │ teamshared-server  │  │ teamshared-      │
 │ (template)     │  │ (template│  │ (Dockerfile) │  │ distiller  │
 │                │  │  )       │  │  public ✓    │  │ (Dockerfile│
 │  DATABASE_URL  │  │ REDIS_URL│  │  /data vol   │  │   command  │
 │                │  │          │  │  pre-deploy  │  │   override)│
-│                │  │          │  │  actx migrate│  │            │
+│                │  │          │  │  teamshared migrate│  │            │
 └────────┬───────┘  └─────┬────┘  └──────┬───────┘  └─────┬──────┘
          │                │              │                │
          └────────────────┴──────────────┴────────────────┘
@@ -31,12 +31,12 @@ is what protects the public endpoint, so don't disable it.
 
 2. **Redis**: deploy Railway's official Redis template. No customization needed.
 
-## 2. Deploy `actx-server`
+## 2. Deploy `teamshared-server`
 
 1. New service → "Deploy from GitHub repo" → pick this repo.
 2. **Settings → Source**: set the *Custom config file path* to
    `/infra/railway.server.toml`. That single file pins the Dockerfile path,
-   healthcheck, and pre-deploy `actx migrate` so this guide doesn't drift
+   healthcheck, and pre-deploy `teamshared migrate` so this guide doesn't drift
    from reality.
 3. **Settings → Volumes**: attach a 1 GB volume mounted at `/data`. This is
    where `tokens.json` lives — without it your bearer tokens evaporate on
@@ -48,32 +48,33 @@ is what protects the public endpoint, so don't disable it.
 
    | Var | Value |
    |---|---|
-   | `ACTX_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
-   | `ACTX_REDIS_URL` | `${{Redis.REDIS_URL}}` |
-   | `ACTX_TOKENS_FILE` | `/data/tokens.json` |
+   | `TEAMSHARED_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
+   | `TEAMSHARED_REDIS_URL` | `${{Redis.REDIS_URL}}` |
+   | `TEAMSHARED_TOKENS_FILE` | `/data/tokens.json` |
+   | `TEAMSHARED_MINT_SECRET` | *(long random string; enables `POST /tokens/mint` for teammates)* |
    | `OPENAI_API_KEY` | *(your key)* |
-   | `ACTX_EMBED_MODEL` | `text-embedding-3-small` *(default; only override if you want a different embedding model)* |
-   | `ACTX_LLM_MODEL` | `gpt-4o-mini` *(default)* |
+   | `TEAMSHARED_EMBED_MODEL` | `text-embedding-3-small` *(default; only override if you want a different embedding model)* |
+   | `TEAMSHARED_LLM_MODEL` | `gpt-4o-mini` *(default)* |
 
    `PORT` is injected by Railway automatically; `Settings.port` reads it as
-   a fallback so you don't need `ACTX_PORT`.
+   a fallback so you don't need `TEAMSHARED_PORT`.
 
 6. Deploy. The pre-deploy hook applies migrations idempotently; the main
-   process is `actx serve --transport http`.
+   process is `teamshared serve --transport http`.
 
-## 3. Deploy `actx-distiller`
+## 3. Deploy `teamshared-distiller`
 
 1. New service → same GitHub repo.
 2. **Settings → Source**: custom config file path
    `/infra/railway.distiller.toml`. (Different toml because the start
-   command is `actx worker`, no public port, no healthcheck.)
-3. **Variables**: same as the server *minus* `ACTX_TOKENS_FILE` (the
+   command is `teamshared worker`, no public port, no healthcheck.)
+3. **Variables**: same as the server *minus* `TEAMSHARED_TOKENS_FILE` (the
    distiller doesn't read tokens):
 
    | Var | Value |
    |---|---|
-   | `ACTX_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
-   | `ACTX_REDIS_URL` | `${{Redis.REDIS_URL}}` |
+   | `TEAMSHARED_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
+   | `TEAMSHARED_REDIS_URL` | `${{Redis.REDIS_URL}}` |
    | `OPENAI_API_KEY` | *(your key)* |
 
 4. Deploy. The distiller polls the `working:distill:queue` Redis list and
@@ -81,20 +82,39 @@ is what protects the public endpoint, so don't disable it.
 
 ## 4. Mint tokens
 
-After the first successful deploy of `actx-server`:
+After the first successful deploy of `teamshared-server`, set a long random
+`TEAMSHARED_MINT_SECRET` on the server service so teammates can self-serve tokens
+over HTTPS (recommended for public domains):
+
+```bash
+# on the server (one-time admin setup)
+# TEAMSHARED_MINT_SECRET=<long random string>   # Railway variable
+
+# each teammate
+curl -fsS -X POST 'https://<your-railway-domain>/tokens/mint' \
+  -H 'Content-Type: application/json' \
+  -H 'X-Teamshared-Mint-Secret: <TEAMSHARED_MINT_SECRET>' \
+  -d '{"agent":"cursor"}'
+```
+
+The response includes `"token": "teamshared_..."` once — copy it into `TEAMSHARED_TOKEN`.
+
+Admin fallback (Railway CLI, no HTTP mint secret needed):
 
 ```bash
 # install Railway CLI: https://docs.railway.app/develop/cli
 railway link                       # pick this project
-railway run --service actx-server actx token mint cursor
-railway run --service actx-server actx token mint hermes
-railway run --service actx-server actx token mint openclaw
+railway run --service teamshared-server teamshared token mint cursor
+railway run --service teamshared-server teamshared token mint hermes
+railway run --service teamshared-server teamshared token mint openclaw
 ```
 
 Each call prints the raw token once. Paste it into the agent's MCP config
-(see [`src/actx/clients/`](../src/actx/clients) for snippets) — replace
+(see [`src/teamshared/clients/`](../src/teamshared/clients) for snippets) — replace
 `https://memory.tailXXXX.ts.net/mcp` with your Railway public domain
-(`https://actx-server-production.up.railway.app/mcp`).
+(`https://teamshared-server-production.up.railway.app/mcp`).
+
+Or use the HTTP mint endpoint documented above when `TEAMSHARED_MINT_SECRET` is set.
 
 ## 5. Verify
 
@@ -118,8 +138,8 @@ A subsequent `memory_remember` settles it.
   stateless, all state lives in Postgres/Redis. Just don't run multiple
   distiller replicas; the queue is `BLPOP`-based and one consumer is the
   intended topology.
-- **Rotating tokens**: same as anywhere — `actx token revoke <prefix>`
-  then `actx token mint <agent>` over `railway run`, push the new token
+- **Rotating tokens**: same as anywhere — `teamshared token revoke <prefix>`
+  then `teamshared token mint <agent>` over `railway run`, push the new token
   to the agent.
 - **Costs**: a single-replica server + distiller + pgvector + Redis on
   Railway's Hobby plan runs around $5–15/mo depending on Mem0 churn.

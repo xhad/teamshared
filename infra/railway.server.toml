@@ -1,4 +1,4 @@
-# Railway service config for the public-facing actx MCP server.
+# Railway service config for the public-facing teamshared MCP server.
 #
 # Apply by setting "Custom config file path" to /infra/railway.server.toml in
 # the Railway service Settings → Source panel. See infra/railway.example.md
@@ -15,12 +15,12 @@ dockerfilePath = "infra/Dockerfile"
 
 [deploy]
 # Apply SQL migrations before the server takes traffic. Idempotent — the
-# actx_migrations table prevents reruns.
-preDeployCommand = ["actx migrate"]
+# teamshared_migrations table prevents reruns.
+preDeployCommand = ["teamshared migrate"]
 
-# Default CMD in the Dockerfile is `actx serve --transport http`; no override
+# Default CMD in the Dockerfile is `teamshared serve --transport http`; no override
 # needed. The server reads $PORT from env (see Settings.port alias).
-startCommand = "actx serve --transport http"
+startCommand = "teamshared serve --transport http"
 
 # /health returns 200 with a per-dependency status dict. We only ask Railway
 # to confirm the process is alive; degraded sub-deps (e.g. Mem0 cold) are

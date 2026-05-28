@@ -13,15 +13,15 @@ services:
     network_mode: host
     ports: !reset []
     environment:
-      ACTX_PG_HOST: 127.0.0.1
-      ACTX_PG_PORT: ${ACTX_PG_PORT:-5432}
-      ACTX_REDIS_URL: redis://127.0.0.1:6379/0
-      ACTX_OLLAMA_BASE_URL: http://127.0.0.1:11434
+      TEAMSHARED_PG_HOST: 127.0.0.1
+      TEAMSHARED_PG_PORT: ${TEAMSHARED_PG_PORT:-5432}
+      TEAMSHARED_REDIS_URL: redis://127.0.0.1:6379/0
+      TEAMSHARED_OLLAMA_BASE_URL: http://127.0.0.1:11434
 
   distiller:
     network_mode: host
     environment:
-      ACTX_PG_HOST: 127.0.0.1
-      ACTX_PG_PORT: ${ACTX_PG_PORT:-5432}
-      ACTX_REDIS_URL: redis://127.0.0.1:6379/0
-      ACTX_OLLAMA_BASE_URL: http://127.0.0.1:11434
+      TEAMSHARED_PG_HOST: 127.0.0.1
+      TEAMSHARED_PG_PORT: ${TEAMSHARED_PG_PORT:-5432}
+      TEAMSHARED_REDIS_URL: redis://127.0.0.1:6379/0
+      TEAMSHARED_OLLAMA_BASE_URL: http://127.0.0.1:11434

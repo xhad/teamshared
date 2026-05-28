@@ -55,10 +55,10 @@ scenarios:
     description: A name should resurface on synonym queries.
     seeds:
       - kind: fact
-        content: "The shared memory service is called actx."
-        subject: actx
+        content: "The shared memory service is called teamshared."
+        subject: teamshared
         tags: [project]
     probes:
       - query: "What is the name of our memory service?"
         expect_any:
-          - "actx"
+          - "teamshared"

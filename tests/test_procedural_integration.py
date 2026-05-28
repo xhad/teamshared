@@ -3,7 +3,7 @@
 Run against the dev compose stack::
 
     docker compose -f infra/docker-compose.yml up -d postgres
-    actx migrate
+    teamshared migrate
     pytest -m integration tests/test_procedural_integration.py
 """
 
@@ -15,17 +15,17 @@ from collections.abc import AsyncIterator
 import pytest
 import pytest_asyncio
 
-from actx.memory.procedural import ProceduralStore
+from teamshared.memory.procedural import ProceduralStore
 
 pytestmark = pytest.mark.integration
 
 
 def _dsn() -> str:
-    user = os.environ.get("ACTX_PG_USER", "actx")
-    password = os.environ.get("ACTX_PG_PASSWORD", "actx")
-    host = os.environ.get("ACTX_PG_HOST", "localhost")
-    port = os.environ.get("ACTX_PG_PORT", "5432")
-    db = os.environ.get("ACTX_PG_DB", "actx")
+    user = os.environ.get("TEAMSHARED_PG_USER", "teamshared")
+    password = os.environ.get("TEAMSHARED_PG_PASSWORD", "teamshared")
+    host = os.environ.get("TEAMSHARED_PG_HOST", "localhost")
+    port = os.environ.get("TEAMSHARED_PG_PORT", "5432")
+    db = os.environ.get("TEAMSHARED_PG_DB", "teamshared")
     return f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
 

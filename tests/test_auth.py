@@ -11,7 +11,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from actx.auth import BearerAuthMiddleware, TokenStore, current_agent
+from teamshared.auth import BearerAuthMiddleware, TokenStore, current_agent
 
 
 def _build_app(store: TokenStore, *, disabled: bool = False) -> Starlette:
@@ -34,7 +34,7 @@ def _build_app(store: TokenStore, *, disabled: bool = False) -> Starlette:
 def test_token_store_mint_and_lookup(tmp_path: Path) -> None:
     store = TokenStore(tmp_path / "tokens.json")
     token = store.mint("cursor")
-    assert token.startswith("actx_")
+    assert token.startswith("teamshared_")
 
     ident = store.lookup(token)
     assert ident is not None

@@ -1,0 +1,16 @@
+# Paste under `mcp_servers:` in ~/.hermes/config.yaml
+# Mint token: teamshared token mint hermes
+#
+# Also paste the protocol from clients/protocol.md into Hermes system instructions
+# (or reference it in your agent profile) so the model recalls before answering.
+
+mcp_servers:
+  teamshared-memory:
+    url: https://memory.tailXXXX.ts.net/mcp
+    headers:
+      Authorization: "Bearer <agent-token>"
+    timeout: 30
+    connect_timeout: 10
+    tools:
+      resources: true
+      prompts: false

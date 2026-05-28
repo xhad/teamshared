@@ -16,14 +16,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastmcp import Client, FastMCP
 
-from actx.memory.types import RecallResult
-from actx.server.state import ServerState, clear_state, set_state
-from actx.server.tools import register_tools
+from teamshared.memory.types import RecallResult
+from teamshared.server.state import ServerState, clear_state, set_state
+from teamshared.server.tools import register_tools
 
 
 @pytest.fixture
 def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
-    mcp = FastMCP(name="actx-test")
+    mcp = FastMCP(name="teamshared-test")
     register_tools(mcp)
 
     working = MagicMock()
@@ -74,10 +74,16 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
         return_value=RecallResult(query="q", records=[], counts_by_pillar={"semantic": 0})
     )
 
+    agent_state = MagicMock()
+    agent_state.get = AsyncMock(return_value=None)
+    agent_state.set = AsyncMock()
+
     state = ServerState(
         settings=MagicMock(),
         tokens=MagicMock(),
+        invites=MagicMock(),
         working=working,
+        agent_state=agent_state,
         semantic_episodic=semantic,
         procedural=procedural,
         recall=recall,
@@ -231,3 +237,39 @@ async def test_memory_procedure_set_and_get(
     state.procedural.get_procedure.return_value = None
     result = await _call(mcp, "memory_procedure_get", name="p1")
     assert result is None or result == {}
+
+
+async def test_memory_state_get_and_set(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    from teamshared.auth import AgentIdentity, _current_agent
+
+    mcp, state = mcp_with_mocks
+    token = _current_agent.set(AgentIdentity(agent="cursor", token_prefix="teamshared_test"))
+    try:
+        payload = {"version": 1, "turnsSinceLastRun": 3}
+        state.agent_state.get.return_value = payload
+        got = await _call(
+            mcp,
+            "memory_state_get",
+            repo="Users-chad-code-sapien-teamshared",
+            key="continual-learning/cadence",
+        )
+        assert got["value"] == payload
+        state.agent_state.get.assert_awaited_once_with(
+            "teamshared_test",
+            "Users-chad-code-sapien-teamshared",
+            "continual-learning/cadence",
+        )
+
+        stored = await _call(
+            mcp,
+            "memory_state_set",
+            repo="Users-chad-code-sapien-teamshared",
+            key="continual-learning/cadence",
+            value={"version": 1, "turnsSinceLastRun": 0},
+        )
+        assert stored["stored"] is True
+        state.agent_state.set.assert_awaited_once()
+    finally:
+        _current_agent.reset(token)

@@ -6,10 +6,10 @@ checks the documented ``expect_any`` strings against the returned content.
 
 Two run modes:
 
-- Live HTTP (recommended). Requires a running ``actx serve`` and a token::
+- Live HTTP (recommended). Requires a running ``teamshared serve`` and a token::
 
-    export ACTX_EVAL_URL=http://localhost:8077/mcp/
-    export ACTX_EVAL_TOKEN=actx_...
+    export TEAMSHARED_EVAL_URL=http://localhost:8077/mcp/
+    export TEAMSHARED_EVAL_TOKEN=teamshared_...
     python eval/run.py
 
 - In-memory MCP without backing stores. The fake retriever is a simple
@@ -117,13 +117,13 @@ async def _main_in_memory(scenarios_path: Path) -> int:
 
     from fastmcp import FastMCP
 
-    from actx.config import Settings
-    from actx.memory.recall import Recall
-    from actx.memory.types import MemoryRecord
-    from actx.server.state import ServerState, clear_state, set_state
-    from actx.server.tools import register_tools
+    from teamshared.config import Settings
+    from teamshared.memory.recall import Recall
+    from teamshared.memory.types import MemoryRecord
+    from teamshared.server.state import ServerState, clear_state, set_state
+    from teamshared.server.tools import register_tools
 
-    mcp = FastMCP(name="actx-eval")
+    mcp = FastMCP(name="teamshared-eval")
     register_tools(mcp)
 
     store: list[dict[str, Any]] = []
@@ -169,6 +169,7 @@ async def _main_in_memory(scenarios_path: Path) -> int:
             settings=Settings(_env_file=None),
             tokens=MagicMock(),
             working=working,
+            agent_state=MagicMock(),
             semantic_episodic=semantic,
             procedural=procedural,
             recall=recall,
@@ -195,10 +196,10 @@ def main() -> None:
     if args.in_memory:
         sys.exit(asyncio.run(_main_in_memory(args.scenarios)))
 
-    url = os.environ.get("ACTX_EVAL_URL")
-    token = os.environ.get("ACTX_EVAL_TOKEN")
+    url = os.environ.get("TEAMSHARED_EVAL_URL")
+    token = os.environ.get("TEAMSHARED_EVAL_TOKEN")
     if not (url and token):
-        print("Missing ACTX_EVAL_URL / ACTX_EVAL_TOKEN (or pass --in-memory).")
+        print("Missing TEAMSHARED_EVAL_URL / TEAMSHARED_EVAL_TOKEN (or pass --in-memory).")
         sys.exit(2)
     sys.exit(asyncio.run(_main_http(url, token, args.scenarios)))
 

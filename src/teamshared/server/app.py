@@ -1,0 +1,260 @@
+"""FastMCP app factory + ASGI assembly for HTTP transport.
+
+For HTTP we wrap FastMCP's streamable-HTTP ASGI app in a Starlette host that
+adds:
+
+- ``/health`` -- unauthenticated liveness probe.
+- ``BearerAuthMiddleware`` -- per-agent token validation in front of ``/mcp``.
+
+For stdio we just return the configured ``FastMCP`` instance and let the
+caller invoke ``mcp.run(transport="stdio")``.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastmcp import FastMCP
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Mount, Route
+
+from teamshared.auth import BearerAuthMiddleware, TokenStore
+from teamshared.config import Settings, get_settings
+from teamshared.logging import configure_logging, get_logger
+from teamshared.invite import InviteStore
+from teamshared.memory.agent_state import AgentStateStore
+from teamshared.memory.graph import GraphStore
+from teamshared.memory.procedural import ProceduralStore
+from teamshared.memory.recall import Recall
+from teamshared.memory.semantic import SemanticEpisodicStore
+from teamshared.memory.working import WorkingMemory
+from teamshared.server.state import ServerState, clear_state, set_state
+from teamshared.server.token_api import (
+    handle_get_token_page,
+    handle_token_invite_create,
+    handle_token_mint,
+)
+from teamshared.server.tools import register_tools
+from teamshared.telemetry import instrument_asgi, setup_tracing
+
+log = get_logger(__name__)
+
+
+def build_mcp(settings: Settings | None = None) -> FastMCP:
+    """Build a FastMCP instance with all teamshared tools registered."""
+    settings = settings or get_settings()
+    mcp: FastMCP = FastMCP(
+        name="teamshared-memory",
+        instructions=(
+            "Multi-pillar agent memory. Use `memory_recall` early in a task to "
+            "pull relevant facts, episodes, and procedures. Use `memory_remember` "
+            "to persist durable facts and `memory_session_*` for working memory."
+        ),
+    )
+    register_tools(mcp)
+    return mcp
+
+
+async def _init_state(settings: Settings) -> ServerState:
+    """Connect every backing store and assemble :class:`ServerState`."""
+    tokens = TokenStore(settings.tokens_file)
+    invites = InviteStore(settings.invites_file)
+    working = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl)
+    semantic = SemanticEpisodicStore(settings)
+    procedural = ProceduralStore(settings.pg_dsn)
+
+    await working.connect()
+    await procedural.connect()
+    # Mem0 is heavier; connect after the cheap stores so /health is meaningful
+    # even when embeddings are temporarily unreachable.
+    try:
+        await semantic.connect()
+    except Exception as exc:
+        log.warning("mem0_connect_failed_will_retry_on_demand", error=str(exc))
+
+    recall = Recall(working=working, semantic_episodic=semantic, procedural=procedural)
+    agent_state = AgentStateStore(working.client)
+
+    graph: GraphStore | None = None
+    if settings.neo4j_enabled:
+        graph = GraphStore(settings.neo4j_url, settings.neo4j_user, settings.neo4j_password)
+        try:
+            await graph.connect()
+        except Exception as exc:
+            log.warning("graph_store_connect_failed", error=str(exc))
+            graph = None
+
+    state = ServerState(
+        settings=settings,
+        tokens=tokens,
+        invites=invites,
+        working=working,
+        agent_state=agent_state,
+        semantic_episodic=semantic,
+        procedural=procedural,
+        recall=recall,
+        graph=graph,
+    )
+    set_state(state)
+    return state
+
+
+async def _teardown_state(state: ServerState) -> None:
+    await state.working.close()
+    await state.semantic_episodic.close()
+    await state.procedural.close()
+    if state.graph is not None:
+        await state.graph.close()
+    clear_state()
+
+
+def build_http_app(settings: Settings | None = None) -> Starlette:
+    """Build the public-facing Starlette ASGI app.
+
+    Routes:
+    - ``GET  /health``  -- unauthenticated probe.
+    - ``GET  /``        -- root sentinel (returns a tiny JSON banner).
+    - ``GET  /state``   -- bearer-scoped JSON state read (`repo`, `key` query params).
+    - ``PUT  /state``   -- bearer-scoped JSON state write (`{repo, key, value}` body).
+    - ``POST /tokens/mint`` -- mint a bearer token (invite code or admin secret).
+    - ``POST /tokens/mint/{invite}/{agent}`` -- mint via invite (path params).
+    - ``POST /tokens/invites`` -- create invite codes (admin secret).
+    - ``GET  /get-token`` -- browser page to redeem an invite.
+    - ``GET  /get-token/{invite}/{agent}`` -- browser redeem via path params.
+    - ``ANY  /mcp/*``   -- FastMCP streamable HTTP, gated by bearer auth.
+    """
+    settings = settings or get_settings()
+    configure_logging(settings.log_level)
+    setup_tracing()
+
+    mcp = build_mcp(settings)
+    mcp_app = mcp.http_app(path="/")
+
+    async def health_route(request: Request) -> JSONResponse:
+        try:
+            from teamshared.server.state import get_state
+
+            state = get_state()
+            components: dict[str, str] = {}
+            try:
+                await state.working.client.ping()
+                components["redis"] = "ok"
+            except Exception as exc:
+                components["redis"] = f"error: {exc}"
+            try:
+                async with state.procedural.pool.connection() as conn, conn.cursor() as cur:
+                    await cur.execute("SELECT 1")
+                    await cur.fetchone()
+                components["postgres"] = "ok"
+            except Exception as exc:
+                components["postgres"] = f"error: {exc}"
+            components["mem0"] = (
+                "ok" if state.semantic_episodic._memory is not None else "not_ready"
+            )
+            status = "ok" if all(v == "ok" for v in components.values()) else "degraded"
+            return JSONResponse({"status": status, "components": components})
+        except RuntimeError:
+            return JSONResponse({"status": "starting"}, status_code=503)
+
+    async def root_route(_: Request) -> JSONResponse:
+        return JSONResponse(
+            {
+                "service": "teamshared-memory",
+                "mcp": "/mcp",
+                "health": "/health",
+                "state": "/state",
+                "get_token": "/get-token",
+                "tokens_mint": "/tokens/mint",
+                "tokens_invites": "/tokens/invites",
+            }
+        )
+
+    tokens = TokenStore(settings.tokens_file)
+    invites = InviteStore(settings.invites_file)
+
+    async def token_mint_route(request: Request) -> JSONResponse:
+        return await handle_token_mint(request, settings, tokens, invites)
+
+    async def token_invite_create_route(request: Request) -> JSONResponse:
+        return await handle_token_invite_create(request, settings, invites)
+
+    async def get_token_route(request: Request) -> Response:
+        return await handle_get_token_page(request, settings, tokens, invites)
+
+    async def state_get_route(request: Request) -> JSONResponse:
+        repo = request.query_params.get("repo")
+        key = request.query_params.get("key")
+        if not repo or not key:
+            return JSONResponse({"error": "repo and key query params are required"}, status_code=400)
+        identity = request.state.agent
+        try:
+            from teamshared.server.state import get_state
+
+            value = await get_state().agent_state.get(identity.token_prefix, repo, key)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse({"repo": repo, "key": key, "value": value})
+
+    async def state_put_route(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "invalid_json"}, status_code=400)
+        repo = body.get("repo")
+        key = body.get("key")
+        value = body.get("value")
+        if not isinstance(repo, str) or not isinstance(key, str):
+            return JSONResponse({"error": "repo and key are required strings"}, status_code=400)
+        if not isinstance(value, dict):
+            return JSONResponse({"error": "value must be a JSON object"}, status_code=400)
+        identity = request.state.agent
+        try:
+            from teamshared.server.state import get_state
+
+            await get_state().agent_state.set(identity.token_prefix, repo, key, value)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse({"repo": repo, "key": key, "stored": True})
+
+    @asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncIterator[None]:
+        state = await _init_state(settings)
+        log.info("teamshared_server_started", host=settings.host, port=settings.port)
+        async with mcp_app.lifespan(app):
+            try:
+                yield
+            finally:
+                log.info("teamshared_server_stopping")
+                await _teardown_state(state)
+
+    middleware = [
+        Middleware(
+            BearerAuthMiddleware,
+            store=tokens,
+            auth_disabled=settings.auth_disabled,
+        ),
+    ]
+
+    app = Starlette(
+        routes=[
+            Route("/", root_route, methods=["GET"]),
+            Route("/health", health_route, methods=["GET"]),
+            Route("/get-token/{invite}/{agent}", get_token_route, methods=["GET"]),
+            Route("/get-token/{invite}", get_token_route, methods=["GET"]),
+            Route("/get-token", get_token_route, methods=["GET"]),
+            Route("/tokens/mint/{invite}/{agent}", token_mint_route, methods=["POST"]),
+            Route("/tokens/mint", token_mint_route, methods=["POST"]),
+            Route("/tokens/invites", token_invite_create_route, methods=["POST"]),
+            Route("/state", state_get_route, methods=["GET"]),
+            Route("/state", state_put_route, methods=["PUT"]),
+            Mount("/mcp", app=mcp_app),
+        ],
+        middleware=middleware,
+        lifespan=lifespan,
+    )
+    instrument_asgi(app)
+    return app

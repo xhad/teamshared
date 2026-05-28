@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from actx.memory.semantic import SemanticEpisodicStore
+from teamshared.memory.semantic import SemanticEpisodicStore
 
 
 @pytest.fixture
@@ -81,7 +81,7 @@ async def test_search_overfetches_and_disables_threshold(
     """Mem0 2.0's ``score_and_rank`` filters with ``score < threshold`` (default
     0.1) and sorts DESC, but pgvector reports cosine *distance* in ``score``.
     The net effect is that the best matches are dropped. We work around it by
-    over-fetching and disabling the threshold; actx then flips and re-ranks
+    over-fetching and disabling the threshold; teamshared then flips and re-ranks
     correctly. Pin both kwargs so a regression to the small-``top_k`` /
     default-threshold call shape is caught here.
     """
@@ -114,7 +114,7 @@ async def test_search_inverts_mem0_distance_into_similarity(
     store_with_fake_mem0: tuple[SemanticEpisodicStore, MagicMock],
 ) -> None:
     """Mem0's pgvector backend reports cosine *distance* in the ``score`` field
-    (smaller = better). actx contract is similarity (larger = better). The
+    (smaller = better). teamshared contract is similarity (larger = better). The
     boundary in :meth:`SemanticEpisodicStore.search` must flip them so the
     cross-pillar reranker, sort order, and any downstream consumer all agree.
     """

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from actx.config import Settings, get_settings
+from teamshared.config import Settings, get_settings
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -39,9 +39,9 @@ def pytest_collection_modifyitems(
 def temp_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Settings]:
     """A fresh :class:`Settings` instance per test, isolated from the user env."""
     for key in list(os.environ):
-        if key.startswith("ACTX_"):
+        if key.startswith("TEAMSHARED_"):
             monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("ACTX_TOKENS_FILE", str(tmp_path / "tokens.json"))
+    monkeypatch.setenv("TEAMSHARED_TOKENS_FILE", str(tmp_path / "tokens.json"))
     get_settings.cache_clear()
     yield get_settings()
     get_settings.cache_clear()

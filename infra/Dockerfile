@@ -17,12 +17,12 @@ COPY infra/migrations ./infra/migrations
 RUN pip install --upgrade pip \
  && pip install .
 
-ENV ACTX_HOST=0.0.0.0 \
-    ACTX_PORT=8077
+ENV TEAMSHARED_HOST=0.0.0.0 \
+    TEAMSHARED_PORT=8077
 
 EXPOSE 8077
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://localhost:8077/health || exit 1
 
-CMD ["actx", "serve", "--transport", "http"]
+CMD ["teamshared", "serve", "--transport", "http"]
