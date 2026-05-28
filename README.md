@@ -79,8 +79,6 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 - [Hermes](src/teamshared/clients/hermes.config.yaml)
 - [OpenClaw](src/teamshared/clients/openclaw.md)
 
-Each agent gets its own bearer token so memory writes are attributable.
-
 ## MCP tools
 
 | Tool                        | Purpose                                                      |
