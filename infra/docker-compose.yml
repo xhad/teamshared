@@ -104,19 +104,19 @@ services:
       - teamshareddata:/data
     command: ["teamshared", "worker"]
 
-  # Optional: enable when TEAMSHARED_NEO4J_ENABLED=true and you want the relationship graph.
-  # neo4j:
-  #   image: neo4j:5
-  #   environment:
-  #     NEO4J_AUTH: ${TEAMSHARED_NEO4J_USER:-neo4j}/${TEAMSHARED_NEO4J_PASSWORD:-neo4j}
-  #   ports:
-  #     - "7474:7474"
-  #     - "7687:7687"
-  #   volumes:
-  #     - neo4jdata:/data
+  Optional: enable when TEAMSHARED_NEO4J_ENABLED=true and you want the relationship graph.
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: ${TEAMSHARED_NEO4J_USER:-neo4j}/${TEAMSHARED_NEO4J_PASSWORD:-neo4j}
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4jdata:/data
 
 volumes:
   pgdata:
   redisdata:
   teamshareddata:
-  # neo4jdata:
+  neo4jdata:
