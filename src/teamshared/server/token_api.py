@@ -6,8 +6,10 @@ import re
 import secrets
 from html import escape
 
+from urllib.parse import urlencode
+
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from teamshared.auth import TokenStore
 from teamshared.config import Settings
@@ -39,6 +41,38 @@ def _mint_token(agent: str, store: TokenStore) -> JSONResponse:
     return JSONResponse({"agent": agent, "token": token})
 
 
+def _redeem_invite_for_token(
+    invite_code: str,
+    agent_hint: str | None,
+    *,
+    settings: Settings,
+    store: TokenStore,
+    invites: InviteStore,
+) -> tuple[str, str] | tuple[None, JSONResponse]:
+    """Return ``(agent, token)`` or ``(None, error_response)``."""
+    if not settings.self_service_tokens:
+        return None, JSONResponse({"error": "invite_disabled"}, status_code=404)
+    code = invite_code.strip()
+    if not code:
+        return None, JSONResponse({"error": "invalid_invite"}, status_code=401)
+    record = invites.get(code)
+    if record is None:
+        return None, JSONResponse({"error": "invalid_invite"}, status_code=401)
+    agent = _parse_agent(agent_hint) if agent_hint else None
+    if agent is None and record.agent:
+        agent = _parse_agent(record.agent)
+    if agent is None:
+        return None, JSONResponse(
+            {"error": "agent is required for this invite"},
+            status_code=400,
+        )
+    if invites.redeem(code) is None:
+        return None, JSONResponse({"error": "invalid_invite"}, status_code=401)
+    token = store.mint(agent)
+    log.info("token_minted_via_invite", agent=agent, token_prefix=token[:8])
+    return agent, token
+
+
 def _mint_via_invite(
     invite_code: str,
     agent_hint: str | None,
@@ -47,25 +81,17 @@ def _mint_via_invite(
     store: TokenStore,
     invites: InviteStore,
 ) -> JSONResponse:
-    if not settings.self_service_tokens:
-        return JSONResponse({"error": "invite_disabled"}, status_code=404)
-    code = invite_code.strip()
-    if not code:
-        return JSONResponse({"error": "invalid_invite"}, status_code=401)
-    record = invites.get(code)
-    if record is None:
-        return JSONResponse({"error": "invalid_invite"}, status_code=401)
-    agent = _parse_agent(agent_hint) if agent_hint else None
-    if agent is None and record.agent:
-        agent = _parse_agent(record.agent)
-    if agent is None:
-        return JSONResponse(
-            {"error": "agent is required for this invite"},
-            status_code=400,
-        )
-    if invites.redeem(code) is None:
-        return JSONResponse({"error": "invalid_invite"}, status_code=401)
-    return _mint_token(agent, store)
+    result = _redeem_invite_for_token(
+        invite_code,
+        agent_hint,
+        settings=settings,
+        store=store,
+        invites=invites,
+    )
+    if result[0] is None:
+        return result[1]
+    agent, token = result
+    return JSONResponse({"agent": agent, "token": token})
 
 
 def invite_mint_path(invite: str, agent: str) -> str:
@@ -78,6 +104,45 @@ def get_token_path(invite: str, agent: str | None = None) -> str:
     if agent:
         return f"/get-token/{invite}/{agent}"
     return f"/get-token/{invite}"
+
+
+async def handle_root(
+    request: Request,
+    settings: Settings,
+    store: TokenStore,
+    invites: InviteStore,
+) -> Response:
+    """Service banner, or mint a bearer token when ``?invite=&agent=`` are present."""
+    invite_code = request.query_params.get("invite", "").strip()
+    if invite_code:
+        agent_hint = request.query_params.get("agent", "").strip() or None
+        result = _redeem_invite_for_token(
+            invite_code,
+            agent_hint,
+            settings=settings,
+            store=store,
+            invites=invites,
+        )
+        if result[0] is None:
+            return result[1]
+        agent, token = result
+        accept = request.headers.get("accept", "")
+        if "application/json" in accept:
+            return JSONResponse({"agent": agent, "token": token})
+        return PlainTextResponse(token)
+
+    return JSONResponse(
+        {
+            "service": "teamshared-memory",
+            "mcp": "/mcp",
+            "health": "/health",
+            "state": "/state",
+            "get_token": "/get-token",
+            "tokens_mint": "/tokens/mint",
+            "tokens_invites": "/tokens/invites",
+            "token_via_invite": "/?invite=<code>&agent=<name>",
+        }
+    )
 
 
 async def handle_token_mint(
@@ -272,6 +337,11 @@ export TEAMSHARED_TOKEN={escape(token)}</pre>
 </html>"""
 
 
-def invite_redeem_curl(base_url: str, invite: str, agent: str) -> str:
+def invite_redeem_url(base_url: str, invite: str, agent: str) -> str:
+    """Root URL query string for one-shot ``curl -fsS`` token mint."""
     root = base_url.rstrip("/")
-    return f"curl -fsS -X POST '{root}{invite_mint_path(invite, agent)}'"
+    return f"{root}/?{urlencode({'invite': invite, 'agent': agent})}"
+
+
+def invite_redeem_curl(base_url: str, invite: str, agent: str) -> str:
+    return f"curl -fsS '{invite_redeem_url(base_url, invite, agent)}'"

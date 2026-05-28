@@ -14,6 +14,7 @@ from teamshared.invite import InviteStore
 from teamshared.server.token_api import (
     MINT_SECRET_HEADER,
     handle_get_token_page,
+    handle_root,
     handle_token_invite_create,
     handle_token_mint,
 )
@@ -228,6 +229,69 @@ def test_get_token_page_redeems_invite_path(tmp_path: Path) -> None:
         assert resp.status_code == 200
         assert "teamshared_" in resp.text
         assert invites.get(record.code) is None
+
+
+def _root_app(settings: Settings, store: TokenStore, invites: InviteStore) -> Starlette:
+    async def route(request):  # type: ignore[no-untyped-def]
+        return await handle_root(request, settings, store, invites)
+
+    return Starlette(routes=[Route("/", route, methods=["GET"])])
+
+
+def test_root_banner(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        tokens_file=tmp_path / "tokens.json",
+        invites_file=tmp_path / "invites.json",
+    )
+    store = TokenStore(settings.tokens_file)
+    invites = InviteStore(settings.invites_file)
+    with TestClient(_root_app(settings, store, invites)) as client:
+        resp = client.get("/")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["service"] == "teamshared-memory"
+        assert "token_via_invite" in body
+
+
+def test_root_redeems_invite_as_plain_text(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        self_service_tokens=True,
+        tokens_file=tmp_path / "tokens.json",
+        invites_file=tmp_path / "invites.json",
+    )
+    store = TokenStore(settings.tokens_file)
+    invites = InviteStore(settings.invites_file)
+    record = invites.create(agent="cursor-chad", uses=1)
+    with TestClient(_root_app(settings, store, invites)) as client:
+        resp = client.get("/", params={"invite": record.code, "agent": "cursor-chad"})
+        assert resp.status_code == 200
+        assert resp.text.startswith("teamshared_")
+        assert resp.headers["content-type"].startswith("text/plain")
+        assert invites.get(record.code) is None
+
+
+def test_root_redeems_invite_as_json(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        self_service_tokens=True,
+        tokens_file=tmp_path / "tokens.json",
+        invites_file=tmp_path / "invites.json",
+    )
+    store = TokenStore(settings.tokens_file)
+    invites = InviteStore(settings.invites_file)
+    record = invites.create(agent="cursor-chad", uses=1)
+    with TestClient(_root_app(settings, store, invites)) as client:
+        resp = client.get(
+            "/",
+            params={"invite": record.code, "agent": "cursor-chad"},
+            headers={"Accept": "application/json"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["agent"] == "cursor-chad"
+        assert body["token"].startswith("teamshared_")
 
 
 def test_get_token_page_redeems_invite(tmp_path: Path) -> None:

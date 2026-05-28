@@ -28,7 +28,7 @@ from teamshared.auth import TokenStore
 from teamshared.config import get_settings
 from teamshared.invite import InviteStore
 from teamshared.logging import configure_logging
-from teamshared.server.token_api import get_token_path, invite_mint_path
+from teamshared.server.token_api import get_token_path, invite_redeem_curl, invite_redeem_url
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="teamshared memory CLI")
 token_app = typer.Typer(no_args_is_help=True, help="Bearer-token management")
@@ -211,12 +211,16 @@ def token_invite_create(
         root = base.rstrip("/")
         if record.agent:
             link = f"{root}{get_token_path(record.code, record.agent)}"
-            curl = f"curl -fsS -X POST '{root}{invite_mint_path(record.code, record.agent)}'"
+            curl = invite_redeem_curl(root, record.code, record.agent)
+            root_url = invite_redeem_url(root, record.code, record.agent)
         else:
             link = f"{root}{get_token_path(record.code)}"
-            curl = f"curl -fsS -X POST '{root}{invite_mint_path(record.code, '<agent>')}'"
+            curl = invite_redeem_curl(root, record.code, "<agent>")
+            root_url = None
         console.print(f"[bold]link[/bold]: {link}")
         console.print(f"[bold]curl[/bold]: {curl}")
+        if root_url:
+            console.print(f"[bold]url[/bold]: {root_url}")
     else:
         console.print(
             "[dim]Set TEAMSHARED_PUBLIC_URL to print a shareable /get-token link.[/dim]"

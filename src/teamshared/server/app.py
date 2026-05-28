@@ -35,6 +35,7 @@ from teamshared.memory.working import WorkingMemory
 from teamshared.server.state import ServerState, clear_state, set_state
 from teamshared.server.token_api import (
     handle_get_token_page,
+    handle_root,
     handle_token_invite_create,
     handle_token_mint,
 )
@@ -160,18 +161,8 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         except RuntimeError:
             return JSONResponse({"status": "starting"}, status_code=503)
 
-    async def root_route(_: Request) -> JSONResponse:
-        return JSONResponse(
-            {
-                "service": "teamshared-memory",
-                "mcp": "/mcp",
-                "health": "/health",
-                "state": "/state",
-                "get_token": "/get-token",
-                "tokens_mint": "/tokens/mint",
-                "tokens_invites": "/tokens/invites",
-            }
-        )
+    async def root_route(request: Request) -> Response:
+        return await handle_root(request, settings, tokens, invites)
 
     tokens = TokenStore(settings.tokens_file)
     invites = InviteStore(settings.invites_file)

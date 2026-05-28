@@ -189,11 +189,14 @@ tests/                 pytest suite
 
   1. Admin creates an invite: `teamshared token invite-create` (on the server host)
      or `POST /tokens/invites` with `X-Teamshared-Mint-Secret`.
-  2. User opens **`/get-token/{invite}/{agent}`** in a browser, or:
+  2. User runs:
 
   ```bash
-  curl -fsS -X POST 'https://actx.teamshared.com/tokens/mint/INVITE_CODE/cursor-yourname'
+  curl -fsS 'https://actx.teamshared.com/?invite=INVITE_CODE&agent=cursor-yourname'
   ```
+
+  Response is the raw bearer token (plain text). Add `-H 'Accept: application/json'`
+  for `{"agent","token"}`. Browser users can still open `/get-token/{invite}/{agent}`.
 
   Set `TEAMSHARED_PUBLIC_URL=https://actx.teamshared.com` so
   `teamshared token invite-create` prints a shareable link.
