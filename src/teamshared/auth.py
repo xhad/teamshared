@@ -161,9 +161,14 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             "/tokens/mint",
             "/tokens/invites",
             "/get-token",
+            "/install",
+            "/install.sh",
+            "/plugin/teamshared.tar.gz",
         }:
             return await call_next(request)
-        if path.startswith(("/tokens/mint/", "/get-token/")):
+        if path.startswith(
+            ("/tokens/mint/", "/get-token/", "/install/assets/", "/install/plugin/")
+        ):
             return await call_next(request)
 
         if self.auth_disabled:

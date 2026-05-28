@@ -1,0 +1,5 @@
+# teamshared — merge into ~/.codex/config.toml or use: codex mcp add teamshared ...
+[mcp_servers.teamshared]
+url = "__MCP_URL__"
+bearer_token_env_var = "TEAMSHARED_TOKEN"
+enabled = true

@@ -169,6 +169,9 @@ def _service_banner_json() -> JSONResponse:
             "tokens_mint": "/tokens/mint",
             "tokens_invites": "/tokens/invites",
             "token_via_invite": "/?invite=<code>&agent=<name>",
+            "install": "/install",
+            "install_script": "/install.sh",
+            "plugin_bundle": "/install/plugin/teamshared.tar.gz",
         }
     )
 
@@ -211,6 +214,9 @@ def _landing_page_html() -> str:
     setup instructions for your agent type ({allowed}).</p>
     <a class="button" href="/get-token">Get your token</a>
     <p class="muted">CLI: <code>curl -fsS 'https://actx.teamshared.com/?invite=CODE&amp;agent=TYPE'</code></p>
+    <p class="muted">One-command install:
+    <code>curl -fsSL https://actx.teamshared.com/install.sh -o install-teamshared.sh &amp;&amp; bash install-teamshared.sh</code>
+    (see <a href="/install">/install</a>).</p>
   </div>
 </body>
 </html>"""

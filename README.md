@@ -69,6 +69,20 @@ run Ollama on the host. The image installs the `ollama` Python client Mem0 needs
 
 ## Connect your agents
 
+### One-command install (curl)
+
+No local clone required — one script prompts for your harness (Cursor, Codex,
+Hermes, Claude, OpenClaw), downloads plugin files and MCP config from the server,
+and places them in the right paths:
+
+```bash
+curl -fsSL https://actx.teamshared.com/install.sh -o install-teamshared.sh
+bash install-teamshared.sh
+```
+
+The script prompts for your bearer token ([`/get-token`](https://actx.teamshared.com/get-token))
+and writes it into the harness MCP config. Details: [`/install`](https://actx.teamshared.com/install).
+
 **Cursor (recommended):** install the **teamshared** plugin.
 
 **Marketplace:** Settings → Plugins → Add marketplace → `https://github.com/xhad/actx`, then `/add-plugin teamshared`.

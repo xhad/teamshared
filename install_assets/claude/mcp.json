@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "teamshared": {
+      "url": "__MCP_URL__",
+      "headers": {
+        "Authorization": "Bearer __TEAMSHARED_TOKEN__"
+      }
+    }
+  }
+}

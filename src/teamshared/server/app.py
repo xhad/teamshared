@@ -34,6 +34,12 @@ from teamshared.memory.recall import Recall
 from teamshared.memory.semantic import SemanticEpisodicStore
 from teamshared.memory.working import WorkingMemory
 from teamshared.server.state import ServerState, clear_state, set_state
+from teamshared.server.install_api import (
+    handle_install_asset,
+    handle_install_index,
+    handle_install_sh,
+    handle_plugin_bundle,
+)
 from teamshared.server.token_api import (
     handle_get_token_page,
     handle_root,
@@ -131,6 +137,11 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     - ``POST /tokens/invites`` -- create invite codes (admin secret).
     - ``GET  /get-token`` -- browser page to redeem an invite.
     - ``GET  /get-token/{invite}/{agent}`` -- browser redeem via path params.
+    - ``GET  /install`` -- install instructions (HTML).
+    - ``GET  /install.sh`` -- unified installer (prompts for harness).
+    - ``GET  /install/assets/{path}`` -- harness config snippets (remote pull).
+    - ``GET  /install/plugin/teamshared.tar.gz`` -- Cursor plugin bundle.
+    - ``GET  /plugin/teamshared.tar.gz`` -- alias of the plugin bundle.
     - ``ANY  /mcp/*``   -- FastMCP streamable HTTP, gated by bearer auth.
     """
     settings = settings or get_settings()
@@ -166,6 +177,18 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
 
     async def get_token_route(request: Request) -> Response:
         return await handle_get_token_page(request, settings, tokens, invites)
+
+    async def install_index_route(request: Request) -> HTMLResponse:
+        return await handle_install_index(request)
+
+    async def install_sh_route(request: Request) -> Response:
+        return await handle_install_sh(request)
+
+    async def install_asset_route(request: Request) -> Response:
+        return await handle_install_asset(request)
+
+    async def plugin_bundle_route(request: Request) -> Response:
+        return await handle_plugin_bundle(request)
 
     async def state_get_route(request: Request) -> JSONResponse:
         repo = request.query_params.get("repo")
@@ -229,6 +252,19 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/get-token/{invite}/{agent}", get_token_route, methods=["GET"]),
             Route("/get-token/{invite}", get_token_route, methods=["GET"]),
             Route("/get-token", get_token_route, methods=["GET"]),
+            Route("/install", install_index_route, methods=["GET"]),
+            Route("/install.sh", install_sh_route, methods=["GET"]),
+            Route(
+                "/install/assets/{asset_path:path}",
+                install_asset_route,
+                methods=["GET"],
+            ),
+            Route(
+                "/install/plugin/teamshared.tar.gz",
+                plugin_bundle_route,
+                methods=["GET"],
+            ),
+            Route("/plugin/teamshared.tar.gz", plugin_bundle_route, methods=["GET"]),
             Route("/tokens/mint/{invite}/{agent}", token_mint_route, methods=["POST"]),
             Route("/tokens/mint", token_mint_route, methods=["POST"]),
             Route("/tokens/invites", token_invite_create_route, methods=["POST"]),
