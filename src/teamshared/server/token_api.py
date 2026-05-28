@@ -213,7 +213,6 @@ def _landing_page_html() -> str:
     <p>Ask your admin for a one-time invite code, then create your token and copy the
     setup instructions for your agent type ({allowed}).</p>
     <a class="button" href="/get-token">Get your token</a>
-    <p class="muted">CLI: <code>curl -fsS 'https://actx.teamshared.com/?invite=CODE&amp;agent=TYPE'</code></p>
     <p class="muted">One-command install:
     <code>curl -fsSL https://actx.teamshared.com/install.sh | bash</code>
     (see <a href="/install">/install</a>).</p>
