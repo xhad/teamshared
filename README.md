@@ -149,57 +149,6 @@ Two reference topologies live in [`infra/`](infra):
   [`railway.distiller.toml`](infra/railway.distiller.toml). Bearer auth on
   a public domain replaces Tailscale.
 
-**Team production (Spark + Cloudflare):** `https://actx.teamshared.com`
-(`/health`, `/mcp`, `/get-token/...`). The old `mcp.teamshared.com` hostname
-is retired — use `actx.teamshared.com` everywhere.
-
-Both are starting points; teamshared is just an HTTP/MCP service plus a worker,
-so it'll run anywhere that can host two containers and reach Postgres +
-Redis.
-
-## Layout
-
-```
-src/teamshared/
-  config.py            settings (env-driven)
-  auth.py              per-agent bearer tokens + middleware
-  logging.py           structlog setup
-  memory/
-    working.py         Redis-backed working memory
-    semantic.py        Mem0 wrapper (semantic + episodic)
-    procedural.py      Postgres-backed procedures
-    recall.py          cross-pillar hybrid search
-    types.py           shared pydantic schemas
-  distill/
-    worker.py          background summarization worker
-    summarizer.py      LLM call + JSON parsing
-    prompts.py         distiller system prompt
-  server/
-    app.py             FastMCP + Starlette assembly
-    tools.py           @mcp.tool definitions
-    state.py           shared per-process singletons
-    health.py          shared health probe
-  seed/                bundled starter procedures (`teamshared seed`)
-  cli.py               `teamshared` entrypoint (typer)
-  clients/             config snippets per agent
-plugins/
-  teamshared/          Cursor plugin — MCP, rules, continual learning, clients
-infra/
-  Dockerfile
-  docker-compose.yml
-  migrations/001_init.sql
-  tailscale.example.md
-eval/
-  golden.yaml          scenarios for `eval/run.py`
-  run.py               live or in-memory eval runner
-scripts/
-  smoke_all_tools.py   exercise every MCP tool (live or --in-memory)
-  smoke_cross_agent.py shared-brain end-to-end smoke
-  validate-teamshared-plugin.sh
-  backup.sh            nightly pg_dump + redis rdb tarball
-tests/                 pytest suite
-```
-
 ## Operations
 
 - **Mint tokens (HTTP)**: teammates redeem a one-time **invite code** (no admin
@@ -212,41 +161,6 @@ tests/                 pytest suite
   ```bash
   curl -fsS 'https://actx.teamshared.com/?invite=INVITE_CODE&agent=cursor'
   ```
-
-  Response is the raw bearer token (plain text). Add `-H 'Accept: application/json'`
-  for `{"agent","token"}`. Browser users can still open `/get-token/{invite}/{agent}`.
-
-  Set `TEAMSHARED_PUBLIC_URL=https://actx.teamshared.com` so
-  `teamshared token invite-create` prints a shareable link.
-  Admin direct mint still works via `X-Teamshared-Mint-Secret` + `POST /tokens/mint`.
-- **Backup**: cron `scripts/backup.sh` nightly. See the file header for env vars.
-- **Telemetry**: install `pip install '.[otel]'` and set
-  `OTEL_EXPORTER_OTLP_ENDPOINT`. Spans are emitted for every ASGI request.
-- **Eval**: `python eval/run.py` against a running server (set
-  `TEAMSHARED_EVAL_URL`/`TEAMSHARED_EVAL_TOKEN`). `--in-memory` runs the framework
-  against a fake bag-of-words retriever -- useful for CI structure checks but
-  not for real recall quality.
-- **Full tool smoke**: exercise every MCP tool against a live server:
-
-  ```bash
-  export TEAMSHARED_SMOKE_URL=https://actx.teamshared.com/mcp/
-  export TEAMSHARED_SMOKE_TOKEN=teamshared_...   # your bearer token
-  python scripts/smoke_all_tools.py
-  ```
-
-  Optional: `TEAMSHARED_SMOKE_TOKEN_HERMES` for cross-agent recall;
-  `--skip-forget` to leave smoke memories in the brain;
-  `--expect-existing 'QUERY:needle1,needle2'` for custom pre-existing recall probes.
-  Structure-only (mocked stores): `python scripts/smoke_all_tools.py --in-memory`.
-- **Cross-agent smoke**: `python scripts/smoke_cross_agent.py --in-memory`
-  for CI; live with `TEAMSHARED_SMOKE_URL`/`TEAMSHARED_SMOKE_TOKEN_CURSOR`/`TEAMSHARED_SMOKE_TOKEN_HERMES`.
-- **Client state API**: `GET/PUT /state` (bearer auth) and MCP
-  `memory_state_get` / `memory_state_set` store small JSON blobs keyed by
-  `(state_id, repo_slug, key)`. Used by continual-learning for cadence/index
-  without committing local files.
-- **Graph store (Neo4j)**: opt-in. Set `TEAMSHARED_NEO4J_ENABLED=true`, uncomment the
-  `neo4j` service in `infra/docker-compose.yml`, and install the extra:
-  `pip install '.[neo4j]'`. Exposes `memory_graph_relate` and `memory_graph_related`.
 
 See [`AGENTS.md`](AGENTS.md) for the conventions agents (human or LLM) should
 follow when modifying this repo.

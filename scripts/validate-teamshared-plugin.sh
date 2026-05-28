@@ -18,7 +18,6 @@ check() {
 echo "Validating teamshared plugin at $PLUGIN"
 check "$PLUGIN/.cursor-plugin/plugin.json"
 check "$ROOT/.cursor-plugin/marketplace.json"
-check "$PLUGIN/mcp.json"
 check "$PLUGIN/rules/teamshared.mdc"
 check "$PLUGIN/skills/teamshared/SKILL.md"
 check "$PLUGIN/skills/continual-learning/SKILL.md"

@@ -46,13 +46,16 @@ def test_load_teamshared_memory_rule_mdc() -> None:
     assert "memory_recall" in mdc
 
 
-def test_codex_setup_includes_cli_and_toml() -> None:
+def test_codex_setup_uses_inline_token_toml() -> None:
     setup = agent_setup(
         "codex",
         mcp_url="https://actx.teamshared.com/mcp",
         token="teamshared_testtoken",
     )
     assert setup is not None
-    assert "codex mcp add teamshared" in setup.snippet
-    assert "TEAMSHARED_TOKEN" in setup.snippet
     assert "[mcp_servers.teamshared]" in setup.snippet
+    assert "http_headers" in setup.snippet
+    assert "Bearer teamshared_testtoken" in setup.snippet
+    # No env-var indirection for codex anymore.
+    assert "bearer_token_env_var" not in setup.snippet
+    assert "export TEAMSHARED_TOKEN" not in setup.snippet

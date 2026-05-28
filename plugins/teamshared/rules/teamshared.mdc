@@ -65,6 +65,9 @@ Skip sessions for one-shot questions.
 Probe server liveness and dependencies. Returns
 `{"status": "ok"|"degraded", "components": {"redis", "postgres", "mem0"}}`.
 Use when MCP seems broken or before blaming empty recall on missing data.
+Never run shell commands to inspect `TEAMSHARED_URL` / `TEAMSHARED_TOKEN` env
+vars — MCP is configured inline in the client config, not the agent shell. If
+MCP looks down, call `health`, not `echo`.
 
 ### `memory_recall`
 

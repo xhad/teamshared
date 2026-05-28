@@ -22,11 +22,18 @@ Once this repo is public (or teammates have access):
 
    Or use **Settings → Plugins** and enable **teamshared**.
 
-4. Set environment variables **before launching Cursor** (shell profile or `.env`):
+4. Add the MCP server to `~/.cursor/mcp.json` with the URL and bearer token **inline**
+   (no environment variables — `/get-token` and `install.sh` write this for you):
 
-   ```bash
-   export TEAMSHARED_URL=https://actx.teamshared.com/mcp   # or your host
-   export TEAMSHARED_TOKEN=teamshared_...                    # from /get-token
+   ```json
+   {
+     "mcpServers": {
+       "teamshared": {
+         "url": "https://actx.teamshared.com/mcp",
+         "headers": { "Authorization": "Bearer teamshared_..." }
+       }
+     }
+   }
    ```
 
 5. Install [Bun](https://bun.sh) for continual-learning hooks.
@@ -44,7 +51,7 @@ ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 | Requirement | Why |
 |---|---|
 | teamshared server + token | MCP tools and `/state` API for continual-learning |
-| `TEAMSHARED_URL` / `TEAMSHARED_TOKEN` | Plugin `mcp.json` reads these at Cursor launch |
+| Token inline in `~/.cursor/mcp.json` | Cursor connects to teamshared (no env vars) |
 | Bun | `stop` hook runs TypeScript via `bun run` |
 | Open repo with `AGENTS.md` | Continual learning writes learned bullets there |
 
@@ -58,9 +65,9 @@ Cursor reviews all marketplace plugins manually. Checklist before submitting at
 - [ ] Repository is **public** and open source (MIT)
 - [ ] `.cursor-plugin/marketplace.json` at repo root lists `plugins/teamshared`
 - [ ] `plugins/teamshared/.cursor-plugin/plugin.json` is valid JSON with `name`, `version`, `description`, `author`, `license`, `logo`
-- [ ] All component paths exist: `rules/`, `skills/*/SKILL.md`, `agents/*.md`, `hooks/hooks.json`, `mcp.json`
+- [ ] All component paths exist: `rules/`, `skills/*/SKILL.md`, `agents/*.md`, `hooks/hooks.json`
 - [ ] Every skill/agent has YAML frontmatter (`name`, `description`)
-- [ ] `README.md` covers install, env vars, and what the plugin does
+- [ ] `README.md` covers install, MCP config, and what the plugin does
 - [ ] `LICENSE` and `CHANGELOG.md` present
 - [ ] Logo committed at `assets/logo.svg`
 - [ ] Test locally: symlink to `~/.cursor/plugins/local/teamshared`, reload, verify MCP + hooks
@@ -86,7 +93,6 @@ actx/
 └── plugins/
     └── teamshared/
         ├── .cursor-plugin/plugin.json
-        ├── mcp.json
         ├── rules/teamshared.mdc
         ├── skills/
         ├── agents/

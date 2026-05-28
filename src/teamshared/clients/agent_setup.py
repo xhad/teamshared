@@ -93,15 +93,10 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
 
     if agent_type == "codex":
         snippet = (
-            f"export TEAMSHARED_TOKEN='{token}'\n"
-            f"codex mcp add teamshared --url '{mcp_url}' --bearer-token-env-var TEAMSHARED_TOKEN\n"
-            "codex mcp list\n"
-        )
-        toml_snippet = (
-            "# Or add to ~/.codex/config.toml:\n"
+            "# Add to ~/.codex/config.toml (token is inline; no env vars needed):\n"
             "[mcp_servers.teamshared]\n"
             f'url = "{mcp_url}"\n'
-            'bearer_token_env_var = "TEAMSHARED_TOKEN"\n'
+            f'http_headers = {{ Authorization = "Bearer {token}" }}\n'
             "enabled = true\n"
         )
         return AgentSetup(
@@ -109,12 +104,12 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
             title="Codex",
             config_path="~/.codex/config.toml",
             steps=(
-                "Run the commands below (sets TEAMSHARED_TOKEN and registers the HTTP MCP server).",
-                "Or paste the TOML block into ~/.codex/config.toml and export TEAMSHARED_TOKEN in your shell.",
+                "Paste the TOML block below into ~/.codex/config.toml.",
+                "Run `codex mcp list` to confirm teamshared is registered.",
                 "Start a new Codex session and confirm teamshared tools are available.",
             ),
-            snippet=snippet + "\n" + toml_snippet,
-            snippet_lang="bash",
+            snippet=snippet,
+            snippet_lang="toml",
         )
 
     if agent_type == "hermes":

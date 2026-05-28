@@ -136,32 +136,6 @@ print(config_path)
 PY
 }
 
-_ts_append_profile() {
-  local marker="# teamshared (installed by install.sh)"
-  local profiles=()
-  if [[ -n "${ZSH_VERSION:-}" ]]; then
-    profiles+=("${ZDOTDIR:-$HOME}/.zshrc")
-  fi
-  profiles+=("$HOME/.zshrc" "$HOME/.bashrc")
-  local p
-  for p in "${profiles[@]}"; do
-    [[ -f "$p" ]] || continue
-    if grep -qF "$marker" "$p" 2>/dev/null; then
-      echo "  shell profile already configured ($p)"
-      return 0
-    fi
-  done
-  local target="${profiles[0]}"
-  mkdir -p "$(dirname "$target")"
-  {
-    echo ""
-    echo "$marker"
-    echo "export TEAMSHARED_URL=\"${TEAMSHARED_MCP_URL}\""
-    echo "export TEAMSHARED_TOKEN=\"${TEAMSHARED_TOKEN}\""
-  } >>"$target"
-  echo "  exports → $target"
-}
-
 _ts_finish() {
   echo ""
   case "${HARNESS}" in
@@ -207,7 +181,6 @@ _ts_install_cursor() {
   _ts_apply_token "${mcp_snippet}"
   _ts_merge_json_mcp "${mcp_snippet}" "${mcp_config}"
   echo "  MCP config → ${mcp_config}"
-  _ts_append_profile
   echo ""
   echo "Optional: install Bun (https://bun.sh) for continual-learning hooks."
 }
@@ -218,26 +191,18 @@ _ts_install_codex() {
   local snippet="${HOME}/.codex/teamshared-mcp.toml"
   mkdir -p "${HOME}/.codex"
   _ts_fetch "${snippet}" "${ASSETS}/codex/mcp.toml"
+  _ts_apply_token "${snippet}"
 
-  if command -v codex >/dev/null 2>&1; then
-    export TEAMSHARED_TOKEN
-    echo "Registering teamshared via codex CLI …"
-    codex mcp remove teamshared 2>/dev/null || true
-    codex mcp add teamshared --url "${TEAMSHARED_MCP_URL}" --bearer-token-env-var TEAMSHARED_TOKEN
-    codex mcp list || true
+  if [[ -f "${dest}" ]] && grep -q '\[mcp_servers.teamshared\]' "${dest}"; then
+    echo "teamshared already in ${dest} — edit it manually if the token changed."
+  elif [[ -f "${dest}" ]]; then
+    printf '\n' >>"${dest}"
+    cat "${snippet}" >>"${dest}"
+    echo "Appended teamshared block → ${dest}"
   else
-    if [[ -f "${dest}" ]] && grep -q '\[mcp_servers.teamshared\]' "${dest}"; then
-      echo "teamshared already in ${dest}"
-    elif [[ -f "${dest}" ]]; then
-      printf '\n# teamshared\n' >>"${dest}"
-      cat "${snippet}" >>"${dest}"
-      echo "Appended teamshared block → ${dest}"
-    else
-      cp "${snippet}" "${dest}"
-      echo "Wrote ${dest}"
-    fi
+    cp "${snippet}" "${dest}"
+    echo "Wrote ${dest}"
   fi
-  _ts_append_profile
   echo "  snippet kept at ${snippet}"
 }
 

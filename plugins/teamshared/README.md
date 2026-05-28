@@ -5,7 +5,6 @@ AGENTS.md continual learning, and copy-paste snippets for other clients.
 
 | Component | Purpose |
 |---|---|
-| `mcp.json` | Wires `teamshared` via `TEAMSHARED_URL` + `TEAMSHARED_TOKEN` |
 | `rules/teamshared.mdc` | Recall-first protocol (`alwaysApply`) |
 | `skills/teamshared/` | Memory tool chooser + session workflow |
 | `skills/continual-learning/` | Orchestrates AGENTS.md updates from transcripts |
@@ -21,7 +20,7 @@ The continual-learning hook is based on [Cursor's continual-learning plugin](htt
 
 1. **Settings → Plugins → Add marketplace** → `https://github.com/xhad/actx`
 2. Run **`/add-plugin teamshared`** or enable it under Settings → Plugins
-3. Set env vars and reload (below)
+3. Add the MCP server to `~/.cursor/mcp.json` (below) and reload
 
 See [MARKETPLACE.md](MARKETPLACE.md) for publish/submission checklist.
 
@@ -34,11 +33,19 @@ ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 ## Setup
 
 1. **teamshared server + bearer token** — get one from your admin or your server's `/get-token` page.
-2. **Environment variables** (export before launching Cursor):
+2. **MCP server config** — put the URL and bearer token **directly** in `~/.cursor/mcp.json`
+   (no environment variables). The `/get-token` page and `install.sh` write this for you;
+   to do it manually, merge:
 
-```bash
-export TEAMSHARED_URL=https://actx.teamshared.com/mcp
-export TEAMSHARED_TOKEN=teamshared_...
+```json
+{
+  "mcpServers": {
+    "teamshared": {
+      "url": "https://actx.teamshared.com/mcp",
+      "headers": { "Authorization": "Bearer teamshared_..." }
+    }
+  }
+}
 ```
 
 3. **[Bun](https://bun.sh)** on PATH for continual-learning hooks.
