@@ -193,7 +193,7 @@ def token_invite_create(
         None,
         "--agent",
         "-a",
-        help="Agent type for this invite: cursor, hermes, claude, or openclaw.",
+        help="Agent type for this invite: cursor, codex, hermes, claude, or openclaw.",
     ),
     uses: int = typer.Option(1, "--uses", "-n", help="Number of redemptions allowed."),
 ) -> None:
@@ -204,7 +204,7 @@ def token_invite_create(
     if agent is not None:
         agent_type = normalize_agent_type(agent)
         if agent_type is None:
-            raise typer.BadParameter("agent must be one of: cursor, hermes, claude, openclaw")
+            raise typer.BadParameter("agent must be one of: cursor, codex, hermes, claude, openclaw")
     settings = get_settings()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent=agent_type, uses=uses)

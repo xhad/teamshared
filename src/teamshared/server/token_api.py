@@ -300,7 +300,7 @@ async def handle_get_token_page(
             agent_type = _resolve_invite_agent_type(agent or None, record.agent)
             if agent_type is None:
                 if agent or record.agent:
-                    error = "Agent must be one of: cursor, hermes, claude, openclaw."
+                    error = f"Agent must be one of: {', '.join(sorted(KNOWN_AGENT_TYPES))}."
                 else:
                     error = "Choose your agent type below."
             elif invites.redeem(invite_code) is None:

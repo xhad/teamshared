@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-KNOWN_AGENT_TYPES = frozenset({"cursor", "hermes", "claude", "openclaw"})
+KNOWN_AGENT_TYPES = frozenset({"cursor", "codex", "hermes", "claude", "openclaw"})
 
 
 def normalize_agent_type(value: str) -> str | None:
@@ -56,6 +56,32 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
             ),
             snippet=json.dumps(payload, indent=2),
             snippet_lang="json",
+        )
+
+    if agent_type == "codex":
+        snippet = (
+            f"export TEAMSHARED_TOKEN='{token}'\n"
+            f"codex mcp add teamshared --url '{mcp_url}' --bearer-token-env-var TEAMSHARED_TOKEN\n"
+            "codex mcp list\n"
+        )
+        toml_snippet = (
+            "# Or add to ~/.codex/config.toml:\n"
+            "[mcp_servers.teamshared]\n"
+            f'url = "{mcp_url}"\n'
+            'bearer_token_env_var = "TEAMSHARED_TOKEN"\n'
+            "enabled = true\n"
+        )
+        return AgentSetup(
+            agent_type=agent_type,
+            title="Codex",
+            config_path="~/.codex/config.toml",
+            steps=(
+                "Run the commands below (sets TEAMSHARED_TOKEN and registers the HTTP MCP server).",
+                "Or paste the TOML block into ~/.codex/config.toml and export TEAMSHARED_TOKEN in your shell.",
+                "Start a new Codex session and confirm teamshared tools are available.",
+            ),
+            snippet=snippet + "\n" + toml_snippet,
+            snippet_lang="bash",
         )
 
     if agent_type == "hermes":
