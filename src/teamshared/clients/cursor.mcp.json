@@ -1,8 +1,8 @@
 {
   "_comment": "Copy into ~/.cursor/mcp.json. Replace <agent-token> with the value from `teamshared token mint cursor`.",
   "mcpServers": {
-    "teamshared-memory": {
-      "url": "https://memory.tailXXXX.ts.net/mcp",
+    "teamshared": {
+      "url": "https://actx.teamshared.com/mcp",
       "headers": {
         "Authorization": "Bearer <agent-token>"
       }

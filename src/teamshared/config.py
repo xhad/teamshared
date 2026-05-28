@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     public_url: str | None = Field(
         default=None,
         description=(
-            "Public HTTPS origin for invite links (e.g. https://mcp.example.com). "
+            "Public HTTPS origin for invite links (e.g. https://actx.teamshared.com). "
             "Used by `teamshared token invite-create` when printing share URLs."
         ),
     )

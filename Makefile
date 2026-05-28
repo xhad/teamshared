@@ -9,8 +9,9 @@ build-ollama-host :; $(COMPOSE_OLLAMA_HOST) up -d --build
 migrate :; $(COMPOSE) run --rm server teamshared migrate
 seed :; $(COMPOSE) run --rm server teamshared seed
 token-mint :; $(COMPOSE) run --rm server teamshared token mint cursor
+invite-create :; $(COMPOSE) run --rm server teamshared token invite-create --agent cursor-chad
 # Paste the printed token into ~/.cursor/mcp.json using src/teamshared/clients/cursor.mcp.json as the template
 health :; curl -fsS http://localhost:8077/health | jq
 
-.PHONY: build migrate seed token-mint health
+.PHONY: build migrate seed token-mint invite-create health
 

@@ -130,6 +130,10 @@ Two reference topologies live in [`infra/`](infra):
   [`railway.distiller.toml`](infra/railway.distiller.toml). Bearer auth on
   a public domain replaces Tailscale.
 
+**Team production (Spark + Cloudflare):** `https://actx.teamshared.com`
+(`/health`, `/mcp`, `/get-token/...`). The old `mcp.teamshared.com` hostname
+is retired — use `actx.teamshared.com` everywhere.
+
 Both are starting points; teamshared is just an HTTP/MCP service plus a worker,
 so it'll run anywhere that can host two containers and reach Postgres +
 Redis.
@@ -188,10 +192,11 @@ tests/                 pytest suite
   2. User opens **`/get-token/{invite}/{agent}`** in a browser, or:
 
   ```bash
-  curl -fsS -X POST 'https://mcp.example.com/tokens/mint/INVITE_CODE/cursor-yourname'
+  curl -fsS -X POST 'https://actx.teamshared.com/tokens/mint/INVITE_CODE/cursor-yourname'
   ```
 
-  Set `TEAMSHARED_PUBLIC_URL` so `teamshared token invite-create` prints a shareable link.
+  Set `TEAMSHARED_PUBLIC_URL=https://actx.teamshared.com` so
+  `teamshared token invite-create` prints a shareable link.
   Admin direct mint still works via `X-Teamshared-Mint-Secret` + `POST /tokens/mint`.
 - **Backup**: cron `scripts/backup.sh` nightly. See the file header for env vars.
 - **Telemetry**: install `pip install '.[otel]'` and set

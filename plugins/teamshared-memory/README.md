@@ -22,7 +22,7 @@ Bundled components:
 Admin (once per teammate):
 
 ```bash
-export TEAMSHARED_PUBLIC_URL=https://mcp.example.com   # on the server
+export TEAMSHARED_PUBLIC_URL=https://actx.teamshared.com   # on the server
 teamshared token invite-create --agent cursor-yourname
 # share the printed /get-token link
 ```
@@ -49,11 +49,12 @@ curl -fsS -X POST "${TEAMSHARED_URL%/mcp}/tokens/mint" \
 3. Environment variables (add to shell profile or `.env` loaded before Cursor starts):
 
 ```bash
-export TEAMSHARED_URL=http://localhost:8077/mcp
+export TEAMSHARED_URL=https://actx.teamshared.com/mcp
 export TEAMSHARED_TOKEN=teamshared_...   # from token mint
 ```
 
-For Tailscale/Railway, set `TEAMSHARED_URL` to your public `/mcp` URL instead.
+For local dev use `http://localhost:8077/mcp`. The team production host is
+`https://actx.teamshared.com` (`mcp.teamshared.com` is retired).
 
 ## Install in Cursor
 
