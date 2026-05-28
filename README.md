@@ -69,13 +69,17 @@ run Ollama on the host. The image installs the `ollama` Python client Mem0 needs
 
 ## Connect your agents
 
-**Cursor (recommended):** install the [`plugins/teamshared`](plugins/teamshared/) plugin — MCP wiring, recall-first rule, AGENTS.md continual learning, and client snippets.
+**Cursor (recommended):** install the **teamshared** plugin.
+
+**Marketplace:** Settings → Plugins → Add marketplace → `https://github.com/xhad/actx`, then `/add-plugin teamshared`.
+
+**Local symlink:**
 
 ```bash
 ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 ```
 
-Reload Cursor (**Developer: Reload Window**). Requires **Bun** for continual-learning hooks.
+Export `TEAMSHARED_URL` and `TEAMSHARED_TOKEN` before launching Cursor. Requires **Bun** for continual-learning hooks. See [`plugins/teamshared/README.md`](plugins/teamshared/README.md) and [`plugins/teamshared/MARKETPLACE.md`](plugins/teamshared/MARKETPLACE.md).
 
 Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients):
 

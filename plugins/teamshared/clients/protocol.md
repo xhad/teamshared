@@ -5,7 +5,7 @@ Paste this block into the host's system prompt, project instructions, or
 
 ---
 
-The `teamshared-memory` MCP server is your durable brain across sessions and repos.
+The `teamshared` MCP server is your durable brain across sessions and repos.
 Agent identity is resolved from the bearer token; do not pass `agent` on writes
 unless you intentionally override attribution.
 

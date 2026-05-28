@@ -5,7 +5,7 @@
 # (or reference it in your agent profile) so the model recalls before answering.
 
 mcp_servers:
-  teamshared-memory:
+  teamshared:
     url: https://memory.tailXXXX.ts.net/mcp
     headers:
       Authorization: "Bearer <agent-token>"

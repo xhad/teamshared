@@ -1,0 +1,17 @@
+{
+  "name": "teamshared",
+  "owner": {
+    "name": "Sapien"
+  },
+  "metadata": {
+    "description": "teamshared — shared agent memory MCP server and Cursor plugin",
+    "version": "0.2.0"
+  },
+  "plugins": [
+    {
+      "name": "teamshared",
+      "source": "./plugins/teamshared",
+      "description": "Shared team memory for Cursor: MCP wiring, recall-first rules, AGENTS.md continual learning, and client snippets."
+    }
+  ]
+}

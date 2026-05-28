@@ -1,14 +1,14 @@
 {
   "_comment": "Merge into claude_desktop_config.json (macOS: ~/Library/Application Support/Claude/claude_desktop_config.json). Restart Claude Desktop after editing.",
   "mcpServers": {
-    "teamshared-memory-remote": {
+    "teamshared-remote": {
       "_comment": "Preferred when teamshared is deployed on Tailscale/Railway",
       "url": "https://memory.tailXXXX.ts.net/mcp",
       "headers": {
         "Authorization": "Bearer <agent-token>"
       }
     },
-    "teamshared-memory-local": {
+    "teamshared-local": {
       "_comment": "Local stdio — requires teamshared on PATH and backing stores running",
       "command": "teamshared",
       "args": ["serve", "--transport", "stdio"],

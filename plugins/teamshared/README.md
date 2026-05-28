@@ -15,28 +15,36 @@ AGENTS.md continual learning, and copy-paste snippets for other clients.
 
 The continual-learning hook is based on [Cursor's continual-learning plugin](https://github.com/cursor/plugins) (MIT), modified to store cadence and transcript index on teamshared.
 
-## Prerequisites
+## Install
 
-1. A running teamshared server and bearer token (see main [README](../README.md)).
-2. **Bun** on PATH for continual-learning hooks (`bun --version`).
-3. Environment variables before launching Cursor:
+### From marketplace (recommended)
+
+1. **Settings → Plugins → Add marketplace** → `https://github.com/xhad/actx`
+2. Run **`/add-plugin teamshared`** or enable it under Settings → Plugins
+3. Set env vars and reload (below)
+
+See [MARKETPLACE.md](MARKETPLACE.md) for publish/submission checklist.
+
+### From this repo (symlink)
+
+```bash
+ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
+```
+
+## Setup
+
+1. **teamshared server + bearer token** — get one from your admin or your server's `/get-token` page.
+2. **Environment variables** (export before launching Cursor):
 
 ```bash
 export TEAMSHARED_URL=https://actx.teamshared.com/mcp
 export TEAMSHARED_TOKEN=teamshared_...
 ```
 
-## Install
+3. **[Bun](https://bun.sh)** on PATH for continual-learning hooks.
+4. **Developer: Reload Window** — confirm **Settings → MCP** shows `teamshared` enabled.
 
-```bash
-ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
-```
-
-Reload Cursor (**Developer: Reload Window**). Confirm under **Settings → Plugins** that
-**teamshared** appears, and under **Settings → MCP** that the server is enabled.
-
-Do not install the upstream Cursor `continual-learning` marketplace plugin — this
-bundle replaces it with teamshared state storage.
+Do not install the upstream Cursor `continual-learning` marketplace plugin — this bundle replaces it with teamshared state storage.
 
 ## What you get
 
@@ -53,4 +61,4 @@ See [`clients/`](clients/) for Hermes, Claude Desktop, and protocol markdown.
 
 ## License
 
-MIT — teamshared components by Sapien; continual-learning hook derived from Cursor's plugin (see [LICENSE-continual-learning](LICENSE-continual-learning)).
+MIT — see [LICENSE](LICENSE). Continual-learning portions derived from Cursor's plugin ([LICENSE-continual-learning](LICENSE-continual-learning)).
