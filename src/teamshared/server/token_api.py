@@ -215,7 +215,7 @@ def _landing_page_html() -> str:
     <a class="button" href="/get-token">Get your token</a>
     <p class="muted">CLI: <code>curl -fsS 'https://actx.teamshared.com/?invite=CODE&amp;agent=TYPE'</code></p>
     <p class="muted">One-command install:
-    <code>curl -fsSL https://actx.teamshared.com/install.sh -o install-teamshared.sh &amp;&amp; bash install-teamshared.sh</code>
+    <code>curl -fsSL https://actx.teamshared.com/install.sh | bash</code>
     (see <a href="/install">/install</a>).</p>
   </div>
 </body>

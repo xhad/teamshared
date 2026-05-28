@@ -12,8 +12,7 @@ _REPO_ASSETS = None
 # Placeholders substituted when the script is served (request base URL).
 _INSTALL_SH = r"""#!/usr/bin/env bash
 # teamshared unified installer
-#   curl -fsSL __BASE__/install.sh -o install-teamshared.sh && bash install-teamshared.sh
-# Non-interactive: TEAMSHARED_HARNESS=cursor bash install-teamshared.sh
+#   curl -fsSL __BASE__/install.sh | bash
 set -euo pipefail
 
 TEAMSHARED_BASE_URL="${TEAMSHARED_BASE_URL:-__BASE__}"
@@ -33,48 +32,59 @@ _ts_fetch() {
   curl -fsSL "$url" -o "$dest"
 }
 
+# curl | bash has no stdin TTY; read prompts from the controlling terminal.
+_ts_tty() {
+  if [[ -t 0 ]]; then
+    printf '%s' "$1"
+  elif [[ -r /dev/tty ]]; then
+    printf '%s' "$1" >/dev/tty
+  else
+    _ts_die "no terminal available for prompts (try: bash install-teamshared.sh)"
+  fi
+}
+
+_ts_read() {
+  if [[ -t 0 ]]; then
+    read -r "$@"
+  else
+    read -r "$@" </dev/tty
+  fi
+}
+
+_ts_read_secret() {
+  if [[ -t 0 ]]; then
+    read -rs "$@"
+    echo
+  else
+    read -rs "$@" </dev/tty
+    echo >/dev/tty
+  fi
+}
+
 _ts_choose_harness() {
-  if [[ -n "${TEAMSHARED_HARNESS:-}" ]]; then
-    HARNESS="${TEAMSHARED_HARNESS}"
-    return 0
-  fi
-  if [[ ! -t 0 ]]; then
-    _ts_die "set TEAMSHARED_HARNESS (cursor, codex, hermes, claude, openclaw) or run interactively"
-  fi
-  echo ""
-  echo "Which agent harness are you installing teamshared for?"
-  echo "  1) cursor      — Cursor IDE plugin, rules, MCP wiring"
-  echo "  2) codex       — OpenAI Codex CLI / config.toml"
-  echo "  3) hermes      — Hermes (~/.hermes/config.yaml)"
-  echo "  4) claude      — Claude Desktop"
-  echo "  5) openclaw    — OpenClaw"
-  echo ""
+  _ts_tty $'\nSelect agent harness:\n  1) cursor   — Cursor IDE (plugin, rules, MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n\n'
   local choice
   while true; do
-    read -rp "Enter 1-5: " choice
+    _ts_tty 'Enter choice [1-5]: '
+    _ts_read choice
     case "$choice" in
       1|cursor) HARNESS=cursor; break ;;
       2|codex) HARNESS=codex; break ;;
       3|hermes) HARNESS=hermes; break ;;
       4|claude) HARNESS=claude; break ;;
       5|openclaw) HARNESS=openclaw; break ;;
-      *) echo "Invalid choice." ;;
+      *)
+        _ts_tty 'Invalid choice. Enter 1, 2, 3, 4, or 5.\n'
+        ;;
     esac
   done
+  _ts_tty "Selected: ${HARNESS}\n"
 }
 
 _ts_prompt_token() {
-  if [[ -n "${TEAMSHARED_TOKEN:-}" ]]; then
-    export TEAMSHARED_TOKEN
-    return 0
-  fi
-  if [[ ! -t 0 ]]; then
-    _ts_die "set TEAMSHARED_TOKEN or run interactively (get a token at ${TEAMSHARED_BASE_URL}/get-token)"
-  fi
-  echo ""
-  echo "Paste your teamshared bearer token (from ${TEAMSHARED_BASE_URL}/get-token)."
-  read -rsp "teamshared bearer token (teamshared_…): " TEAMSHARED_TOKEN
-  echo
+  _ts_tty $'\nPaste your teamshared bearer token (from '"${TEAMSHARED_BASE_URL}"'/get-token).\n'
+  _ts_tty 'teamshared bearer token (teamshared_…): '
+  _ts_read_secret TEAMSHARED_TOKEN
   export TEAMSHARED_TOKEN
   [[ -n "${TEAMSHARED_TOKEN}" ]] || _ts_die "empty token"
   [[ "${TEAMSHARED_TOKEN}" == teamshared_* ]] || _ts_die "token should start with teamshared_"
@@ -362,8 +372,7 @@ def install_index_html(*, base_url: str) -> str:
   <h1>Install teamshared</h1>
   <p>One script for every harness ({harnesses}). Downloads plugin files and MCP
   config from this server — no local clone of the repo required.</p>
-  <pre>curl -fsSL {base}/install.sh -o install-teamshared.sh
-bash install-teamshared.sh</pre>
+  <pre>curl -fsSL {base}/install.sh | bash</pre>
   <p>The script prompts for your bearer token from <a href="/get-token">/get-token</a>
   and writes it into the harness MCP config.</p>
 </body>

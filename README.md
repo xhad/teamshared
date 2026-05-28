@@ -76,8 +76,7 @@ Hermes, Claude, OpenClaw), downloads plugin files and MCP config from the server
 and places them in the right paths:
 
 ```bash
-curl -fsSL https://actx.teamshared.com/install.sh -o install-teamshared.sh
-bash install-teamshared.sh
+curl -fsSL https://actx.teamshared.com/install.sh | bash
 ```
 
 The script prompts for your bearer token ([`/get-token`](https://actx.teamshared.com/get-token))

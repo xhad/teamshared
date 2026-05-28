@@ -24,7 +24,9 @@ def test_unified_install_script() -> None:
     assert "_ts_choose_harness" in body
     assert "teamshared install:" in body
     assert "TEAMSHARED_INVITE" not in body
-    assert "read -rsp" in body
+    assert "TEAMSHARED_HARNESS" not in body
+    assert "_ts_tty" in body
+    assert "/dev/tty" in body
     assert "_ts_prompt_token" in body
     assert "/get-token" in body
     assert "https://actx.teamshared.com/mcp" in body
@@ -48,7 +50,7 @@ def test_install_routes() -> None:
         script = client.get("/install.sh")
         assert script.status_code == 200
         assert script.headers["content-type"].startswith("text/x-shellscript")
-        assert "Enter 1-5" in script.text
+        assert "Enter choice [1-5]" in script.text
 
         codex = client.get("/install/assets/codex/mcp.toml")
         assert codex.status_code == 200

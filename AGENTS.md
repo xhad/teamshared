@@ -108,19 +108,20 @@ build, so dropping it breaks both the `server` and `distiller` images.
 
 - Keep Cursor hook and continual-learning state under `~/.cursor`, not committed in the repo.
 - Prefer storing the continual-learning transcript index on the teamshared server via `memory_state_get` / `memory_state_set` (token+repo scoped) when MCP is available; fall back to `~/.cursor/hooks/state/continual-learning/<workspace-slug>/`.
-- Teammate onboarding should cover the `teamshared` Cursor plugin (MCP + rule + continual learning), not just a standalone `~/.cursor/mcp.json` snippet.
+- Teammate onboarding should use the unified curl installer (`install.sh` on actx.teamshared.com) or the `teamshared` Cursor plugin (MCP + rule + continual learning), not a standalone `~/.cursor/mcp.json` snippet alone.
+- Remote install uses one `install.sh` with interactive harness selection and a bearer-token prompt written into MCP config; no per-harness `.sh` scripts and no invite-redeem flow in the installer.
 - Get-token/onboarding pages should ship the full `teamshared.mdc` rule markdown with install instructions (copy-paste from the page), not repo symlinks or MCP JSON alone.
 
 ## Learned Workspace Facts
 
 - The Python package, CLI, and env prefix are `teamshared` / `TEAMSHARED_*`.
-- Team production MCP host is `https://actx.teamshared.com` (`/health`, `/mcp`, `/get-token/...`); `mcp.teamshared.com` is retired.
+- Team production host is `https://actx.teamshared.com` (`/health`, `/mcp`, `/get-token`, unified install at `/install.sh` and `/install`); `mcp.teamshared.com` is retired.
 - Continual-learning workspace slug: repo root path with leading `/` removed and `/` replaced by `-` (this repo: `Users-chad-code-sapien-actx`).
 - On Spark, run the CLI through Docker Compose or Makefile targets; prefer `make invite-create-host` (exec into the running server) over `make invite-create` so invites land in `/data/invites.json`. There is no global `teamshared` on shell PATH.
 - Self-service token onboarding uses agent types (`cursor`, `codex`, `hermes`, `claude`, `openclaw`), not personalized names (`cursor-chad` → `cursor`); redeem via `curl -fsS 'https://actx.teamshared.com/?invite=CODE&agent=TYPE'` for the raw bearer token.
 - Spark deployments with host Ollama use `make build-ollama-host`; set `TEAMSHARED_PG_PORT` / `TEAMSHARED_REDIS_PORT` in `.env` when host 5432/6379 are already taken.
 - One-off compose CLI targets (`migrate`, `seed`, `token-mint`, `invite-create`) use `--no-deps` so they do not start conflicting Postgres/Redis containers.
-- `teamshared` Cursor plugin at `plugins/teamshared/` bundles MCP wiring, recall rule, continual-learning hooks, and client snippets; marketplace install via repo `https://github.com/xhad/actx` and `/add-plugin teamshared`, or symlink to `~/.cursor/plugins/local/teamshared`.
+- `teamshared` Cursor plugin at `plugins/teamshared/` bundles MCP wiring, recall rule, continual-learning hooks, and client snippets; install via `curl -fsSL https://actx.teamshared.com/install.sh` (remote assets under `/install/assets/`), marketplace (`/add-plugin teamshared`), or symlink to `~/.cursor/plugins/local/teamshared`.
 - Legacy names `actx`, `sptx`, `actx-memory`, and `sptx-memory` are retired; use `teamshared` for package, plugin, and MCP server naming.
 - `teamshared seed` loads starter procedural playbooks only; semantic and episodic memory come from `memory_remember` and session distillation.
 - Plugin MCP wiring reads `TEAMSHARED_URL` and `TEAMSHARED_TOKEN` from the environment (see plugin `mcp.json`); Cursor must inherit those vars at launch.
