@@ -104,7 +104,7 @@ services:
       - teamshareddata:/data
     command: ["teamshared", "worker"]
 
-  Optional: enable when TEAMSHARED_NEO4J_ENABLED=true and you want the relationship graph.
+  # Optional: enable when TEAMSHARED_NEO4J_ENABLED=true and you want the relationship graph.
   neo4j:
     image: neo4j:5
     environment:
