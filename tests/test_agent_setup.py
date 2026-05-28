@@ -24,7 +24,12 @@ def test_cursor_setup_includes_mcp_json() -> None:
     assert setup is not None
     assert "mcpServers" in setup.snippet
     assert "teamshared_testtoken" in setup.snippet
-    assert setup.config_path == "~/.cursor/mcp.json"
+    assert "plugins/local/teamshared-memory" in setup.snippet
+    assert setup.config_path == (
+        "~/.cursor/plugins/local/teamshared-memory and ~/.cursor/mcp.json"
+    )
+    assert any("teamshared-memory plugin" in step for step in setup.steps)
+    assert any("Settings → Plugins" in step for step in setup.steps)
 
 
 def test_codex_setup_includes_cli_and_toml() -> None:

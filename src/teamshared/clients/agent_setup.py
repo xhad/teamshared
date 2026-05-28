@@ -44,17 +44,33 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
                 }
             }
         }
+        plugin_install = (
+            "# 1. Install the teamshared-memory Cursor plugin (recall-first rule + skill)\n"
+            "mkdir -p ~/.cursor/plugins/local\n"
+            "# From the actx repo checkout:\n"
+            'ln -sf "$(pwd)/plugins/teamshared-memory" ~/.cursor/plugins/local/teamshared-memory\n'
+            "# Without the repo, copy the plugin folder instead:\n"
+            "# cp -R /path/to/teamshared-memory ~/.cursor/plugins/local/\n"
+            "\n"
+            "# 2. MCP server — merge into ~/.cursor/mcp.json\n"
+        )
         return AgentSetup(
             agent_type=agent_type,
             title="Cursor",
-            config_path="~/.cursor/mcp.json",
-            steps=(
-                "Open or create ~/.cursor/mcp.json.",
-                "Merge the JSON below into the top-level object (keep any other mcpServers entries).",
-                "In Cursor: Command Palette → Developer: Reload Window.",
-                "Confirm teamshared appears under Settings → MCP.",
+            config_path=(
+                "~/.cursor/plugins/local/teamshared-memory and ~/.cursor/mcp.json"
             ),
-            snippet=json.dumps(payload, indent=2),
+            steps=(
+                "Install the teamshared-memory plugin so the recall-first rule and "
+                "skill load on every turn (symlink or copy to "
+                "~/.cursor/plugins/local/teamshared-memory — see commands below).",
+                "Open or create ~/.cursor/mcp.json and merge the JSON block below "
+                "(keep any other mcpServers entries).",
+                "In Cursor: Command Palette → Developer: Reload Window.",
+                "Confirm teamshared appears under Settings → MCP and "
+                "teamshared-memory under Settings → Plugins.",
+            ),
+            snippet=plugin_install + json.dumps(payload, indent=2),
             snippet_lang="json",
         )
 

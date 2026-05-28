@@ -310,6 +310,8 @@ def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
         assert "Connect teamshared to Cursor" in resp.text
         assert "mcpServers" in resp.text
         assert "~/.cursor/mcp.json" in resp.text
+        assert "plugins/local/teamshared-memory" in resp.text
+        assert "Settings → Plugins" in resp.text
 
 
 def test_invite_normalizes_cursor_chad_to_cursor(tmp_path: Path) -> None:
