@@ -173,11 +173,18 @@ class SemanticEpisodicStore:
         the caller's requested ``limit``. Remove this workaround once Mem0
         either ships per-backend score normalization or pgvector starts
         returning similarity.
+
+        Mem0 2.0 also requires at least one entity id (``user_id``, ``agent_id``,
+        or ``run_id``) inside ``filters``. For the shared-brain read path
+        (``agent=None``) we discover distinct ``user_id`` scopes in the
+        collection and search them with an ``in`` filter.
         """
+        entity_filters = await self._mem0_entity_filters(agent)
+        if entity_filters is None:
+            return []
+
         loop = asyncio.get_running_loop()
-        filters: dict[str, Any] = {}
-        if agent:
-            filters["user_id"] = agent
+        filters: dict[str, Any] = dict(entity_filters)
         if pillar:
             filters["pillar"] = pillar
 
@@ -185,9 +192,8 @@ class SemanticEpisodicStore:
             "query": query,
             "top_k": max(limit * 10, 50),
             "threshold": 0.0,
+            "filters": filters,
         }
-        if filters:
-            kwargs["filters"] = filters
 
         result = await loop.run_in_executor(None, lambda: self.memory.search(**kwargs))
         return self._records_from_mem0(result, time_range=time_range)
@@ -210,10 +216,15 @@ class SemanticEpisodicStore:
         over-fetch and filter in Python; the working set is small."""
         loop = asyncio.get_running_loop()
 
+        entity_filters = await self._mem0_entity_filters(agent)
+        if entity_filters is None:
+            return []
+
         def _fetch() -> Any:
-            kwargs: dict[str, Any] = {"top_k": max(limit * 4, 50)}
-            if agent:
-                kwargs["filters"] = {"user_id": agent}
+            kwargs: dict[str, Any] = {
+                "top_k": max(limit * 4, 50),
+                "filters": entity_filters,
+            }
             return self.memory.get_all(**kwargs)
 
         raw = await loop.run_in_executor(None, _fetch)
@@ -229,6 +240,43 @@ class SemanticEpisodicStore:
             return not (until and r.created_at and r.created_at > until)
 
         return [r for r in records if _matches(r)][:limit]
+
+    async def _mem0_entity_filters(self, agent: str | None) -> dict[str, Any] | None:
+        """Build Mem0 entity filters for one agent or the shared-brain scope."""
+        if agent:
+            return {"user_id": agent}
+        user_ids = await self._distinct_mem0_user_ids()
+        if not user_ids:
+            return None
+        if len(user_ids) == 1:
+            return {"user_id": user_ids[0]}
+        return {"user_id": {"in": user_ids}}
+
+    async def _distinct_mem0_user_ids(self) -> list[str]:
+        """Return distinct Mem0 ``user_id`` scopes stored in the pgvector table."""
+        table = self._settings.mem0_collection
+        dsn = self._settings.pg_dsn
+
+        def _query() -> list[str]:
+            import psycopg
+            from psycopg import sql
+
+            with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL(
+                        "SELECT DISTINCT payload->>'user_id' FROM {} "
+                        "WHERE payload->>'user_id' IS NOT NULL "
+                        "AND payload->>'user_id' != ''"
+                    ).format(sql.Identifier(table))
+                )
+                return [str(row[0]) for row in cur.fetchall() if row[0]]
+
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, _query)
+        except Exception as exc:
+            log.warning("mem0_distinct_user_ids_failed", error=str(exc))
+            return []
 
     @staticmethod
     def _normalize_add_result(result: Any) -> list[dict[str, Any]]:

@@ -11,10 +11,11 @@ instead of in production.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from teamshared.config import Settings
 from teamshared.memory.semantic import SemanticEpisodicStore
 
 
@@ -25,7 +26,7 @@ def store_with_fake_mem0() -> tuple[SemanticEpisodicStore, MagicMock]:
     We bypass :meth:`SemanticEpisodicStore.connect` (which would import and
     instantiate real Mem0) by assigning ``_memory`` directly.
     """
-    store = SemanticEpisodicStore.__new__(SemanticEpisodicStore)
+    store = SemanticEpisodicStore(Settings(_env_file=None))
     fake = MagicMock()
     fake.get_all.return_value = {"results": []}
     fake.search.return_value = {"results": []}
@@ -50,15 +51,16 @@ async def test_list_episodes_uses_filters_not_top_level_user_id(
     assert kwargs.get("top_k") == 50  # max(limit*4, 50)
 
 
-async def test_list_episodes_omits_filters_when_no_agent(
+async def test_list_episodes_uses_shared_brain_scope_when_no_agent(
     store_with_fake_mem0: tuple[SemanticEpisodicStore, MagicMock],
 ) -> None:
     store, fake = store_with_fake_mem0
+    store._distinct_mem0_user_ids = AsyncMock(return_value=["cursor", "hermes"])  # type: ignore[method-assign]
 
     await store.list_episodes(limit=5)
 
     kwargs: dict[str, Any] = fake.get_all.call_args.kwargs
-    assert "filters" not in kwargs
+    assert kwargs.get("filters") == {"user_id": {"in": ["cursor", "hermes"]}}
     assert "user_id" not in kwargs
 
 
@@ -98,16 +100,29 @@ async def test_search_overfetches_and_disables_threshold(
     assert kwargs.get("top_k") == 200  # max(20 * 10, 50)
 
 
-async def test_search_omits_filters_when_no_agent_no_pillar(
+async def test_search_uses_shared_brain_scope_when_no_agent(
     store_with_fake_mem0: tuple[SemanticEpisodicStore, MagicMock],
 ) -> None:
     store, fake = store_with_fake_mem0
+    store._distinct_mem0_user_ids = AsyncMock(return_value=["cursor", "hermes"])  # type: ignore[method-assign]
 
     await store.search("anything", limit=8)
 
     kwargs: dict[str, Any] = fake.search.call_args.kwargs
-    assert "filters" not in kwargs
+    assert kwargs.get("filters") == {"user_id": {"in": ["cursor", "hermes"]}}
     assert kwargs.get("top_k") == 80  # max(8 * 10, 50)
+
+
+async def test_search_skips_mem0_when_no_agent_scopes_exist(
+    store_with_fake_mem0: tuple[SemanticEpisodicStore, MagicMock],
+) -> None:
+    store, fake = store_with_fake_mem0
+    store._distinct_mem0_user_ids = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
+    records = await store.search("anything", limit=8)
+
+    assert records == []
+    fake.search.assert_not_called()
 
 
 async def test_search_inverts_mem0_distance_into_similarity(
@@ -119,6 +134,7 @@ async def test_search_inverts_mem0_distance_into_similarity(
     cross-pillar reranker, sort order, and any downstream consumer all agree.
     """
     store, fake = store_with_fake_mem0
+    store._distinct_mem0_user_ids = AsyncMock(return_value=["cursor"])  # type: ignore[method-assign]
     fake.search.return_value = {
         "results": [
             {"id": "near", "memory": "very close", "score": 0.1,
