@@ -12,6 +12,11 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from teamshared.auth import TokenStore
+from teamshared.clients.agent_setup import (
+    KNOWN_AGENT_TYPES,
+    agent_setup,
+    normalize_agent_type,
+)
 from teamshared.config import Settings
 from teamshared.invite import InviteStore
 from teamshared.logging import get_logger
@@ -29,6 +34,29 @@ def _parse_agent(value: object) -> str | None:
     if not _AGENT_PATTERN.fullmatch(agent):
         return None
     return agent
+
+
+def _resolve_invite_agent_type(
+    agent_hint: str | None,
+    invite_agent: str | None,
+) -> str | None:
+    for candidate in (agent_hint, invite_agent):
+        if not candidate:
+            continue
+        agent_type = normalize_agent_type(candidate)
+        if agent_type is not None:
+            return agent_type
+    return None
+
+
+def _invalid_agent_type_response() -> JSONResponse:
+    return JSONResponse(
+        {
+            "error": "agent must be a known type",
+            "allowed": sorted(KNOWN_AGENT_TYPES),
+        },
+        status_code=400,
+    )
 
 
 def _mint_enabled(settings: Settings) -> bool:
@@ -58,19 +86,19 @@ def _redeem_invite_for_token(
     record = invites.get(code)
     if record is None:
         return None, JSONResponse({"error": "invalid_invite"}, status_code=401)
-    agent = _parse_agent(agent_hint) if agent_hint else None
-    if agent is None and record.agent:
-        agent = _parse_agent(record.agent)
-    if agent is None:
+    agent_type = _resolve_invite_agent_type(agent_hint, record.agent)
+    if agent_type is None:
+        if agent_hint or record.agent:
+            return None, _invalid_agent_type_response()
         return None, JSONResponse(
-            {"error": "agent is required for this invite"},
+            {"error": "agent is required for this invite", "allowed": sorted(KNOWN_AGENT_TYPES)},
             status_code=400,
         )
     if invites.redeem(code) is None:
         return None, JSONResponse({"error": "invalid_invite"}, status_code=401)
-    token = store.mint(agent)
-    log.info("token_minted_via_invite", agent=agent, token_prefix=token[:8])
-    return agent, token
+    token = store.mint(agent_type)
+    log.info("token_minted_via_invite", agent=agent_type, token_prefix=token[:8])
+    return agent_type, token
 
 
 def _mint_via_invite(
@@ -223,9 +251,12 @@ async def handle_token_invite_create(
     if not isinstance(uses, int) or uses <= 0:
         return JSONResponse({"error": "uses must be a positive integer"}, status_code=400)
 
-    agent = _parse_agent(body.get("agent")) if body.get("agent") is not None else None
-    if body.get("agent") is not None and agent is None:
-        return JSONResponse({"error": "invalid agent"}, status_code=400)
+    agent = None
+    if body.get("agent") is not None:
+        agent_type = normalize_agent_type(str(body.get("agent")))
+        if agent_type is None:
+            return _invalid_agent_type_response()
+        agent = agent_type
 
     record = invites.create(agent=agent, uses=uses)
     return JSONResponse(
@@ -252,46 +283,60 @@ async def handle_get_token_page(
         request.path_params.get("invite")
         or request.query_params.get("invite", "")
     ).strip()
+    record = invites.get(invite_code) if invite_code else None
+    preset_type = normalize_agent_type(record.agent) if record and record.agent else None
     agent = (
         request.path_params.get("agent")
         or request.query_params.get("agent", "")
     ).strip()
+    if not agent and preset_type:
+        agent = preset_type
     error = ""
 
     if invite_code:
-        parsed_agent = _parse_agent(agent) if agent else None
-        record = invites.get(invite_code)
         if record is None:
             error = "Invalid or expired invite code."
         else:
-            final_agent = parsed_agent or (
-                _parse_agent(record.agent) if record.agent else None
-            )
-            if final_agent is None:
-                error = "Enter your agent name below (e.g. cursor-chad)."
+            agent_type = _resolve_invite_agent_type(agent or None, record.agent)
+            if agent_type is None:
+                if agent or record.agent:
+                    error = "Agent must be one of: cursor, hermes, claude, openclaw."
+                else:
+                    error = "Choose your agent type below."
             elif invites.redeem(invite_code) is None:
                 error = "Invalid or expired invite code."
             else:
-                token = store.mint(final_agent)
-                log.info("token_minted_via_web", agent=final_agent, token_prefix=token[:8])
+                token = store.mint(agent_type)
+                log.info("token_minted_via_web", agent=agent_type, token_prefix=token[:8])
                 base = str(request.base_url).rstrip("/")
                 return HTMLResponse(
-                    _token_result_html(final_agent, token, base),
+                    _token_result_html(agent_type, token, base),
                     status_code=200,
                 )
 
-    return HTMLResponse(_token_form_html(error=error, invite=invite_code, agent=agent))
+    return HTMLResponse(
+        _token_form_html(error=error, invite=invite_code, agent=agent, preset_type=preset_type)
+    )
 
 
-def _token_form_html(*, error: str, invite: str, agent: str) -> str:
+def _token_form_html(
+    *,
+    error: str,
+    invite: str,
+    agent: str,
+    preset_type: str | None = None,
+) -> str:
     err = f"<p style='color:#b00020'>{escape(error)}</p>" if error else ""
+    allowed = ", ".join(sorted(KNOWN_AGENT_TYPES))
+    agent_value = preset_type or agent
+    readonly = " readonly" if preset_type else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>teamshared token</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; max-width: 36rem; margin: 3rem auto; padding: 0 1rem; }}
+    body {{ font-family: system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; }}
     label {{ display: block; margin-top: 1rem; font-weight: 600; }}
     input {{ width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }}
     button {{ margin-top: 1rem; padding: 0.6rem 1rem; }}
@@ -300,39 +345,47 @@ def _token_form_html(*, error: str, invite: str, agent: str) -> str:
 </head>
 <body>
   <h1>Get your teamshared token</h1>
-  <p>Paste the invite code from your admin, choose a unique agent name, and submit.</p>
+  <p>Paste the invite code from your admin and pick your agent type ({allowed}).</p>
   {err}
   <form method="get" action="/get-token">
     <label for="invite">Invite code</label>
     <input id="invite" name="invite" required value="{escape(invite)}" />
-    <label for="agent">Agent name (e.g. cursor-chad)</label>
-    <input id="agent" name="agent" required placeholder="cursor-yourname" value="{escape(agent)}" />
+    <label for="agent">Agent type</label>
+    <input id="agent" name="agent" required placeholder="cursor" value="{escape(agent_value)}"{readonly} />
     <button type="submit">Create token</button>
   </form>
 </body>
 </html>"""
 
 
-def _token_result_html(agent: str, token: str, base_url: str) -> str:
+def _token_result_html(agent_type: str, token: str, base_url: str) -> str:
     mcp_url = f"{base_url}/mcp"
+    setup = agent_setup(agent_type, mcp_url=mcp_url, token=token)
+    if setup is None:
+        return f"""<!doctype html>
+<html lang="en"><body><pre>{escape(token)}</pre></body></html>"""
+
+    steps_html = "".join(f"<li>{escape(step)}</li>" for step in setup.steps)
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>teamshared token</title>
+  <title>teamshared setup — {escape(setup.title)}</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; max-width: 36rem; margin: 3rem auto; padding: 0 1rem; }}
-    code, pre {{ word-break: break-all; background: #f4f4f5; padding: 0.75rem; display: block; }}
+    body {{ font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }}
+    pre {{ word-break: break-all; background: #f4f4f5; padding: 0.75rem; overflow-x: auto; font-size: 0.9rem; }}
+    ol {{ padding-left: 1.25rem; }}
+    .path {{ color: #555; font-size: 0.95rem; }}
   </style>
 </head>
 <body>
-  <h1>Your teamshared token</h1>
-  <p><strong>Agent:</strong> {escape(agent)}</p>
-  <p>Copy this token now. It is shown once.</p>
-  <pre id="token">{escape(token)}</pre>
-  <p>Set in your shell or MCP config:</p>
-  <pre>export TEAMSHARED_URL={escape(mcp_url)}
-export TEAMSHARED_TOKEN={escape(token)}</pre>
+  <h1>Connect teamshared to {escape(setup.title)}</h1>
+  <p>Your bearer token is embedded in the config below. It is shown once — copy it now if you need it elsewhere.</p>
+  <p class="path"><strong>Config file:</strong> <code>{escape(setup.config_path)}</code></p>
+  <ol>{steps_html}</ol>
+  <pre>{escape(setup.snippet)}</pre>
+  <p><strong>Token only:</strong></p>
+  <pre>{escape(token)}</pre>
 </body>
 </html>"""
 

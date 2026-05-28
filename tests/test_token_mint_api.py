@@ -133,7 +133,7 @@ def test_token_mint_with_invite(tmp_path: Path) -> None:
     )
     store = TokenStore(settings.tokens_file)
     invites = InviteStore(settings.invites_file)
-    record = invites.create(agent="cursor-chad", uses=1)
+    record = invites.create(agent="cursor", uses=1)
     with TestClient(_mint_app(settings, store, invites)) as client:
         resp = client.post(
             "/tokens/mint",
@@ -141,7 +141,7 @@ def test_token_mint_with_invite(tmp_path: Path) -> None:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["agent"] == "cursor-chad"
+        assert body["agent"] == "cursor"
         assert body["token"].startswith("teamshared_")
         assert invites.get(record.code) is None
 
@@ -204,12 +204,12 @@ def test_token_mint_with_invite_path(tmp_path: Path) -> None:
     )
     store = TokenStore(settings.tokens_file)
     invites = InviteStore(settings.invites_file)
-    record = invites.create(agent="cursor-chad", uses=1)
+    record = invites.create(agent="cursor", uses=1)
     with TestClient(_mint_app(settings, store, invites)) as client:
         resp = client.post(f"/tokens/mint/{record.code}/cursor-chad")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["agent"] == "cursor-chad"
+        assert body["agent"] == "cursor"
         assert body["token"].startswith("teamshared_")
         assert invites.get(record.code) is None
 
@@ -281,7 +281,7 @@ def test_root_redeems_invite_as_json(tmp_path: Path) -> None:
     )
     store = TokenStore(settings.tokens_file)
     invites = InviteStore(settings.invites_file)
-    record = invites.create(agent="cursor-chad", uses=1)
+    record = invites.create(agent="cursor", uses=1)
     with TestClient(_root_app(settings, store, invites)) as client:
         resp = client.get(
             "/",
@@ -290,8 +290,44 @@ def test_root_redeems_invite_as_json(tmp_path: Path) -> None:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["agent"] == "cursor-chad"
+        assert body["agent"] == "cursor"
         assert body["token"].startswith("teamshared_")
+
+
+def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        self_service_tokens=True,
+        tokens_file=tmp_path / "tokens.json",
+        invites_file=tmp_path / "invites.json",
+    )
+    store = TokenStore(settings.tokens_file)
+    invites = InviteStore(settings.invites_file)
+    record = invites.create(agent="cursor", uses=1)
+    with TestClient(_get_token_app(settings, store, invites)) as client:
+        resp = client.get(f"/get-token/{record.code}/cursor")
+        assert resp.status_code == 200
+        assert "Connect teamshared to Cursor" in resp.text
+        assert "mcpServers" in resp.text
+        assert "~/.cursor/mcp.json" in resp.text
+
+
+def test_invite_normalizes_cursor_chad_to_cursor(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        self_service_tokens=True,
+        tokens_file=tmp_path / "tokens.json",
+        invites_file=tmp_path / "invites.json",
+    )
+    store = TokenStore(settings.tokens_file)
+    invites = InviteStore(settings.invites_file)
+    record = invites.create(agent="cursor", uses=1)
+    with TestClient(_mint_app(settings, store, invites)) as client:
+        resp = client.post(f"/tokens/mint/{record.code}/cursor-chad")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["agent"] == "cursor"
+        assert store.lookup(body["token"]).agent == "cursor"  # type: ignore[union-attr]
 
 
 def test_get_token_page_redeems_invite(tmp_path: Path) -> None:

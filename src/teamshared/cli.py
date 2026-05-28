@@ -25,6 +25,7 @@ from rich.console import Console
 from rich.table import Table
 
 from teamshared.auth import TokenStore
+from teamshared.clients.agent_setup import normalize_agent_type
 from teamshared.config import get_settings
 from teamshared.invite import InviteStore
 from teamshared.logging import configure_logging
@@ -192,16 +193,21 @@ def token_invite_create(
         None,
         "--agent",
         "-a",
-        help="Optional fixed agent name stamped on the invite.",
+        help="Agent type for this invite: cursor, hermes, claude, or openclaw.",
     ),
     uses: int = typer.Option(1, "--uses", "-n", help="Number of redemptions allowed."),
 ) -> None:
     """Create a one-time invite code for self-service token minting."""
     if uses <= 0:
         raise typer.BadParameter("uses must be positive")
+    agent_type: str | None = None
+    if agent is not None:
+        agent_type = normalize_agent_type(agent)
+        if agent_type is None:
+            raise typer.BadParameter("agent must be one of: cursor, hermes, claude, openclaw")
     settings = get_settings()
     invites = InviteStore(settings.invites_file)
-    record = invites.create(agent=agent, uses=uses)
+    record = invites.create(agent=agent_type, uses=uses)
     console.print(f"[bold]invite[/bold]: [cyan]{record.code}[/cyan]")
     if record.agent:
         console.print(f"[bold]agent[/bold]: {record.agent}")

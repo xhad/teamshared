@@ -11,8 +11,8 @@ down-all :; $(COMPOSE_OLLAMA_HOST) down --remove-orphans
 migrate :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared migrate
 seed :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared seed
 token-mint :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared token mint cursor
-invite-create :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared token invite-create --agent cursor-chad
-invite-create-host :; $(COMPOSE_OLLAMA_HOST) run --no-deps --rm server teamshared token invite-create --agent cursor-chad
+invite-create :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared token invite-create --agent cursor
+invite-create-host :; $(COMPOSE_OLLAMA_HOST) exec server teamshared token invite-create --agent cursor
 # Paste the printed token into ~/.cursor/mcp.json using src/teamshared/clients/cursor.mcp.json as the template
 health :; curl -fsS http://localhost:8077/health | jq
 
