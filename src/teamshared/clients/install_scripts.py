@@ -82,8 +82,7 @@ _ts_choose_harness() {
 }
 
 _ts_prompt_token() {
-  _ts_tty $'\nPaste your teamshared bearer token (from '"${TEAMSHARED_BASE_URL}"'/get-token).\n'
-  _ts_tty 'teamshared bearer token (teamshared_…): '
+  _ts_tty $'\nPaste your teamshared bearer token (from '"${TEAMSHARED_BASE_URL}"'/get-token): '
   _ts_read_secret TEAMSHARED_TOKEN
   export TEAMSHARED_TOKEN
   [[ -n "${TEAMSHARED_TOKEN}" ]] || _ts_die "empty token"
@@ -165,7 +164,14 @@ _ts_append_profile() {
 
 _ts_finish() {
   echo ""
-  echo "Done. Restart your agent (Cursor: Developer → Reload Window)."
+  case "${HARNESS}" in
+    cursor)   echo "Done. Restart Cursor: Command Palette → Developer: Reload Window." ;;
+    codex)    echo "Done. Restart the Codex CLI session to load the teamshared MCP server." ;;
+    hermes)   echo "Done. Restart Hermes to load the teamshared MCP server." ;;
+    claude)   echo "Done. Quit and reopen Claude Desktop to load the teamshared MCP server." ;;
+    openclaw) echo "Done. Restart the OpenClaw daemon (openclaw daemon restart) if it was not restarted above." ;;
+    *)        echo "Done. Restart your agent to load the teamshared MCP server." ;;
+  esac
   echo "MCP URL: ${TEAMSHARED_MCP_URL}"
 }
 

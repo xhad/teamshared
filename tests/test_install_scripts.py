@@ -31,6 +31,10 @@ def test_unified_install_script() -> None:
     assert "/get-token" in body
     assert "https://actx.teamshared.com/mcp" in body
     assert "/install/assets" in body
+    # Restart guidance is per-harness, not hardcoded to Cursor.
+    assert "Restart Hermes" in body
+    assert "Quit and reopen Claude Desktop" in body
+    assert "Done. Restart your agent (Cursor: Developer → Reload Window)." not in body
 
 
 def test_install_routes() -> None:
