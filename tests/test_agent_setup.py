@@ -26,18 +26,18 @@ def test_cursor_setup_includes_mcp_json() -> None:
         token="teamshared_testtoken",
     )
     assert setup is not None
+    assert setup.snippet.startswith("{")
     assert "mcpServers" in setup.snippet
     assert "teamshared_testtoken" in setup.snippet
-    assert "plugins/local/teamshared-memory" in setup.snippet
-    assert setup.config_path == (
-        "~/.cursor/plugins/local/teamshared-memory and ~/.cursor/mcp.json"
-    )
-    assert any("teamshared-memory plugin" in step for step in setup.steps)
-    assert any("Settings → Plugins" in step for step in setup.steps)
+    assert "plugins/local" not in setup.snippet
+    assert "actx repo" not in setup.snippet.lower()
+    assert setup.config_path == "~/.cursor/rules/teamshared-memory.mdc and ~/.cursor/mcp.json"
+    assert any("Memory rule section" in step for step in setup.steps)
+    assert any("Settings → MCP" in step for step in setup.steps)
     assert setup.rule_mdc is not None
     assert "teamshared Memory Protocol" in setup.rule_mdc
     assert "alwaysApply: true" in setup.rule_mdc
-    assert any("~/.cursor/rules/teamshared-memory.mdc" in step for step in setup.rule_install_steps)
+    assert any("Memory rule block below" in step for step in setup.rule_install_steps)
 
 
 def test_load_teamshared_memory_rule_mdc() -> None:

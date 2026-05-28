@@ -118,7 +118,8 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
 
     Routes:
     - ``GET  /health``  -- unauthenticated probe.
-    - ``GET  /``        -- root sentinel (returns a tiny JSON banner).
+    - ``GET  /``        -- landing page (HTML); JSON banner with ``Accept: application/json``;
+                           mint via ``?invite=&agent=`` (plain text or JSON).
     - ``GET  /state``   -- bearer-scoped JSON state read (`repo`, `key` query params).
     - ``PUT  /state``   -- bearer-scoped JSON state write (`{repo, key, value}` body).
     - ``POST /tokens/mint`` -- mint a bearer token (invite code or admin secret).

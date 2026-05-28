@@ -135,6 +135,87 @@ def get_token_path(invite: str, agent: str | None = None) -> str:
     return f"/get-token/{invite}"
 
 
+_ONBOARDING_PAGE_CSS = """
+    body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
+    p, li { color: #3f3f46; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: #f4f4f5; padding: 0.125rem 0.375rem; border-radius: 0.25rem; }
+    h2 { margin-top: 2rem; font-size: 1.15rem; }
+    ul { padding-left: 1.25rem; }
+    a { color: #2563eb; }
+    .cta { margin-top: 1.5rem; }
+    .cta a.button {
+      display: inline-block;
+      margin-top: 0.5rem;
+      padding: 0.6rem 1rem;
+      background: #18181b;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 0.375rem;
+      font-weight: 600;
+    }
+    .cta a.button:hover { background: #27272a; }
+    .muted { color: #71717a; font-size: 0.95rem; }
+"""
+
+
+def _service_banner_json() -> JSONResponse:
+    return JSONResponse(
+        {
+            "service": "teamshared-memory",
+            "mcp": "/mcp",
+            "health": "/health",
+            "state": "/state",
+            "get_token": "/get-token",
+            "tokens_mint": "/tokens/mint",
+            "tokens_invites": "/tokens/invites",
+            "token_via_invite": "/?invite=<code>&agent=<name>",
+        }
+    )
+
+
+def _landing_page_html() -> str:
+    allowed = ", ".join(sorted(KNOWN_AGENT_TYPES))
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>teamshared</title>
+  <style>{_ONBOARDING_PAGE_CSS}</style>
+</head>
+<body>
+  <h1>teamshared</h1>
+  <p>Multi-pillar agent memory, exposed as an MCP server. One shared brain for
+  Cursor, Codex, Hermes, Claude, OpenClaw, and anything else that speaks MCP.</p>
+
+  <h2>Shared brain</h2>
+  <p>Point every teammate's agent at the same teamshared deployment and they read
+  the same durable memory — facts, episodes, and playbooks written by anyone on the team.
+  Working memory stays per-session; everything else is shared by default.</p>
+
+  <h2>Memory pillars</h2>
+  <ul>
+    <li><strong>Working</strong> — Redis-backed conversation buffer for the current task.</li>
+    <li><strong>Semantic</strong> — facts, preferences, and stable knowledge.</li>
+    <li><strong>Episodic</strong> — distilled timeline of past sessions and events.</li>
+    <li><strong>Procedural</strong> — versioned how-to playbooks agents can follow.</li>
+  </ul>
+
+  <h2>How agents use it</h2>
+  <p>Agents connect over MCP at <code>/mcp</code> with a bearer token. Call
+  <code>memory_recall</code> early in a task to pull relevant context; use
+  <code>memory_remember</code> to persist things that should still be true next week.</p>
+
+  <div class="cta">
+    <h2>Get started</h2>
+    <p>Ask your admin for a one-time invite code, then create your token and copy the
+    setup instructions for your agent type ({allowed}).</p>
+    <a class="button" href="/get-token">Get your token</a>
+    <p class="muted">CLI: <code>curl -fsS 'https://actx.teamshared.com/?invite=CODE&amp;agent=TYPE'</code></p>
+  </div>
+</body>
+</html>"""
+
+
 async def handle_root(
     request: Request,
     settings: Settings,
@@ -160,18 +241,11 @@ async def handle_root(
             return JSONResponse({"agent": agent, "token": token})
         return PlainTextResponse(token)
 
-    return JSONResponse(
-        {
-            "service": "teamshared-memory",
-            "mcp": "/mcp",
-            "health": "/health",
-            "state": "/state",
-            "get_token": "/get-token",
-            "tokens_mint": "/tokens/mint",
-            "tokens_invites": "/tokens/invites",
-            "token_via_invite": "/?invite=<code>&agent=<name>",
-        }
-    )
+    accept = request.headers.get("accept", "")
+    if "application/json" in accept and "text/html" not in accept:
+        return _service_banner_json()
+
+    return HTMLResponse(_landing_page_html())
 
 
 async def handle_token_mint(
@@ -337,11 +411,10 @@ def _token_form_html(
   <meta charset="utf-8" />
   <title>teamshared token</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; max-width: 52rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }}
+    {_ONBOARDING_PAGE_CSS}
     label {{ display: block; margin-top: 1rem; font-weight: 600; }}
     input {{ width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }}
     button {{ margin-top: 1rem; padding: 0.6rem 1rem; }}
-    code {{ word-break: break-all; }}
   </style>
 </head>
 <body>
@@ -376,7 +449,7 @@ def _token_result_html(agent_type: str, token: str, base_url: str) -> str:
         )
         rule_section = f"""
   <h2>Memory rule — <code>teamshared-memory.mdc</code></h2>
-  <p>Paste this markdown into your Cursor rules so agents recall team memory on every turn.</p>
+  <p>Copy this rule from the page into Cursor so agents recall team memory on every turn.</p>
   <p class="path"><strong>Save to:</strong> <code>~/.cursor/rules/teamshared-memory.mdc</code></p>
   <ol>{rule_steps_html}</ol>
   <pre class="rule">{escape(setup.rule_mdc)}</pre>

@@ -67,44 +67,26 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
                 }
             }
         }
-        plugin_install = (
-            "# 1. Install the teamshared-memory Cursor plugin (recall-first rule + skill)\n"
-            "mkdir -p ~/.cursor/plugins/local\n"
-            "# From the actx repo checkout:\n"
-            'ln -sf "$(pwd)/plugins/teamshared-memory" ~/.cursor/plugins/local/teamshared-memory\n'
-            "# Without the repo, copy the plugin folder instead:\n"
-            "# cp -R /path/to/teamshared-memory ~/.cursor/plugins/local/\n"
-            "\n"
-            "# 2. MCP server — merge into ~/.cursor/mcp.json\n"
-        )
         rule_mdc = load_teamshared_memory_rule_mdc()
         return AgentSetup(
             agent_type=agent_type,
             title="Cursor",
-            config_path=(
-                "~/.cursor/rules/teamshared-memory.mdc, "
-                "~/.cursor/plugins/local/teamshared-memory, and ~/.cursor/mcp.json"
-            ),
+            config_path="~/.cursor/rules/teamshared-memory.mdc and ~/.cursor/mcp.json",
             steps=(
-                "Save the teamshared-memory rule below to "
-                "~/.cursor/rules/teamshared-memory.mdc (or install the full plugin — "
-                "see rule install steps and commands below).",
+                "Copy the teamshared-memory rule from the Memory rule section below "
+                "into ~/.cursor/rules/teamshared-memory.mdc (include the --- frontmatter lines).",
                 "Open or create ~/.cursor/mcp.json and merge the JSON block below "
                 "(keep any other mcpServers entries).",
                 "In Cursor: Command Palette → Developer: Reload Window.",
-                "Confirm teamshared appears under Settings → MCP and "
-                "teamshared-memory under Settings → Plugins (if you installed the plugin).",
+                "Confirm teamshared appears under Settings → MCP.",
             ),
-            snippet=plugin_install + json.dumps(payload, indent=2),
+            snippet=json.dumps(payload, indent=2),
             snippet_lang="json",
             rule_mdc=rule_mdc,
             rule_install_steps=(
                 "Create the rules directory if needed: mkdir -p ~/.cursor/rules",
-                "Paste the rule markdown below into ~/.cursor/rules/teamshared-memory.mdc "
-                "(include the frontmatter between the --- lines).",
-                "Alternative — full plugin (rule + skill): symlink or copy the "
-                "teamshared-memory folder to ~/.cursor/plugins/local/teamshared-memory "
-                "(commands in the MCP config block below).",
+                "Copy everything in the Memory rule block below into "
+                "~/.cursor/rules/teamshared-memory.mdc.",
                 "Developer: Reload Window so Cursor loads the rule.",
             ),
         )

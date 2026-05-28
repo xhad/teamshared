@@ -238,7 +238,7 @@ def _root_app(settings: Settings, store: TokenStore, invites: InviteStore) -> St
     return Starlette(routes=[Route("/", route, methods=["GET"])])
 
 
-def test_root_banner(tmp_path: Path) -> None:
+def test_root_landing_page(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         tokens_file=tmp_path / "tokens.json",
@@ -248,6 +248,24 @@ def test_root_banner(tmp_path: Path) -> None:
     invites = InviteStore(settings.invites_file)
     with TestClient(_root_app(settings, store, invites)) as client:
         resp = client.get("/")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/html")
+        assert "teamshared" in resp.text
+        assert "Multi-pillar agent memory" in resp.text
+        assert "memory_recall" in resp.text
+        assert 'href="/get-token"' in resp.text
+
+
+def test_root_banner_json(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        tokens_file=tmp_path / "tokens.json",
+        invites_file=tmp_path / "invites.json",
+    )
+    store = TokenStore(settings.tokens_file)
+    invites = InviteStore(settings.invites_file)
+    with TestClient(_root_app(settings, store, invites)) as client:
+        resp = client.get("/", headers={"Accept": "application/json"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["service"] == "teamshared-memory"
@@ -310,12 +328,13 @@ def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
         assert "Connect teamshared to Cursor" in resp.text
         assert "mcpServers" in resp.text
         assert "~/.cursor/mcp.json" in resp.text
-        assert "plugins/local/teamshared-memory" in resp.text
-        assert "Settings → Plugins" in resp.text
+        assert "plugins/local/teamshared-memory" not in resp.text
+        assert "actx repo" not in resp.text.lower()
         assert "Memory rule" in resp.text
         assert "teamshared-memory.mdc" in resp.text
         assert "teamshared Memory Protocol" in resp.text
         assert "~/.cursor/rules/teamshared-memory.mdc" in resp.text
+        assert "Memory rule section" in resp.text
         assert 'id="about-teamshared"' in resp.text
         assert "Multi-pillar agent memory" in resp.text
         assert "memory_recall" in resp.text
