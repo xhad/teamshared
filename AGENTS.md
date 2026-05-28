@@ -98,3 +98,17 @@ image.
 [`infra/Dockerfile`](infra/Dockerfile) must `COPY README.md` alongside
 `pyproject.toml`. Hatchling validates `readme = "README.md"` during the wheel
 build, so dropping it breaks both the `server` and `distiller` images.
+
+## Learned User Preferences
+
+- Keep Cursor hook and continual-learning state under `~/.cursor`, not committed in the repo.
+- Prefer storing the continual-learning transcript index on the teamshared server via `memory_state_get` / `memory_state_set` (token+repo scoped) when MCP is available; fall back to `~/.cursor/hooks/state/continual-learning/<workspace-slug>/`.
+
+## Learned Workspace Facts
+
+- The Python package, CLI, and env prefix are `teamshared` / `TEAMSHARED_*` (renamed from sptx → actx → teamshared); the git checkout may still live at `actx/` on disk.
+- Team production MCP host is `https://actx.teamshared.com` (`/health`, `/mcp`, `/get-token/...`); `mcp.teamshared.com` is retired.
+- Continual-learning workspace slug: repo root path with leading `/` removed and `/` replaced by `-` (this repo: `Users-chad-code-sapien-actx`).
+- On Spark, run the CLI through Docker Compose or Makefile targets (`make invite-create-host`, `docker compose exec server ...`); there is no global `teamshared` on shell PATH.
+- Spark deployments with host Ollama use `make build-ollama-host`; set `TEAMSHARED_PG_PORT` / `TEAMSHARED_REDIS_PORT` in `.env` when host 5432/6379 are already taken.
+- One-off compose CLI targets (`migrate`, `seed`, `token-mint`, `invite-create`) use `--no-deps` so they do not start conflicting Postgres/Redis containers.

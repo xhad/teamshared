@@ -7,6 +7,7 @@
 #
 # Postgres and Redis stay on the compose network; their ports are published to
 # the host so server/distiller (host network) reach them via 127.0.0.1.
+# If 5432/6379 are taken on the host, set TEAMSHARED_PG_PORT / TEAMSHARED_REDIS_PORT in .env.
 
 services:
   server:
@@ -15,7 +16,7 @@ services:
     environment:
       TEAMSHARED_PG_HOST: 127.0.0.1
       TEAMSHARED_PG_PORT: ${TEAMSHARED_PG_PORT:-5432}
-      TEAMSHARED_REDIS_URL: redis://127.0.0.1:6379/0
+      TEAMSHARED_REDIS_URL: redis://127.0.0.1:${TEAMSHARED_REDIS_PORT:-6379}/0
       TEAMSHARED_OLLAMA_BASE_URL: http://127.0.0.1:11434
 
   distiller:
@@ -23,5 +24,5 @@ services:
     environment:
       TEAMSHARED_PG_HOST: 127.0.0.1
       TEAMSHARED_PG_PORT: ${TEAMSHARED_PG_PORT:-5432}
-      TEAMSHARED_REDIS_URL: redis://127.0.0.1:6379/0
+      TEAMSHARED_REDIS_URL: redis://127.0.0.1:${TEAMSHARED_REDIS_PORT:-6379}/0
       TEAMSHARED_OLLAMA_BASE_URL: http://127.0.0.1:11434
