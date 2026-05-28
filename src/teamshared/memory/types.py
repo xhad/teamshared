@@ -39,3 +39,4 @@ class RecallResult(BaseModel):
     query: str
     records: list[MemoryRecord]
     counts_by_pillar: dict[str, int] = Field(default_factory=dict)
+    errors_by_pillar: dict[str, str] = Field(default_factory=dict)

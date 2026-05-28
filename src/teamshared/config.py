@@ -100,7 +100,6 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = "neo4j"
 
-    distill_enabled: bool = True
     distill_interval_seconds: int = 30
 
     @model_validator(mode="after")

@@ -14,6 +14,7 @@ from teamshared.auth import TokenStore
 from teamshared.config import Settings
 from teamshared.invite import InviteStore
 from teamshared.memory.agent_state import AgentStateStore
+from teamshared.memory.audit import AuditLog
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import ProceduralStore
 from teamshared.memory.recall import Recall
@@ -33,6 +34,7 @@ class ServerState:
     semantic_episodic: SemanticEpisodicStore
     procedural: ProceduralStore
     recall: Recall
+    audit: AuditLog
     graph: GraphStore | None = None
 
 

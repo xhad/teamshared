@@ -131,6 +131,19 @@ async def test_recall_search_skips_working_when_caller_unbound(
     working.recent_records.assert_not_awaited()
 
 
+async def test_recall_search_surfaces_pillar_errors(
+    recall_with_mocks: tuple[Recall, MagicMock, MagicMock, MagicMock],
+) -> None:
+    recall, semantic, _, _ = recall_with_mocks
+    semantic.search = AsyncMock(side_effect=RuntimeError("mem0 unavailable"))
+
+    result = await recall.search("anything", scopes=("semantic",))
+
+    assert result.records == []
+    assert result.counts_by_pillar.get("semantic") == 0
+    assert "mem0 unavailable" in result.errors_by_pillar.get("semantic", "")
+
+
 async def test_recall_search_procedural_is_globally_visible(
     recall_with_mocks: tuple[Recall, MagicMock, MagicMock, MagicMock],
 ) -> None:

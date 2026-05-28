@@ -164,15 +164,19 @@ async def _main_in_memory(scenarios_path: Path) -> int:
     procedural.search_procedures = AsyncMock(return_value=[])
 
     recall = Recall(working=working, semantic_episodic=semantic, procedural=procedural)
+    audit = MagicMock()
+    audit.record = AsyncMock()
     set_state(
         ServerState(
             settings=Settings(_env_file=None),
             tokens=MagicMock(),
+            invites=MagicMock(),
             working=working,
             agent_state=MagicMock(),
             semantic_episodic=semantic,
             procedural=procedural,
             recall=recall,
+            audit=audit,
             graph=None,
         )
     )

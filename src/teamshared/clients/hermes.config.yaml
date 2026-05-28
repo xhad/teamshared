@@ -1,7 +1,7 @@
 # Add this block under `mcp_servers:` in ~/.hermes/config.yaml.
 # Replace <agent-token> with the value from `teamshared token mint hermes`.
 mcp_servers:
-  teamshared-memory:
+  teamshared:
     url: https://memory.tailXXXX.ts.net/mcp
     headers:
       Authorization: "Bearer <agent-token>"

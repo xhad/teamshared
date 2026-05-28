@@ -102,6 +102,14 @@ class SemanticEpisodicStore:
         self._memory = None
 
     @property
+    def is_ready(self) -> bool:
+        return self._memory is not None
+
+    async def ensure_connected(self) -> None:
+        if self._memory is None:
+            await self.connect()
+
+    @property
     def memory(self) -> Any:
         if self._memory is None:
             raise RuntimeError("SemanticEpisodicStore not connected; call connect() first")
@@ -124,6 +132,7 @@ class SemanticEpisodicStore:
         extraction pipeline against ``content`` and may produce 0..N stored
         memories; we return the raw Mem0 result list.
         """
+        await self.ensure_connected()
         metadata: dict[str, Any] = {
             "pillar": pillar,
             "kind": kind,
@@ -179,6 +188,7 @@ class SemanticEpisodicStore:
         (``agent=None``) we discover distinct ``user_id`` scopes in the
         collection and search them with an ``in`` filter.
         """
+        await self.ensure_connected()
         entity_filters = await self._mem0_entity_filters(agent)
         if entity_filters is None:
             return []
@@ -199,6 +209,7 @@ class SemanticEpisodicStore:
         return self._records_from_mem0(result, time_range=time_range)
 
     async def delete(self, memory_id: str) -> bool:
+        await self.ensure_connected()
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, lambda: self.memory.delete(memory_id=memory_id))
         return True
@@ -214,6 +225,7 @@ class SemanticEpisodicStore:
     ) -> list[MemoryRecord]:
         """List episodic memories. Mem0's filtering on metadata is limited so we
         over-fetch and filter in Python; the working set is small."""
+        await self.ensure_connected()
         loop = asyncio.get_running_loop()
 
         entity_filters = await self._mem0_entity_filters(agent)
@@ -276,7 +288,7 @@ class SemanticEpisodicStore:
             return await loop.run_in_executor(None, _query)
         except Exception as exc:
             log.warning("mem0_distinct_user_ids_failed", error=str(exc))
-            return []
+            raise RuntimeError(f"failed to discover mem0 user scopes: {exc}") from exc
 
     @staticmethod
     def _normalize_add_result(result: Any) -> list[dict[str, Any]]:

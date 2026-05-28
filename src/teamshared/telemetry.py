@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-def setup_tracing(service_name: str = "teamshared-memory") -> bool:
+def setup_tracing(service_name: str = "teamshared") -> bool:
     """Wire up OTLP tracing if the env asks for it. Returns True if active.
 
     Configuration is by env vars (the OTel-standard ones):

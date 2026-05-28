@@ -38,20 +38,20 @@ def validate_key(key: str) -> str:
     return key
 
 
-def storage_key(token_prefix: str, repo: str, key: str) -> str:
+def storage_key(state_id: str, repo: str, key: str) -> str:
     repo = validate_repo(repo)
     key = validate_key(key)
-    return f"agent-state:{token_prefix}:{repo}:{key}"
+    return f"agent-state:{state_id}:{repo}:{key}"
 
 
 class AgentStateStore:
-    """Small JSON blob store keyed by (token_prefix, repo, key)."""
+    """Small JSON blob store keyed by (state_id, repo, key)."""
 
     def __init__(self, client: redis.Redis) -> None:
         self._client = client
 
-    async def get(self, token_prefix: str, repo: str, key: str) -> dict[str, Any] | None:
-        raw = await self._client.get(storage_key(token_prefix, repo, key))
+    async def get(self, state_id: str, repo: str, key: str) -> dict[str, Any] | None:
+        raw = await self._client.get(storage_key(state_id, repo, key))
         if raw is None:
             return None
         parsed = json.loads(raw)
@@ -59,13 +59,13 @@ class AgentStateStore:
             raise ValueError("stored agent state must be a JSON object")
         return parsed
 
-    async def set(self, token_prefix: str, repo: str, key: str, value: dict[str, Any]) -> None:
+    async def set(self, state_id: str, repo: str, key: str, value: dict[str, Any]) -> None:
         if not isinstance(value, dict):
             raise ValueError("value must be a JSON object")
-        redis_key = storage_key(token_prefix, repo, key)
+        redis_key = storage_key(state_id, repo, key)
         await self._client.set(redis_key, json.dumps(value, separators=(",", ":")))
-        log.info("agent_state_set", token_prefix=token_prefix, repo=repo, key=key)
+        log.info("agent_state_set", state_id=state_id, repo=repo, key=key)
 
-    async def delete(self, token_prefix: str, repo: str, key: str) -> bool:
-        deleted = await self._client.delete(storage_key(token_prefix, repo, key))
+    async def delete(self, state_id: str, repo: str, key: str) -> bool:
+        deleted = await self._client.delete(storage_key(state_id, repo, key))
         return bool(deleted)

@@ -14,7 +14,7 @@ because it's per-session conversation buffer, not durable knowledge.
 Pass `agent="cursor"` on either tool when you want to narrow recall to a
 single agent's history (e.g. for debugging or "what did I write?" queries).
 
-The pillars (see [`plan.md`](plan.md)):
+The four memory pillars:
 
 - **Working** — Redis-backed per-session conversation buffer.
 - **Semantic** — Mem0-backed facts, preferences, user profiles.
@@ -165,6 +165,8 @@ src/teamshared/
     app.py             FastMCP + Starlette assembly
     tools.py           @mcp.tool definitions
     state.py           shared per-process singletons
+    health.py          shared health probe
+  seed/                bundled starter procedures (`teamshared seed`)
   cli.py               `teamshared` entrypoint (typer)
   clients/             config snippets per agent
 plugins/
@@ -174,18 +176,13 @@ infra/
   docker-compose.yml
   migrations/001_init.sql
   tailscale.example.md
-  telemetry.py         optional OTel hooks
-  seed/                bundled starter procedures (`teamshared seed`)
-infra/
-  Dockerfile
-  docker-compose.yml
-  migrations/001_init.sql
-  tailscale.example.md
 eval/
   golden.yaml          scenarios for `eval/run.py`
   run.py               live or in-memory eval runner
 scripts/
+  smoke_all_tools.py   exercise every MCP tool (live or --in-memory)
   smoke_cross_agent.py shared-brain end-to-end smoke
+  validate-teamshared-plugin.sh
   backup.sh            nightly pg_dump + redis rdb tarball
 tests/                 pytest suite
 ```
@@ -200,7 +197,7 @@ tests/                 pytest suite
   2. User runs:
 
   ```bash
-  curl -fsS 'https://actx.teamshared.com/?invite=INVITE_CODE&agent=cursor-yourname'
+  curl -fsS 'https://actx.teamshared.com/?invite=INVITE_CODE&agent=cursor'
   ```
 
   Response is the raw bearer token (plain text). Add `-H 'Accept: application/json'`
@@ -216,11 +213,23 @@ tests/                 pytest suite
   `TEAMSHARED_EVAL_URL`/`TEAMSHARED_EVAL_TOKEN`). `--in-memory` runs the framework
   against a fake bag-of-words retriever -- useful for CI structure checks but
   not for real recall quality.
+- **Full tool smoke**: exercise every MCP tool against a live server:
+
+  ```bash
+  export TEAMSHARED_SMOKE_URL=https://actx.teamshared.com/mcp/
+  export TEAMSHARED_SMOKE_TOKEN=teamshared_...   # your bearer token
+  python scripts/smoke_all_tools.py
+  ```
+
+  Optional: `TEAMSHARED_SMOKE_TOKEN_HERMES` for cross-agent recall;
+  `--skip-forget` to leave smoke memories in the brain;
+  `--expect-existing 'QUERY:needle1,needle2'` for custom pre-existing recall probes.
+  Structure-only (mocked stores): `python scripts/smoke_all_tools.py --in-memory`.
 - **Cross-agent smoke**: `python scripts/smoke_cross_agent.py --in-memory`
   for CI; live with `TEAMSHARED_SMOKE_URL`/`TEAMSHARED_SMOKE_TOKEN_CURSOR`/`TEAMSHARED_SMOKE_TOKEN_HERMES`.
 - **Client state API**: `GET/PUT /state` (bearer auth) and MCP
   `memory_state_get` / `memory_state_set` store small JSON blobs keyed by
-  `(token_prefix, repo_slug, key)`. Used by continual-learning for cadence/index
+  `(state_id, repo_slug, key)`. Used by continual-learning for cadence/index
   without committing local files.
 - **Graph store (Neo4j)**: opt-in. Set `TEAMSHARED_NEO4J_ENABLED=true`, uncomment the
   `neo4j` service in `infra/docker-compose.yml`, and install the extra:

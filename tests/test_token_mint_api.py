@@ -268,7 +268,7 @@ def test_root_banner_json(tmp_path: Path) -> None:
         resp = client.get("/", headers={"Accept": "application/json"})
         assert resp.status_code == 200
         body = resp.json()
-        assert body["service"] == "teamshared-memory"
+        assert body["service"] == "teamshared"
         assert "token_via_invite" in body
 
 

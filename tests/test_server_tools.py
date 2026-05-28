@@ -42,7 +42,7 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     )
     semantic.list_episodes = AsyncMock(return_value=[])
     semantic.delete = AsyncMock(return_value=True)
-    semantic._memory = object()  # so /health says ok
+    semantic.is_ready = True
 
     procedural = MagicMock()
     procedural.get_procedure = AsyncMock(return_value=None)
@@ -78,6 +78,11 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     agent_state.get = AsyncMock(return_value=None)
     agent_state.set = AsyncMock()
 
+    audit = MagicMock()
+    audit.record = AsyncMock()
+
+    working.get_metadata = AsyncMock(return_value={"agent": "anonymous"})
+
     state = ServerState(
         settings=MagicMock(),
         tokens=MagicMock(),
@@ -87,6 +92,7 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
         semantic_episodic=semantic,
         procedural=procedural,
         recall=recall,
+        audit=audit,
         graph=None,
     )
     set_state(state)
@@ -149,6 +155,22 @@ async def test_memory_session_lifecycle(
     closed = await _call(mcp, "memory_session_close", session_id="sess_abc", distill=False)
     assert closed["session_id"] == "sess_abc"
     assert state.working.close_session.await_args.kwargs["distill"] is False
+
+
+async def test_memory_session_append_rejects_foreign_session(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    state.working.get_metadata = AsyncMock(return_value={"agent": "hermes"})
+
+    with pytest.raises(Exception):  # FastMCP wraps tool errors
+        await _call(
+            mcp,
+            "memory_session_append",
+            session_id="sess_abc",
+            role="user",
+            content="hi",
+        )
 
 
 async def test_memory_recall_returns_result_shape(
@@ -245,7 +267,7 @@ async def test_memory_state_get_and_set(
     from teamshared.auth import AgentIdentity, _current_agent
 
     mcp, state = mcp_with_mocks
-    token = _current_agent.set(AgentIdentity(agent="cursor", token_prefix="teamshared_test"))
+    token = _current_agent.set(AgentIdentity(agent="cursor", state_id="teamshared_test"))
     try:
         payload = {"version": 1, "turnsSinceLastRun": 3}
         state.agent_state.get.return_value = payload

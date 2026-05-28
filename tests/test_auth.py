@@ -46,6 +46,30 @@ def test_token_store_mint_and_lookup(tmp_path: Path) -> None:
     assert "..." in listing[0]["token_prefix"]
 
 
+def test_token_store_mint_assigns_unique_state_ids(tmp_path: Path) -> None:
+    store = TokenStore(tmp_path / "tokens.json")
+    token_a = store.mint("cursor")
+    token_b = store.mint("hermes")
+
+    id_a = store.lookup(token_a)
+    id_b = store.lookup(token_b)
+    assert id_a is not None and id_b is not None
+    assert id_a.state_id != id_b.state_id
+    assert len(id_a.state_id) >= 16
+
+
+def test_token_store_legacy_token_gets_stable_state_id(tmp_path: Path) -> None:
+    store = TokenStore(tmp_path / "tokens.json")
+    token = "teamshared_legacytoken"
+    store._save({token: {"agent": "cursor", "created_at": "now"}})
+
+    first = store.lookup(token)
+    second = store.lookup(token)
+    assert first is not None and second is not None
+    assert first.state_id == second.state_id
+    assert first.state_id != "teamshar"
+
+
 def test_token_store_revoke(tmp_path: Path) -> None:
     store = TokenStore(tmp_path / "tokens.json")
     token = store.mint("hermes")

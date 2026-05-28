@@ -110,16 +110,23 @@ class Recall:
 
         records: list[MemoryRecord] = []
         counts: dict[str, int] = {}
+        errors: dict[str, str] = {}
         for kind, result in zip(kinds, per_pillar, strict=True):
             if isinstance(result, BaseException):
                 log.warning("recall_pillar_failed", pillar=kind, error=str(result))
                 counts[kind] = 0
+                errors[kind] = str(result)
                 continue
             counts[kind] = len(result)
             records.extend(result)
 
         ranked = _rerank(records, k=k)
-        return RecallResult(query=query, records=ranked, counts_by_pillar=counts)
+        return RecallResult(
+            query=query,
+            records=ranked,
+            counts_by_pillar=counts,
+            errors_by_pillar=errors,
+        )
 
 
 def _rerank(records: list[MemoryRecord], *, k: int) -> list[MemoryRecord]:

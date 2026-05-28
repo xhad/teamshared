@@ -19,6 +19,7 @@ from pydantic import Field
 from teamshared.auth import current_agent, require_current_agent
 from teamshared.logging import get_logger
 from teamshared.memory.types import MemoryKind, MemoryScope, TimeRange
+from teamshared.server.health import check_components
 from teamshared.server.state import get_state
 
 log = get_logger(__name__)
@@ -53,6 +54,15 @@ def _caller_agent() -> str | None:
     return ident.agent if ident else None
 
 
+async def _require_session_owner(session_id: str, caller: str) -> None:
+    """Ensure the bearer token owns the working-memory session."""
+    state = get_state()
+    meta = await state.working.get_metadata(session_id)
+    owner = meta.get("agent")
+    if owner != caller:
+        raise PermissionError(f"session {session_id} belongs to {owner!r}, not {caller!r}")
+
+
 def register_tools(mcp: Any) -> None:
     """Attach every memory tool to ``mcp``.
 
@@ -69,25 +79,7 @@ def register_tools(mcp: Any) -> None:
         ``/health`` HTTP route.
         """
         state = get_state()
-        components: dict[str, str] = {}
-        try:
-            await state.working.client.ping()
-            components["redis"] = "ok"
-        except Exception as exc:
-            components["redis"] = f"error: {exc}"
-
-        try:
-            async with state.procedural.pool.connection() as conn, conn.cursor() as cur:
-                await cur.execute("SELECT 1")
-                await cur.fetchone()
-            components["postgres"] = "ok"
-        except Exception as exc:
-            components["postgres"] = f"error: {exc}"
-
-        components["mem0"] = "ok" if state.semantic_episodic._memory is not None else "not_ready"
-
-        overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
-        return {"status": overall, "components": components}
+        return await check_components(state)
 
     @mcp.tool()
     async def memory_remember(
@@ -210,6 +202,8 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, int]:
         """Append a turn to a working-memory session."""
         state = get_state()
+        caller = _resolve_agent(None)
+        await _require_session_owner(session_id, caller)
         count = await state.working.append_turn(session_id, role, content)
         return {"turn_count": count}
 
@@ -227,6 +221,8 @@ def register_tools(mcp: Any) -> None:
         background worker to summarize into durable memories.
         """
         state = get_state()
+        caller = _resolve_agent(None)
+        await _require_session_owner(session_id, caller)
         return await state.working.close_session(session_id, distill=distill)
 
     @mcp.tool()
@@ -371,6 +367,12 @@ def register_tools(mcp: Any) -> None:
         agent_id = _resolve_agent(None)
         log.info("memory_forget", memory_id=memory_id, reason=reason, agent=agent_id)
         ok = await state.semantic_episodic.delete(memory_id)
+        await state.audit.record(
+            agent=agent_id,
+            action="forget",
+            target_id=memory_id,
+            payload={"reason": reason, "deleted": ok},
+        )
         return {"memory_id": memory_id, "deleted": ok}
 
     @mcp.tool()
@@ -396,7 +398,7 @@ def register_tools(mcp: Any) -> None:
         """
         ident = require_current_agent()
         state = get_state()
-        value = await state.agent_state.get(ident.token_prefix, repo, key)
+        value = await state.agent_state.get(ident.state_id, repo, key)
         return {"repo": repo, "key": key, "value": value}
 
     @mcp.tool()
@@ -408,7 +410,7 @@ def register_tools(mcp: Any) -> None:
         """Persist JSON state scoped to the caller's bearer token and ``repo``."""
         ident = require_current_agent()
         state = get_state()
-        await state.agent_state.set(ident.token_prefix, repo, key, value)
+        await state.agent_state.set(ident.state_id, repo, key, value)
         return {"repo": repo, "key": key, "stored": True}
 
 

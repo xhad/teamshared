@@ -27,6 +27,7 @@ from teamshared.config import Settings, get_settings
 from teamshared.logging import configure_logging, get_logger
 from teamshared.invite import InviteStore
 from teamshared.memory.agent_state import AgentStateStore
+from teamshared.memory.audit import AuditLog
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import ProceduralStore
 from teamshared.memory.recall import Recall
@@ -39,6 +40,7 @@ from teamshared.server.token_api import (
     handle_token_invite_create,
     handle_token_mint,
 )
+from teamshared.server.health import check_components
 from teamshared.server.tools import register_tools
 from teamshared.telemetry import instrument_asgi, setup_tracing
 
@@ -49,7 +51,7 @@ def build_mcp(settings: Settings | None = None) -> FastMCP:
     """Build a FastMCP instance with all teamshared tools registered."""
     settings = settings or get_settings()
     mcp: FastMCP = FastMCP(
-        name="teamshared-memory",
+        name="teamshared",
         instructions=(
             "Multi-pillar agent memory. Use `memory_recall` early in a task to "
             "pull relevant facts, episodes, and procedures. Use `memory_remember` "
@@ -79,6 +81,7 @@ async def _init_state(settings: Settings) -> ServerState:
 
     recall = Recall(working=working, semantic_episodic=semantic, procedural=procedural)
     agent_state = AgentStateStore(working.client)
+    audit = AuditLog(procedural.pool)
 
     graph: GraphStore | None = None
     if settings.neo4j_enabled:
@@ -98,6 +101,7 @@ async def _init_state(settings: Settings) -> ServerState:
         semantic_episodic=semantic,
         procedural=procedural,
         recall=recall,
+        audit=audit,
         graph=graph,
     )
     set_state(state)
@@ -140,25 +144,8 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         try:
             from teamshared.server.state import get_state
 
-            state = get_state()
-            components: dict[str, str] = {}
-            try:
-                await state.working.client.ping()
-                components["redis"] = "ok"
-            except Exception as exc:
-                components["redis"] = f"error: {exc}"
-            try:
-                async with state.procedural.pool.connection() as conn, conn.cursor() as cur:
-                    await cur.execute("SELECT 1")
-                    await cur.fetchone()
-                components["postgres"] = "ok"
-            except Exception as exc:
-                components["postgres"] = f"error: {exc}"
-            components["mem0"] = (
-                "ok" if state.semantic_episodic._memory is not None else "not_ready"
-            )
-            status = "ok" if all(v == "ok" for v in components.values()) else "degraded"
-            return JSONResponse({"status": status, "components": components})
+            body = await check_components(get_state())
+            return JSONResponse(body)
         except RuntimeError:
             return JSONResponse({"status": "starting"}, status_code=503)
 
@@ -189,7 +176,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         try:
             from teamshared.server.state import get_state
 
-            value = await get_state().agent_state.get(identity.token_prefix, repo, key)
+            value = await get_state().agent_state.get(identity.state_id, repo, key)
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse({"repo": repo, "key": key, "value": value})
@@ -210,7 +197,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         try:
             from teamshared.server.state import get_state
 
-            await get_state().agent_state.set(identity.token_prefix, repo, key, value)
+            await get_state().agent_state.set(identity.state_id, repo, key, value)
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse({"repo": repo, "key": key, "stored": True})

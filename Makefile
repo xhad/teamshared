@@ -16,5 +16,8 @@ invite-create-host :; $(COMPOSE_OLLAMA_HOST) exec server teamshared token invite
 # Paste the printed token into ~/.cursor/mcp.json using src/teamshared/clients/cursor.mcp.json as the template
 health :; curl -fsS http://localhost:8077/health | jq
 
-.PHONY: build build-ollama-host down down-all migrate seed token-mint invite-create invite-create-host health
+smoke-all :; python scripts/smoke_all_tools.py
+smoke-cross-agent :; python scripts/smoke_cross_agent.py
+
+.PHONY: build build-ollama-host down down-all migrate seed token-mint invite-create invite-create-host health smoke-all smoke-cross-agent
 

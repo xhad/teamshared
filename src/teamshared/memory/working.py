@@ -25,6 +25,8 @@ from teamshared.memory.types import MemoryRecord
 log = get_logger(__name__)
 
 DISTILL_QUEUE_KEY = "working:distill:queue"
+DISTILL_DEAD_LETTER_KEY = "working:distill:dead"
+MAX_DISTILL_ATTEMPTS = 3
 
 
 def _session_key(session_id: str) -> str:
@@ -182,6 +184,26 @@ class WorkingMemory:
             return None
         _, payload = result
         return json.loads(payload)
+
+    async def requeue_distill_job(self, job: dict[str, Any]) -> None:
+        """Retry a failed distillation job or move it to the dead-letter queue."""
+        attempts = int(job.get("attempts", 0)) + 1
+        job["attempts"] = attempts
+        payload = json.dumps(job)
+        if attempts >= MAX_DISTILL_ATTEMPTS:
+            await self.client.rpush(DISTILL_DEAD_LETTER_KEY, payload)
+            log.error(
+                "distill_job_dead_letter",
+                session_id=job.get("session_id"),
+                attempts=attempts,
+            )
+            return
+        await self.client.rpush(DISTILL_QUEUE_KEY, payload)
+        log.warning(
+            "distill_job_requeued",
+            session_id=job.get("session_id"),
+            attempts=attempts,
+        )
 
     async def _require_open(self, session_id: str) -> None:
         meta = await self.client.hgetall(_session_key(session_id))

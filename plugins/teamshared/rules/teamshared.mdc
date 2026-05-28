@@ -1,5 +1,5 @@
 ---
-description: Use the teamshared MCP server as persistent cross-session memory
+description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
 ---
 

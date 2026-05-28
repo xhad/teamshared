@@ -161,7 +161,7 @@ _ONBOARDING_PAGE_CSS = """
 def _service_banner_json() -> JSONResponse:
     return JSONResponse(
         {
-            "service": "teamshared-memory",
+            "service": "teamshared",
             "mcp": "/mcp",
             "health": "/health",
             "state": "/state",

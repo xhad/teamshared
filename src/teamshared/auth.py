@@ -17,6 +17,7 @@ tool implementations don't have to dig through the request.
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import json
 import secrets
 from dataclasses import dataclass
@@ -39,7 +40,16 @@ class AgentIdentity:
     """Resolved identity for a request after bearer validation."""
 
     agent: str
-    token_prefix: str
+    state_id: str
+
+
+def _derive_state_id(token: str, entry: dict[str, Any]) -> str:
+    """Return a unique per-token scope id for client state storage."""
+    stored = entry.get("state_id")
+    if stored:
+        return str(stored)
+    # Legacy tokens minted before state_id existed: stable hash of the secret.
+    return hashlib.sha256(token.encode()).hexdigest()[:32]
 
 
 _current_agent: contextvars.ContextVar[AgentIdentity | None] = contextvars.ContextVar(
@@ -88,7 +98,7 @@ class TokenStore:
         entry = self._load().get(token)
         if entry is None:
             return None
-        return AgentIdentity(agent=entry["agent"], token_prefix=token[:8])
+        return AgentIdentity(agent=entry["agent"], state_id=_derive_state_id(token, entry))
 
     def mint(self, agent: str) -> str:
         """Generate a new token for ``agent`` and persist it. Returns the raw token."""
@@ -97,6 +107,7 @@ class TokenStore:
         data[token] = {
             "agent": agent,
             "created_at": datetime.now(UTC).isoformat(),
+            "state_id": secrets.token_hex(16),
         }
         self._save(data)
         return token
@@ -156,7 +167,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if self.auth_disabled:
-            identity = AgentIdentity(agent="anonymous", token_prefix="disabled")
+            identity = AgentIdentity(agent="anonymous", state_id="disabled")
         else:
             header = request.headers.get("authorization", "")
             if not header.lower().startswith("bearer "):

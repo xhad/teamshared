@@ -46,8 +46,12 @@ class DistillWorker:
                 continue
             try:
                 await self._handle(job)
+            except SummarizerError as exc:
+                log.warning("distill_summarizer_failed", error=str(exc), job=job)
+                await self.working.requeue_distill_job(job)
             except Exception as exc:
                 log.error("distill_job_failed", error=str(exc), job=job)
+                await self.working.requeue_distill_job(job)
 
     async def stop(self) -> None:
         self._stop.set()
@@ -70,7 +74,7 @@ class DistillWorker:
                 self.settings, agent=agent, topic=topic, transcript=transcript
             )
         except SummarizerError:
-            return
+            raise
 
         episode = payload.get("episode") or {}
         facts = payload.get("facts") or []
