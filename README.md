@@ -69,9 +69,13 @@ run Ollama on the host. The image installs the `ollama` Python client Mem0 needs
 
 ## Connect your agents
 
-**Cursor (recommended):** install the [`plugins/teamshared-memory`](plugins/teamshared-memory/)
-plugin — bundles MCP wiring, recall-first rules, and client snippets for
-Hermes and Claude.
+**Cursor (recommended):** install the [`plugins/teamshared`](plugins/teamshared/) plugin — MCP wiring, recall-first rule, AGENTS.md continual learning, and client snippets.
+
+```bash
+ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
+```
+
+Reload Cursor (**Developer: Reload Window**). Requires **Bun** for continual-learning hooks.
 
 Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients):
 
@@ -159,6 +163,8 @@ src/teamshared/
     state.py           shared per-process singletons
   cli.py               `teamshared` entrypoint (typer)
   clients/             config snippets per agent
+plugins/
+  teamshared/          Cursor plugin — MCP, rules, continual learning, clients
 infra/
   Dockerfile
   docker-compose.yml

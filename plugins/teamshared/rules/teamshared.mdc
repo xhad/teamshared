@@ -1,11 +1,11 @@
 ---
-description: Use the teamshared-memory MCP server as persistent cross-session memory
+description: Use the teamshared MCP server as persistent cross-session memory
 alwaysApply: true
 ---
 
 # teamshared Memory Protocol
 
-The `teamshared-memory` MCP server is your durable brain across sessions and repos.
+The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
 override it or narrow a read filter.
 

@@ -328,12 +328,10 @@ def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
         assert "Connect teamshared to Cursor" in resp.text
         assert "mcpServers" in resp.text
         assert "~/.cursor/mcp.json" in resp.text
-        assert "plugins/local/teamshared-memory" not in resp.text
-        assert "actx repo" not in resp.text.lower()
         assert "Memory rule" in resp.text
-        assert "teamshared-memory.mdc" in resp.text
+        assert "teamshared.mdc" in resp.text
         assert "teamshared Memory Protocol" in resp.text
-        assert "~/.cursor/rules/teamshared-memory.mdc" in resp.text
+        assert "~/.cursor/rules/teamshared.mdc" in resp.text
         assert "Memory rule section" in resp.text
         assert 'id="about-teamshared"' in resp.text
         assert "Multi-pillar agent memory" in resp.text

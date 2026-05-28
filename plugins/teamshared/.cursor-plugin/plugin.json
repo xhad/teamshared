@@ -1,0 +1,17 @@
+{
+  "name": "teamshared",
+  "displayName": "teamshared",
+  "version": "0.2.0",
+  "description": "Shared team memory for Cursor: MCP wiring, recall-first rules, AGENTS.md continual learning, and client snippets.",
+  "author": {
+    "name": "Sapien"
+  },
+  "license": "MIT",
+  "keywords": ["teamshared", "mcp", "memory", "agent-memory", "shared-brain", "continual-learning"],
+  "category": "developer-tools",
+  "tags": ["mcp", "memory", "teamshared", "hooks"],
+  "rules": "./rules/",
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "hooks": "./hooks/hooks.json"
+}

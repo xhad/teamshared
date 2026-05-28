@@ -1,5 +1,5 @@
 ---
-name: teamshared-memory
+name: teamshared
 description: Use teamshared MCP memory tools — recall before answering, remember durable facts, and run session workflows for multi-turn tasks.
 ---
 

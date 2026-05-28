@@ -448,9 +448,9 @@ def _token_result_html(agent_type: str, token: str, base_url: str) -> str:
             f"<li>{escape(step)}</li>" for step in setup.rule_install_steps
         )
         rule_section = f"""
-  <h2>Memory rule — <code>teamshared-memory.mdc</code></h2>
+  <h2>Memory rule — <code>teamshared.mdc</code></h2>
   <p>Copy this rule from the page into Cursor so agents recall team memory on every turn.</p>
-  <p class="path"><strong>Save to:</strong> <code>~/.cursor/rules/teamshared-memory.mdc</code></p>
+  <p class="path"><strong>Save to:</strong> <code>~/.cursor/rules/teamshared.mdc</code></p>
   <ol>{rule_steps_html}</ol>
   <pre class="rule">{escape(setup.rule_mdc)}</pre>
 """

@@ -12,21 +12,21 @@ KNOWN_AGENT_TYPES = frozenset({"cursor", "codex", "hermes", "claude", "openclaw"
 _REPO_RULE_MDC = (
     Path(__file__).resolve().parents[3]
     / "plugins"
-    / "teamshared-memory"
+    / "teamshared"
     / "rules"
-    / "teamshared-memory.mdc"
+    / "teamshared.mdc"
 )
 
 
 def load_teamshared_memory_rule_mdc() -> str:
     """Load bundled ``teamshared-memory.mdc`` (plugin rule) for onboarding pages."""
     try:
-        raw = resources.files("teamshared.clients").joinpath("teamshared-memory.mdc").read_bytes()
+        raw = resources.files("teamshared.clients").joinpath("teamshared.mdc").read_bytes()
         return raw.decode("utf-8")
     except (FileNotFoundError, ModuleNotFoundError, TypeError):
         if _REPO_RULE_MDC.is_file():
             return _REPO_RULE_MDC.read_text(encoding="utf-8")
-        raise FileNotFoundError("teamshared-memory.mdc is not bundled and repo copy is missing")
+        raise FileNotFoundError("teamshared.mdc is not bundled and repo copy is missing")
 
 
 def normalize_agent_type(value: str) -> str | None:
@@ -71,10 +71,10 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
         return AgentSetup(
             agent_type=agent_type,
             title="Cursor",
-            config_path="~/.cursor/rules/teamshared-memory.mdc and ~/.cursor/mcp.json",
+            config_path="~/.cursor/rules/teamshared.mdc and ~/.cursor/mcp.json",
             steps=(
-                "Copy the teamshared-memory rule from the Memory rule section below "
-                "into ~/.cursor/rules/teamshared-memory.mdc (include the --- frontmatter lines).",
+                "Copy the teamshared rule from the Memory rule section below "
+                "into ~/.cursor/rules/teamshared.mdc (include the --- frontmatter lines).",
                 "Open or create ~/.cursor/mcp.json and merge the JSON block below "
                 "(keep any other mcpServers entries).",
                 "In Cursor: Command Palette → Developer: Reload Window.",
@@ -86,7 +86,7 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
             rule_install_steps=(
                 "Create the rules directory if needed: mkdir -p ~/.cursor/rules",
                 "Copy everything in the Memory rule block below into "
-                "~/.cursor/rules/teamshared-memory.mdc.",
+                "~/.cursor/rules/teamshared.mdc.",
                 "Developer: Reload Window so Cursor loads the rule.",
             ),
         )

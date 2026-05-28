@@ -30,8 +30,8 @@ def test_cursor_setup_includes_mcp_json() -> None:
     assert "mcpServers" in setup.snippet
     assert "teamshared_testtoken" in setup.snippet
     assert "plugins/local" not in setup.snippet
-    assert "actx repo" not in setup.snippet.lower()
-    assert setup.config_path == "~/.cursor/rules/teamshared-memory.mdc and ~/.cursor/mcp.json"
+    assert "symlink" not in setup.snippet.lower()
+    assert setup.config_path == "~/.cursor/rules/teamshared.mdc and ~/.cursor/mcp.json"
     assert any("Memory rule section" in step for step in setup.steps)
     assert any("Settings → MCP" in step for step in setup.steps)
     assert setup.rule_mdc is not None
