@@ -312,6 +312,30 @@ def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
         assert "~/.cursor/mcp.json" in resp.text
         assert "plugins/local/teamshared-memory" in resp.text
         assert "Settings → Plugins" in resp.text
+        assert "Memory rule" in resp.text
+        assert "teamshared-memory.mdc" in resp.text
+        assert "teamshared Memory Protocol" in resp.text
+        assert "~/.cursor/rules/teamshared-memory.mdc" in resp.text
+        assert 'id="about-teamshared"' in resp.text
+        assert "Multi-pillar agent memory" in resp.text
+        assert "memory_recall" in resp.text
+
+
+def test_get_token_form_shows_readme(tmp_path: Path) -> None:
+    settings = Settings(
+        _env_file=None,
+        self_service_tokens=True,
+        tokens_file=tmp_path / "tokens.json",
+        invites_file=tmp_path / "invites.json",
+    )
+    store = TokenStore(settings.tokens_file)
+    invites = InviteStore(settings.invites_file)
+    with TestClient(_get_token_app(settings, store, invites)) as client:
+        resp = client.get("/get-token")
+        assert resp.status_code == 200
+        assert 'id="about-teamshared"' in resp.text
+        assert "Learn what teamshared does" in resp.text
+        assert "MCP tools" in resp.text
 
 
 def test_invite_normalizes_cursor_chad_to_cursor(tmp_path: Path) -> None:

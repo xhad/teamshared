@@ -108,6 +108,8 @@ build, so dropping it breaks both the `server` and `distiller` images.
 
 - Keep Cursor hook and continual-learning state under `~/.cursor`, not committed in the repo.
 - Prefer storing the continual-learning transcript index on the teamshared server via `memory_state_get` / `memory_state_set` (token+repo scoped) when MCP is available; fall back to `~/.cursor/hooks/state/continual-learning/<workspace-slug>/`.
+- Teammate onboarding should cover the `teamshared-memory` Cursor plugin (rule + skill + MCP shape), not just a standalone `~/.cursor/mcp.json` snippet.
+- Get-token/onboarding pages should ship the full `teamshared-memory.mdc` rule markdown with install instructions, not only the MCP JSON block.
 
 ## Learned Workspace Facts
 
@@ -119,3 +121,6 @@ build, so dropping it breaks both the `server` and `distiller` images.
 - Teammate curl onboarding: `curl -fsS 'https://actx.teamshared.com/?invite=CODE&agent=TYPE'` returns the raw bearer token as plain text.
 - Spark deployments with host Ollama use `make build-ollama-host`; set `TEAMSHARED_PG_PORT` / `TEAMSHARED_REDIS_PORT` in `.env` when host 5432/6379 are already taken.
 - One-off compose CLI targets (`migrate`, `seed`, `token-mint`, `invite-create`) use `--no-deps` so they do not start conflicting Postgres/Redis containers.
+- `teamshared-memory` Cursor plugin lives at `plugins/teamshared-memory/`; local install is `ln -sf <repo>/plugins/teamshared-memory ~/.cursor/plugins/local/teamshared-memory` then reload Cursor.
+- Plugin MCP wiring reads `TEAMSHARED_URL` and `TEAMSHARED_TOKEN` from the environment (see plugin `mcp.json`); Cursor must inherit those vars at launch.
+- Cursor does not auto-fetch remote `.mdc` rules from MCP on connect; distribute agent guidance via the plugin bundle or bundled rule on get-token pages.

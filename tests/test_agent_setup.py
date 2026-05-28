@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from teamshared.clients.agent_setup import agent_setup, normalize_agent_type
+from teamshared.clients.agent_setup import (
+    agent_setup,
+    load_teamshared_memory_rule_mdc,
+    normalize_agent_type,
+)
 
 
 def test_normalize_agent_type() -> None:
@@ -30,6 +34,16 @@ def test_cursor_setup_includes_mcp_json() -> None:
     )
     assert any("teamshared-memory plugin" in step for step in setup.steps)
     assert any("Settings → Plugins" in step for step in setup.steps)
+    assert setup.rule_mdc is not None
+    assert "teamshared Memory Protocol" in setup.rule_mdc
+    assert "alwaysApply: true" in setup.rule_mdc
+    assert any("~/.cursor/rules/teamshared-memory.mdc" in step for step in setup.rule_install_steps)
+
+
+def test_load_teamshared_memory_rule_mdc() -> None:
+    mdc = load_teamshared_memory_rule_mdc()
+    assert mdc.startswith("---")
+    assert "memory_recall" in mdc
 
 
 def test_codex_setup_includes_cli_and_toml() -> None:

@@ -4,8 +4,29 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from importlib import resources
+from pathlib import Path
 
 KNOWN_AGENT_TYPES = frozenset({"cursor", "codex", "hermes", "claude", "openclaw"})
+
+_REPO_RULE_MDC = (
+    Path(__file__).resolve().parents[3]
+    / "plugins"
+    / "teamshared-memory"
+    / "rules"
+    / "teamshared-memory.mdc"
+)
+
+
+def load_teamshared_memory_rule_mdc() -> str:
+    """Load bundled ``teamshared-memory.mdc`` (plugin rule) for onboarding pages."""
+    try:
+        raw = resources.files("teamshared.clients").joinpath("teamshared-memory.mdc").read_bytes()
+        return raw.decode("utf-8")
+    except (FileNotFoundError, ModuleNotFoundError, TypeError):
+        if _REPO_RULE_MDC.is_file():
+            return _REPO_RULE_MDC.read_text(encoding="utf-8")
+        raise FileNotFoundError("teamshared-memory.mdc is not bundled and repo copy is missing")
 
 
 def normalize_agent_type(value: str) -> str | None:
@@ -31,6 +52,8 @@ class AgentSetup:
     steps: tuple[str, ...]
     snippet: str
     snippet_lang: str
+    rule_mdc: str | None = None
+    rule_install_steps: tuple[str, ...] = ()
 
 
 def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | None:
@@ -54,24 +77,36 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
             "\n"
             "# 2. MCP server — merge into ~/.cursor/mcp.json\n"
         )
+        rule_mdc = load_teamshared_memory_rule_mdc()
         return AgentSetup(
             agent_type=agent_type,
             title="Cursor",
             config_path=(
-                "~/.cursor/plugins/local/teamshared-memory and ~/.cursor/mcp.json"
+                "~/.cursor/rules/teamshared-memory.mdc, "
+                "~/.cursor/plugins/local/teamshared-memory, and ~/.cursor/mcp.json"
             ),
             steps=(
-                "Install the teamshared-memory plugin so the recall-first rule and "
-                "skill load on every turn (symlink or copy to "
-                "~/.cursor/plugins/local/teamshared-memory — see commands below).",
+                "Save the teamshared-memory rule below to "
+                "~/.cursor/rules/teamshared-memory.mdc (or install the full plugin — "
+                "see rule install steps and commands below).",
                 "Open or create ~/.cursor/mcp.json and merge the JSON block below "
                 "(keep any other mcpServers entries).",
                 "In Cursor: Command Palette → Developer: Reload Window.",
                 "Confirm teamshared appears under Settings → MCP and "
-                "teamshared-memory under Settings → Plugins.",
+                "teamshared-memory under Settings → Plugins (if you installed the plugin).",
             ),
             snippet=plugin_install + json.dumps(payload, indent=2),
             snippet_lang="json",
+            rule_mdc=rule_mdc,
+            rule_install_steps=(
+                "Create the rules directory if needed: mkdir -p ~/.cursor/rules",
+                "Paste the rule markdown below into ~/.cursor/rules/teamshared-memory.mdc "
+                "(include the frontmatter between the --- lines).",
+                "Alternative — full plugin (rule + skill): symlink or copy the "
+                "teamshared-memory folder to ~/.cursor/plugins/local/teamshared-memory "
+                "(commands in the MCP config block below).",
+                "Developer: Reload Window so Cursor loads the rule.",
+            ),
         )
 
     if agent_type == "codex":

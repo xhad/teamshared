@@ -17,6 +17,7 @@ from teamshared.clients.agent_setup import (
     agent_setup,
     normalize_agent_type,
 )
+from teamshared.clients.readme_page import render_readme_html
 from teamshared.config import Settings
 from teamshared.invite import InviteStore
 from teamshared.logging import get_logger
@@ -336,7 +337,7 @@ def _token_form_html(
   <meta charset="utf-8" />
   <title>teamshared token</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; }}
+    body {{ font-family: system-ui, sans-serif; max-width: 52rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }}
     label {{ display: block; margin-top: 1rem; font-weight: 600; }}
     input {{ width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }}
     button {{ margin-top: 1rem; padding: 0.6rem 1rem; }}
@@ -346,6 +347,7 @@ def _token_form_html(
 <body>
   <h1>Get your teamshared token</h1>
   <p>Paste the invite code from your admin and pick your agent type ({allowed}).</p>
+  <p><a href="#about-teamshared">Learn what teamshared does</a> before you connect.</p>
   {err}
   <form method="get" action="/get-token">
     <label for="invite">Invite code</label>
@@ -354,6 +356,7 @@ def _token_form_html(
     <input id="agent" name="agent" required placeholder="cursor" value="{escape(agent_value)}"{readonly} />
     <button type="submit">Create token</button>
   </form>
+  {render_readme_html()}
 </body>
 </html>"""
 
@@ -366,26 +369,44 @@ def _token_result_html(agent_type: str, token: str, base_url: str) -> str:
 <html lang="en"><body><pre>{escape(token)}</pre></body></html>"""
 
     steps_html = "".join(f"<li>{escape(step)}</li>" for step in setup.steps)
+    rule_section = ""
+    if setup.rule_mdc:
+        rule_steps_html = "".join(
+            f"<li>{escape(step)}</li>" for step in setup.rule_install_steps
+        )
+        rule_section = f"""
+  <h2>Memory rule — <code>teamshared-memory.mdc</code></h2>
+  <p>Paste this markdown into your Cursor rules so agents recall team memory on every turn.</p>
+  <p class="path"><strong>Save to:</strong> <code>~/.cursor/rules/teamshared-memory.mdc</code></p>
+  <ol>{rule_steps_html}</ol>
+  <pre class="rule">{escape(setup.rule_mdc)}</pre>
+"""
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>teamshared setup — {escape(setup.title)}</title>
   <style>
-    body {{ font-family: system-ui, sans-serif; max-width: 42rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }}
+    body {{ font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }}
     pre {{ word-break: break-all; background: #f4f4f5; padding: 0.75rem; overflow-x: auto; font-size: 0.9rem; }}
+    pre.rule {{ white-space: pre-wrap; max-height: 28rem; overflow-y: auto; }}
     ol {{ padding-left: 1.25rem; }}
     .path {{ color: #555; font-size: 0.95rem; }}
+    h2 {{ margin-top: 2rem; font-size: 1.15rem; }}
+    .readme-intro {{ color: #52525b; }}
   </style>
 </head>
 <body>
   <h1>Connect teamshared to {escape(setup.title)}</h1>
   <p>Your bearer token is embedded in the config below. It is shown once — copy it now if you need it elsewhere.</p>
-  <p class="path"><strong>Config file:</strong> <code>{escape(setup.config_path)}</code></p>
+  <p class="path"><strong>Config paths:</strong> <code>{escape(setup.config_path)}</code></p>
   <ol>{steps_html}</ol>
+  {rule_section}
+  <h2>MCP config</h2>
   <pre>{escape(setup.snippet)}</pre>
   <p><strong>Token only:</strong></p>
   <pre>{escape(token)}</pre>
+  {render_readme_html()}
 </body>
 </html>"""
 
