@@ -161,6 +161,9 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         except RuntimeError:
             return JSONResponse({"status": "starting"}, status_code=503)
 
+    async def favicon_route(_: Request) -> Response:
+        return Response(status_code=204)
+
     async def root_route(request: Request) -> Response:
         return await handle_root(request, settings, tokens, invites)
 
@@ -233,6 +236,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     app = Starlette(
         routes=[
             Route("/", root_route, methods=["GET"]),
+            Route("/favicon.ico", favicon_route, methods=["GET"]),
             Route("/health", health_route, methods=["GET"]),
             Route("/get-token/{invite}/{agent}", get_token_route, methods=["GET"]),
             Route("/get-token/{invite}", get_token_route, methods=["GET"]),

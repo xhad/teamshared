@@ -125,10 +125,7 @@ class TokenStore:
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     """Validate ``Authorization: Bearer <token>`` against a :class:`TokenStore`.
 
-    Two escape hatches:
-    - ``/health`` and ``/`` are always anonymous.
-    - ``/tokens/mint`` and ``/tokens/mint/{invite}/{agent}`` use invite codes or
-      ``X-Teamshared-Mint-Secret`` instead of bearer auth.
+    - ``/health``, ``/``, ``/favicon.ico``, and token self-service paths are anonymous.
     - If ``auth_disabled`` is True, a synthetic ``anonymous`` identity is bound
       (useful for local development / tests).
     """
@@ -146,7 +143,14 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         path = request.url.path
-        if path in {"/health", "/", "/tokens/mint", "/tokens/invites", "/get-token"}:
+        if path in {
+            "/health",
+            "/",
+            "/favicon.ico",
+            "/tokens/mint",
+            "/tokens/invites",
+            "/get-token",
+        }:
             return await call_next(request)
         if path.startswith(("/tokens/mint/", "/get-token/")):
             return await call_next(request)
