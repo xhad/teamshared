@@ -12,6 +12,9 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
+import psycopg
+from psycopg import sql
+
 from teamshared.config import Settings
 from teamshared.logging import get_logger
 from teamshared.memory.types import MemoryKind, MemoryRecord
@@ -253,6 +256,128 @@ class SemanticEpisodicStore:
 
         return [r for r in records if _matches(r)][:limit]
 
+    async def stats(self) -> dict[str, Any]:
+        """Aggregate semantic + episodic counts via direct SQL on the Mem0 table.
+
+        Mem0's ``get_all`` is capped by ``top_k`` and unreliable for totals, so
+        the ``/memory`` dashboard reads counts straight from the pgvector
+        ``payload`` JSONB. Returns per-pillar, per-agent (``user_id``), per-kind
+        (semantic only), and top-tag breakdowns.
+        """
+        if not self.is_ready:
+            raise RuntimeError("mem0 not ready")
+        table = self._settings.mem0_collection
+        dsn = self._settings.pg_dsn
+
+        def _query() -> dict[str, Any]:
+            ident = sql.Identifier(table)
+            with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL("SELECT payload->>'pillar', COUNT(*) FROM {} GROUP BY 1").format(ident)
+                )
+                by_pillar = {(row[0] or "semantic"): int(row[1]) for row in cur.fetchall()}
+
+                cur.execute(
+                    sql.SQL(
+                        "SELECT payload->>'user_id', COUNT(*) FROM {} "
+                        "WHERE payload->>'user_id' IS NOT NULL AND payload->>'user_id' != '' "
+                        "GROUP BY 1 ORDER BY 2 DESC"
+                    ).format(ident)
+                )
+                by_agent = {str(row[0]): int(row[1]) for row in cur.fetchall()}
+
+                cur.execute(
+                    sql.SQL(
+                        "SELECT payload->>'kind', COUNT(*) FROM {} "
+                        "WHERE payload->>'pillar' = 'semantic' AND payload->>'kind' IS NOT NULL "
+                        "GROUP BY 1 ORDER BY 2 DESC"
+                    ).format(ident)
+                )
+                by_kind = {str(row[0]): int(row[1]) for row in cur.fetchall()}
+
+                cur.execute(
+                    sql.SQL(
+                        "SELECT tag, COUNT(*) FROM {}, "
+                        "jsonb_array_elements_text(COALESCE(payload->'tags', '[]'::jsonb)) AS tag "
+                        "GROUP BY 1 ORDER BY 2 DESC LIMIT 15"
+                    ).format(ident)
+                )
+                tags = [(str(row[0]), int(row[1])) for row in cur.fetchall()]
+
+            return {
+                "by_pillar": by_pillar,
+                "by_agent": by_agent,
+                "by_kind": by_kind,
+                "tags": tags,
+                "semantic": int(by_pillar.get("semantic", 0)),
+                "episodic": int(by_pillar.get("episodic", 0)),
+                "total": sum(by_pillar.values()),
+            }
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _query)
+
+    async def list_recent(
+        self,
+        limit: int = 10,
+        pillar: str | None = None,
+    ) -> list[MemoryRecord]:
+        """Return the most recently created memories (newest first) via direct SQL."""
+        if not self.is_ready:
+            raise RuntimeError("mem0 not ready")
+        table = self._settings.mem0_collection
+        dsn = self._settings.pg_dsn
+
+        def _query() -> list[MemoryRecord]:
+            ident = sql.Identifier(table)
+            select = (
+                "SELECT id, COALESCE(payload->>'data', payload->>'memory', payload->>'text'), "
+                "payload->>'user_id', payload->>'pillar', payload->>'kind', "
+                "payload->>'created_at' FROM {} "
+            )
+            with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+                if pillar:
+                    cur.execute(
+                        sql.SQL(
+                            select
+                            + "WHERE payload->>'pillar' = %s "
+                            "ORDER BY (payload->>'created_at')::timestamptz DESC NULLS LAST LIMIT %s"
+                        ).format(ident),
+                        (pillar, limit),
+                    )
+                else:
+                    cur.execute(
+                        sql.SQL(
+                            select
+                            + "ORDER BY (payload->>'created_at')::timestamptz DESC NULLS LAST LIMIT %s"
+                        ).format(ident),
+                        (limit,),
+                    )
+                rows = cur.fetchall()
+
+            out: list[MemoryRecord] = []
+            for rid, content, user_id, plr, kind, created in rows:
+                created_at: datetime | None = None
+                if created:
+                    try:
+                        created_at = datetime.fromisoformat(str(created))
+                    except ValueError:
+                        created_at = None
+                out.append(
+                    MemoryRecord(
+                        id=str(rid),
+                        pillar=plr if plr in {"semantic", "episodic"} else "semantic",
+                        kind=kind if kind in {"fact", "preference", "event", "note"} else None,
+                        content=content or "",
+                        agent=user_id,
+                        created_at=created_at,
+                    )
+                )
+            return out
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _query)
+
     async def _mem0_entity_filters(self, agent: str | None) -> dict[str, Any] | None:
         """Build Mem0 entity filters for one agent or the shared-brain scope."""
         if agent:
@@ -270,9 +395,6 @@ class SemanticEpisodicStore:
         dsn = self._settings.pg_dsn
 
         def _query() -> list[str]:
-            import psycopg
-            from psycopg import sql
-
             with psycopg.connect(dsn) as conn, conn.cursor() as cur:
                 cur.execute(
                     sql.SQL(

@@ -162,5 +162,11 @@ Two reference topologies live in [`infra/`](infra):
   curl -fsS 'https://actx.teamshared.com/?invite=INVITE_CODE&agent=cursor'
   ```
 
+- **Memory dashboard**: `GET /memory` is a public, zero-dependency HTML page
+  showing component health, per-pillar counts, simple charts, and the most
+  recent saved records. Counts come from direct SQL on the `teamshared_memories`
+  and `procedures` tables plus a Redis scan (not the MCP tool surface), so they
+  stay accurate even where `get_all` is capped.
+
 See [`AGENTS.md`](AGENTS.md) for the conventions agents (human or LLM) should
 follow when modifying this repo.

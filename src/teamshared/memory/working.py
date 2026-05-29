@@ -145,6 +145,52 @@ class WorkingMemory:
             "distill_enqueued": distill,
         }
 
+    async def stats(self, recent_limit: int = 20) -> dict[str, Any]:
+        """Aggregate working-memory stats across all agents.
+
+        Scans every ``working:session:*`` hash (skipping the ``:turns`` lists),
+        splitting active (``closed_at == ""``) from closed sessions and grouping
+        by agent. Also reports distill-queue depths and the most recent sessions
+        with their turn counts. Used by the public ``/memory`` dashboard.
+        """
+        client = self.client
+        sessions: list[dict[str, Any]] = []
+        async for key in client.scan_iter(match="working:session:*", count=200):
+            if key.endswith(":turns"):
+                continue
+            meta = await client.hgetall(key)
+            if not meta:
+                continue
+            session_id = key.split("working:session:", 1)[1]
+            sessions.append({"session_id": session_id, **meta})
+
+        active = 0
+        closed = 0
+        by_agent: dict[str, int] = {}
+        for s in sessions:
+            agent = s.get("agent") or "unknown"
+            by_agent[agent] = by_agent.get(agent, 0) + 1
+            if s.get("closed_at"):
+                closed += 1
+            else:
+                active += 1
+
+        sessions.sort(key=lambda s: s.get("opened_at") or "", reverse=True)
+        recent: list[dict[str, Any]] = []
+        for s in sessions[:recent_limit]:
+            turn_count = int(await client.llen(_turns_key(s["session_id"])))
+            recent.append({**s, "turn_count": turn_count})
+
+        return {
+            "total": len(sessions),
+            "active": active,
+            "closed": closed,
+            "by_agent": by_agent,
+            "distill_queue": int(await client.llen(DISTILL_QUEUE_KEY)),
+            "distill_dead": int(await client.llen(DISTILL_DEAD_LETTER_KEY)),
+            "recent": recent,
+        }
+
     async def list_open_sessions(self, agent: str, limit: int = 20) -> list[dict[str, Any]]:
         ids = await self.client.zrevrange(_agent_index_key(agent), 0, limit - 1)
         out: list[dict[str, Any]] = []

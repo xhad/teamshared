@@ -161,6 +161,45 @@ class ProceduralStore:
             rows = await cur.fetchall()
         return [_row_to_dict(r) for r in rows]
 
+    async def stats(self) -> dict[str, Any]:
+        """Aggregate procedure counts for the ``/memory`` dashboard.
+
+        Returns the number of distinct playbooks, total version rows, a
+        per-author breakdown, and tag distribution over the latest version of
+        each playbook.
+        """
+        async with self.pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT COUNT(DISTINCT name), COUNT(*) FROM procedures")
+            row = await cur.fetchone()
+            playbooks = int(row[0]) if row else 0
+            versions = int(row[1]) if row else 0
+
+            await cur.execute(
+                "SELECT created_by, COUNT(*) FROM procedures GROUP BY 1 ORDER BY 2 DESC"
+            )
+            by_author = {str(r[0]): int(r[1]) for r in await cur.fetchall()}
+
+            await cur.execute(
+                """
+                SELECT tag, COUNT(*) FROM (
+                    SELECT DISTINCT ON (name) tags
+                    FROM procedures
+                    ORDER BY name, version DESC
+                ) latest, unnest(tags) AS tag
+                GROUP BY 1
+                ORDER BY 2 DESC
+                LIMIT 15
+                """
+            )
+            tags = [(str(r[0]), int(r[1])) for r in await cur.fetchall()]
+
+        return {
+            "playbooks": playbooks,
+            "versions": versions,
+            "by_author": by_author,
+            "tags": tags,
+        }
+
     async def search_procedures(self, query: str, limit: int = 10) -> list[MemoryRecord]:
         """Lexical search via Postgres trigram + full-text on ``name``/``description``/``steps_md``.
 

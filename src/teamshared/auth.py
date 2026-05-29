@@ -156,6 +156,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         if path in {
             "/health",
+            "/memory",
             "/",
             "/favicon.ico",
             "/tokens/mint",

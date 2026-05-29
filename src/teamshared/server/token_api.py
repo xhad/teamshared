@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import secrets
 from html import escape
-
 from urllib.parse import urlencode
 
 from starlette.requests import Request
@@ -164,6 +163,7 @@ def _service_banner_json() -> JSONResponse:
             "service": "teamshared",
             "mcp": "/mcp",
             "health": "/health",
+            "memory_dashboard": "/memory",
             "state": "/state",
             "get_token": "/get-token",
             "tokens_mint": "/tokens/mint",
@@ -207,6 +207,8 @@ def _landing_page_html() -> str:
   <p>Agents connect over MCP at <code>/mcp</code> with a bearer token. Call
   <code>memory_recall</code> early in a task to pull relevant context; use
   <code>memory_remember</code> to persist things that should still be true next week.</p>
+
+  <p>See what's in the brain on the <a href="/memory">memory status dashboard</a>.</p>
 
   <div class="cta">
     <h2>Get started</h2>

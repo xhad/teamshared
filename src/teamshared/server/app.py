@@ -19,13 +19,13 @@ from fastmcp import FastMCP
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
 from teamshared.auth import BearerAuthMiddleware, TokenStore
 from teamshared.config import Settings, get_settings
-from teamshared.logging import configure_logging, get_logger
 from teamshared.invite import InviteStore
+from teamshared.logging import configure_logging, get_logger
 from teamshared.memory.agent_state import AgentStateStore
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.graph import GraphStore
@@ -33,20 +33,21 @@ from teamshared.memory.procedural import ProceduralStore
 from teamshared.memory.recall import Recall
 from teamshared.memory.semantic import SemanticEpisodicStore
 from teamshared.memory.working import WorkingMemory
-from teamshared.server.state import ServerState, clear_state, set_state
+from teamshared.server.dashboard import handle_memory_dashboard
+from teamshared.server.health import check_components
 from teamshared.server.install_api import (
     handle_install_asset,
     handle_install_index,
     handle_install_sh,
     handle_plugin_bundle,
 )
+from teamshared.server.state import ServerState, clear_state, set_state
 from teamshared.server.token_api import (
     handle_get_token_page,
     handle_root,
     handle_token_invite_create,
     handle_token_mint,
 )
-from teamshared.server.health import check_components
 from teamshared.server.tools import register_tools
 from teamshared.telemetry import instrument_asgi, setup_tracing
 
@@ -128,6 +129,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
 
     Routes:
     - ``GET  /health``  -- unauthenticated probe.
+    - ``GET  /memory``  -- public memory status dashboard (HTML).
     - ``GET  /``        -- landing page (HTML); JSON banner with ``Accept: application/json``;
                            mint via ``?invite=&agent=`` (plain text or JSON).
     - ``GET  /state``   -- bearer-scoped JSON state read (`repo`, `key` query params).
@@ -162,6 +164,17 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
 
     async def favicon_route(_: Request) -> Response:
         return Response(status_code=204)
+
+    async def memory_dashboard_route(request: Request) -> Response:
+        try:
+            from teamshared.server.state import get_state
+
+            return await handle_memory_dashboard(request, get_state())
+        except RuntimeError:
+            return HTMLResponse(
+                "<h1>teamshared</h1><p>Server is starting; memory dashboard not ready yet.</p>",
+                status_code=503,
+            )
 
     async def root_route(request: Request) -> Response:
         return await handle_root(request, settings, tokens, invites)
@@ -249,6 +262,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/", root_route, methods=["GET"]),
             Route("/favicon.ico", favicon_route, methods=["GET"]),
             Route("/health", health_route, methods=["GET"]),
+            Route("/memory", memory_dashboard_route, methods=["GET"]),
             Route("/get-token/{invite}/{agent}", get_token_route, methods=["GET"]),
             Route("/get-token/{invite}", get_token_route, methods=["GET"]),
             Route("/get-token", get_token_route, methods=["GET"]),
