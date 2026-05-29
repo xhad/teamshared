@@ -257,16 +257,6 @@ def _health_badges(health: Any) -> str:
     return f'<div class="badges">{"".join(badges)}</div>'
 
 
-def _merge_tags(*sources: Any) -> list[tuple[str, int]]:
-    merged: dict[str, int] = {}
-    for src in sources:
-        if _is_err(src) or not isinstance(src, dict):
-            continue
-        for tag, count in src.get("tags", []):
-            merged[tag] = merged.get(tag, 0) + int(count)
-    return sorted(merged.items(), key=lambda kv: kv[1], reverse=True)[:15]
-
-
 def _render_page(
     *,
     health: Any,
@@ -308,16 +298,6 @@ def _render_page(
         by_kind = sorted(semantic.get("by_kind", {}).items(), key=lambda kv: kv[1], reverse=True)
         agents_panel = _bar_chart(by_agent)
         kinds_panel = _bar_chart(by_kind)
-
-    tags_panel = _bar_chart(_merge_tags(semantic, procedural))
-
-    if _is_err(working):
-        distill_note = _unavailable(working)
-    else:
-        distill_note = (
-            f'<p class="muted">Distill queue: <strong>{working.get("distill_queue", 0)}</strong> pending, '
-            f'<strong>{working.get("distill_dead", 0)}</strong> dead-letter.</p>'
-        )
 
     sem_table = (
         _unavailable(recent_semantic)
@@ -371,8 +351,6 @@ def _render_page(
       <div class="panel"><h3>Memory distribution</h3>{_donut_svg(donut_segments)}</div>
       <div class="panel"><h3>Durable memory by agent</h3>{agents_panel}</div>
       <div class="panel"><h3>Semantic kinds</h3>{kinds_panel}</div>
-      <div class="panel"><h3>Top tags</h3>{tags_panel}</div>
-      <div class="panel"><h3>Working memory</h3>{distill_note}</div>
     </div>
 
     <h2>Recent semantic</h2>
