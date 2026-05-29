@@ -174,8 +174,10 @@ Two reference topologies live in [`infra/`](infra):
   captured separately: a client adapter reads its harness transcript and pushes
   turns to `POST /sessions/turns` (bearer-scoped, body `{"turns": [{"role",
   "content"}]}`), which lands in the same session. The Cursor plugin ships such
-  an adapter as a `stop` hook (`conversation-capture-stop.ts`); other harnesses
-  point their own adapter at the same endpoint. Sessions roll over (close +
+  an adapter as a `stop` hook (`conversation-capture-stop.ts`); Hermes ships one
+  as a `post_llm_call` shell hook (`~/.hermes/agent-hooks/teamshared-capture.py`,
+  wired by the installer — approve once via `hermes --accept-hooks`); other
+  harnesses point their own adapter at the same endpoint. Sessions roll over (close +
   distill, open new) after `TEAMSHARED_CAPTURE_IDLE_SECONDS` of inactivity or
   `TEAMSHARED_CAPTURE_MAX_TURNS` turns; set `TEAMSHARED_CAPTURE_ENABLED=false`
   to disable all capture.

@@ -31,6 +31,10 @@ def test_unified_install_script() -> None:
     assert "/get-token" in body
     assert "https://actx.teamshared.com/mcp" in body
     assert "/install/assets" in body
+    # Hermes ships a conversation-capture shell hook wired by the installer.
+    assert "_ts_install_hermes_hook" in body
+    assert "teamshared-capture.py" in body
+    assert "post_llm_call" in body
     # Restart guidance is per-harness, not hardcoded to Cursor.
     assert "Restart Hermes" in body
     assert "Quit and reopen Claude Desktop" in body
@@ -64,6 +68,15 @@ def test_install_routes() -> None:
         cursor_mcp = client.get("/install/assets/cursor/mcp.json")
         assert cursor_mcp.status_code == 200
         assert "__TEAMSHARED_TOKEN__" in cursor_mcp.text
+
+        hermes_hook = client.get("/install/assets/hermes/capture.py")
+        assert hermes_hook.status_code == 200
+        assert "post_llm_call" in hermes_hook.text
+        assert "/sessions/turns" in hermes_hook.text
+
+        hermes_hooks_yaml = client.get("/install/assets/hermes/hooks.yaml")
+        assert hermes_hooks_yaml.status_code == 200
+        assert "post_llm_call" in hermes_hooks_yaml.text
 
         bundle = client.get("/install/plugin/teamshared.tar.gz")
         assert bundle.status_code == 200

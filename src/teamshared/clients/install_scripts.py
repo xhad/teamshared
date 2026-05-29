@@ -254,6 +254,53 @@ PY
   fi
   _ts_fetch "${HOME}/.hermes/teamshared-protocol.md" "${ASSETS}/hermes/protocol.md" 2>/dev/null || true
   echo "  snippet → ${snippet}"
+
+  _ts_install_hermes_hook "${dest}"
+}
+
+# Deploy the conversation-capture shell hook and register it on post_llm_call.
+_ts_install_hermes_hook() {
+  local config_path="$1"
+  local hook_dir="${HOME}/.hermes/agent-hooks"
+  local hook_script="${hook_dir}/teamshared-capture.py"
+  local hook_creds="${hook_dir}/teamshared-capture.json"
+  mkdir -p "${hook_dir}"
+
+  _ts_fetch "${hook_script}" "${ASSETS}/hermes/capture.py"
+  chmod +x "${hook_script}" 2>/dev/null || true
+
+  # Credentials the stdlib hook reads (avoids parsing YAML at runtime). The
+  # base URL is the origin, not the /mcp endpoint.
+  python3 - "${hook_creds}" <<PY
+import json, sys
+from pathlib import Path
+
+Path(sys.argv[1]).write_text(
+    json.dumps(
+        {"base_url": "${TEAMSHARED_BASE_URL}", "token": "${TEAMSHARED_TOKEN}"},
+        indent=2,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+PY
+  chmod 600 "${hook_creds}" 2>/dev/null || true
+  echo "  capture hook → ${hook_script}"
+
+  if [[ -f "${config_path}" ]] && grep -q '^hooks:' "${config_path}"; then
+    echo "  hooks: block already in ${config_path} — add post_llm_call manually:"
+    echo "      python3 ${hook_script}"
+  else
+    {
+      printf '\nhooks:\n'
+      printf '  post_llm_call:\n'
+      printf '    - command: "python3 %s"\n' "${hook_script}"
+      printf '      timeout: 15\n'
+    } >>"${config_path}"
+    echo "  registered post_llm_call hook → ${config_path}"
+  fi
+  echo "  NOTE: approve the hook once with 'hermes --accept-hooks chat' (or set"
+  echo "        hooks_auto_accept: true). Verify with 'hermes hooks list'."
 }
 
 _ts_install_claude() {
