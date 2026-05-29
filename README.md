@@ -168,5 +168,17 @@ Two reference topologies live in [`infra/`](infra):
   and `procedures` tables plus a Redis scan (not the MCP tool surface), so they
   stay accurate even where `get_all` is capped.
 
+- **Conversation capture**: every authenticated MCP tool call is auto-recorded
+  into a rolling per-agent working session by a server-side FastMCP middleware
+  (harness-agnostic; no client hooks needed). Natural-language turns are
+  captured separately: a client adapter reads its harness transcript and pushes
+  turns to `POST /sessions/turns` (bearer-scoped, body `{"turns": [{"role",
+  "content"}]}`), which lands in the same session. The Cursor plugin ships such
+  an adapter as a `stop` hook (`conversation-capture-stop.ts`); other harnesses
+  point their own adapter at the same endpoint. Sessions roll over (close +
+  distill, open new) after `TEAMSHARED_CAPTURE_IDLE_SECONDS` of inactivity or
+  `TEAMSHARED_CAPTURE_MAX_TURNS` turns; set `TEAMSHARED_CAPTURE_ENABLED=false`
+  to disable all capture.
+
 See [`AGENTS.md`](AGENTS.md) for the conventions agents (human or LLM) should
 follow when modifying this repo.

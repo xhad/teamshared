@@ -33,6 +33,7 @@ from teamshared.memory.procedural import ProceduralStore
 from teamshared.memory.recall import Recall
 from teamshared.memory.semantic import SemanticEpisodicStore
 from teamshared.memory.working import WorkingMemory
+from teamshared.server.capture import ToolCallCaptureMiddleware, ingest_turns
 from teamshared.server.dashboard import handle_memory_dashboard
 from teamshared.server.health import check_components
 from teamshared.server.install_api import (
@@ -66,6 +67,13 @@ def build_mcp(settings: Settings | None = None) -> FastMCP:
         ),
     )
     register_tools(mcp)
+    if settings.capture_enabled:
+        mcp.add_middleware(
+            ToolCallCaptureMiddleware(
+                idle_seconds=settings.capture_idle_seconds,
+                max_turns=settings.capture_max_turns,
+            )
+        )
     return mcp
 
 
@@ -134,6 +142,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
                            mint via ``?invite=&agent=`` (plain text or JSON).
     - ``GET  /state``   -- bearer-scoped JSON state read (`repo`, `key` query params).
     - ``PUT  /state``   -- bearer-scoped JSON state write (`{repo, key, value}` body).
+    - ``POST /sessions/turns`` -- bearer-scoped conversation-turn ingestion into capture session.
     - ``POST /tokens/mint`` -- mint a bearer token (invite code or admin secret).
     - ``POST /tokens/mint/{invite}/{agent}`` -- mint via invite (path params).
     - ``POST /tokens/invites`` -- create invite codes (admin secret).
@@ -238,6 +247,39 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse({"repo": repo, "key": key, "stored": True})
 
+    async def session_turns_route(request: Request) -> JSONResponse:
+        """Append natural-language conversation turns to the caller's implicit
+        per-agent capture session.
+
+        Body: ``{"turns": [{"role": "user"|"assistant"|"tool"|"system",
+        "content": "..."}]}``. This is the harness-agnostic conversation sink:
+        a client-side adapter (e.g. the Cursor transcript hook) reads new turns
+        from its harness transcript and POSTs them here. Turns share the same
+        rolling session as the tool-call capture middleware.
+        """
+        if not settings.capture_enabled:
+            return JSONResponse({"recorded": 0, "capture_disabled": True})
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "invalid_json"}, status_code=400)
+        turns = body.get("turns")
+        if not isinstance(turns, list) or not turns:
+            return JSONResponse(
+                {"error": "turns must be a non-empty array"}, status_code=400
+            )
+        identity = request.state.agent
+        from teamshared.server.state import get_state
+
+        recorded = await ingest_turns(
+            get_state().working,
+            identity.agent,
+            turns,
+            idle_seconds=settings.capture_idle_seconds,
+            max_turns=settings.capture_max_turns,
+        )
+        return JSONResponse({"recorded": recorded})
+
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         state = await _init_state(settings)
@@ -284,6 +326,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/tokens/invites", token_invite_create_route, methods=["POST"]),
             Route("/state", state_get_route, methods=["GET"]),
             Route("/state", state_put_route, methods=["PUT"]),
+            Route("/sessions/turns", session_turns_route, methods=["POST"]),
             Mount("/mcp", app=mcp_app),
         ],
         middleware=middleware,

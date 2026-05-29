@@ -102,6 +102,25 @@ class Settings(BaseSettings):
 
     distill_interval_seconds: int = 30
 
+    capture_enabled: bool = Field(
+        default=True,
+        description=(
+            "Auto-record every MCP tool call into a per-agent implicit "
+            "working session (harness-agnostic conversation capture)."
+        ),
+    )
+    capture_idle_seconds: int = Field(
+        default=1800,
+        description=(
+            "Idle gap after which the implicit capture session rolls over: "
+            "the previous session is closed (and distilled) and a new one opened."
+        ),
+    )
+    capture_max_turns: int = Field(
+        default=200,
+        description="Force a capture-session rollover once it reaches this many turns.",
+    )
+
     @model_validator(mode="after")
     def _hydrate_pg_parts_from_dsn(self) -> "Settings":
         """When ``TEAMSHARED_PG_DSN`` / ``DATABASE_URL`` is present, back-populate the

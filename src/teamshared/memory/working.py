@@ -28,6 +28,11 @@ DISTILL_QUEUE_KEY = "working:distill:queue"
 DISTILL_DEAD_LETTER_KEY = "working:distill:dead"
 MAX_DISTILL_ATTEMPTS = 3
 
+# Topic stamped on sessions assembled implicitly by the tool-call capture
+# middleware (see ``teamshared.server.capture``), as opposed to sessions an
+# agent opens explicitly via ``memory_session_open``.
+AUTO_CAPTURE_TOPIC = "auto-capture"
+
 
 def _session_key(session_id: str) -> str:
     return f"working:session:{session_id}"
@@ -39,6 +44,10 @@ def _turns_key(session_id: str) -> str:
 
 def _agent_index_key(agent: str) -> str:
     return f"working:agent:{agent}:sessions"
+
+
+def _auto_session_key(agent: str) -> str:
+    return f"working:agent:{agent}:autosession"
 
 
 class WorkingMemory:
@@ -144,6 +153,79 @@ class WorkingMemory:
             "closed_at": now,
             "distill_enqueued": distill,
         }
+
+    async def record_turn(
+        self,
+        agent: str,
+        role: str,
+        content: str,
+        *,
+        idle_seconds: int,
+        max_turns: int,
+    ) -> str:
+        """Append one ``role``/``content`` turn to the agent's auto-capture session.
+
+        This is the harness-agnostic capture path. Two producers feed it:
+        the tool-call middleware (``role="tool"``) and the conversation
+        ingestion endpoint (``role="user"`` / ``"assistant"``), so a single
+        rolling session per agent holds the interleaved story. The session
+        rolls over — close (with distillation enqueued) plus open a fresh one —
+        when it has been idle longer than ``idle_seconds`` or has accumulated
+        ``max_turns`` turns. The previous session id, its last activity
+        timestamp, and its turn count are tracked in a small pointer key so we
+        don't have to scan Redis on every call.
+        """
+        now = datetime.now(UTC).timestamp()
+        pointer_key = _auto_session_key(agent)
+        raw = await self.client.get(pointer_key)
+
+        session_id: str | None = None
+        if raw:
+            try:
+                pointer = json.loads(raw)
+            except (TypeError, ValueError):
+                pointer = {}
+            existing = pointer.get("session_id")
+            last_activity = float(pointer.get("last_activity", 0) or 0)
+            turns = int(pointer.get("turns", 0) or 0)
+            fresh = (now - last_activity) < idle_seconds and turns < max_turns
+            if existing and fresh:
+                session_id = existing
+            elif existing:
+                try:
+                    await self.close_session(existing, distill=True)
+                except KeyError:
+                    pass
+
+        if session_id is None:
+            session_id = await self.open_session(agent, topic=AUTO_CAPTURE_TOPIC)
+
+        try:
+            turn_count = await self.append_turn(session_id, role, content)
+        except (KeyError, ValueError):
+            # Session expired or was closed out from under us; start a new one.
+            session_id = await self.open_session(agent, topic=AUTO_CAPTURE_TOPIC)
+            turn_count = await self.append_turn(session_id, role, content)
+
+        pointer_payload = json.dumps(
+            {"session_id": session_id, "last_activity": now, "turns": turn_count}
+        )
+        await self.client.set(pointer_key, pointer_payload)
+        await self.client.expire(pointer_key, self._default_ttl)
+        return session_id
+
+    async def record_tool_call(
+        self,
+        agent: str,
+        content: str,
+        *,
+        idle_seconds: int,
+        max_turns: int,
+    ) -> str:
+        """Record a tool call as a ``tool`` turn (thin wrapper over record_turn)."""
+        return await self.record_turn(
+            agent, "tool", content, idle_seconds=idle_seconds, max_turns=max_turns
+        )
 
     async def stats(self, recent_limit: int = 20) -> dict[str, Any]:
         """Aggregate working-memory stats across all agents.
