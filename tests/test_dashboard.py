@@ -141,28 +141,31 @@ class _FakePool:
 # --------------------------------------------------------------------------- #
 # Store stats unit tests
 # --------------------------------------------------------------------------- #
+ORG = "00000000-0000-0000-0000-000000000001"
+
+
 def test_working_stats_aggregates_across_agents() -> None:
     sessions = {
-        "working:session:s1": {
+        f"working:{ORG}:session:s1": {
             "agent": "cursor",
             "topic": "a",
             "opened_at": "2026-05-28T10:00:00",
             "closed_at": "",
         },
-        "working:session:s2": {
+        f"working:{ORG}:session:s2": {
             "agent": "hermes",
             "topic": "b",
             "opened_at": "2026-05-28T09:00:00",
             "closed_at": "2026-05-28T11:00:00",
         },
     }
-    turns = {"working:session:s1:turns": 4, "working:session:s2:turns": 7}
+    turns = {f"working:{ORG}:session:s1:turns": 4, f"working:{ORG}:session:s2:turns": 7}
     queues = {DISTILL_QUEUE_KEY: 2, DISTILL_DEAD_LETTER_KEY: 1}
 
     wm = WorkingMemory("redis://unused", default_ttl=60)
     wm._client = _FakeRedis(sessions, turns, queues)  # type: ignore[assignment]
 
-    stats = asyncio.run(wm.stats())
+    stats = asyncio.run(wm.stats(ORG))
 
     assert stats["total"] == 2
     assert stats["active"] == 1
@@ -287,13 +290,13 @@ def _semantic_records() -> list[MemoryRecord]:
 
 
 def _make_state(*, semantic_ok: bool = True) -> SimpleNamespace:
-    semantic = SimpleNamespace(
-        stats=AsyncMock(return_value=_semantic_stats()),
+    vector_store = SimpleNamespace(
+        pillar_stats=AsyncMock(return_value=_semantic_stats()),
         list_recent=AsyncMock(return_value=_semantic_records()),
     )
     if not semantic_ok:
-        semantic.stats = AsyncMock(side_effect=RuntimeError("mem0 not ready"))
-        semantic.list_recent = AsyncMock(side_effect=RuntimeError("mem0 not ready"))
+        vector_store.pillar_stats = AsyncMock(side_effect=RuntimeError("pgvector down"))
+        vector_store.list_recent = AsyncMock(side_effect=RuntimeError("pgvector down"))
     procedural = SimpleNamespace(
         stats=AsyncMock(return_value={"playbooks": 2, "versions": 3, "by_author": {"cursor": 3}, "tags": [("ci", 2)]}),
         list_procedures=AsyncMock(
@@ -309,7 +312,12 @@ def _make_state(*, semantic_ok: bool = True) -> SimpleNamespace:
         ),
     )
     working = SimpleNamespace(stats=AsyncMock(return_value=_working_stats()))
-    return SimpleNamespace(working=working, semantic_episodic=semantic, procedural=procedural)
+    return SimpleNamespace(
+        settings=SimpleNamespace(default_org_id=ORG),
+        working=working,
+        services=SimpleNamespace(vector_store=vector_store),
+        procedural=procedural,
+    )
 
 
 def _client(state: SimpleNamespace) -> TestClient:

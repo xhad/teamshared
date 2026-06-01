@@ -17,14 +17,15 @@ async def check_components(state: ServerState) -> dict[str, Any]:
         components["redis"] = f"error: {exc}"
 
     try:
-        async with state.procedural.pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute("SELECT 1")
+        async with state.services.tenant_db.admin() as conn:
+            cur = await conn.execute("SELECT 1")
             await cur.fetchone()
         components["postgres"] = "ok"
     except Exception as exc:
         components["postgres"] = f"error: {exc}"
 
-    components["mem0"] = "ok" if state.semantic_episodic.is_ready else "not_ready"
+    if state.graph is not None:
+        components["graph"] = "ok"
 
     overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
     return {"status": overall, "components": components}

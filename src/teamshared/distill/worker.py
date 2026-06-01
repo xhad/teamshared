@@ -1,9 +1,12 @@
 """Distillation worker entrypoint.
 
 Polls the Redis distill queue, pulls each job, fetches its transcript, asks
-the summarizer for structured output, and writes the result back through Mem0
-as a single episodic memory plus N semantic facts. Runs as its own process so
-it never competes with the MCP server for CPU/event-loop slices.
+the summarizer for structured output, and writes the result back through the
+org-scoped ingestion pipeline (pgvector + RLS) as a single episodic memory
+plus N semantic facts. Each job carries its ``org_id`` so distilled memory
+lands in the right tenant under the originating agent's attribution. Runs as
+its own process so it never competes with the MCP server for CPU/event-loop
+slices.
 """
 
 from __future__ import annotations
@@ -12,12 +15,15 @@ import asyncio
 import contextlib
 import signal
 from typing import Any
+from uuid import UUID
 
 from teamshared.config import Settings, get_settings
 from teamshared.distill.summarizer import SummarizerError, summarize
+from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.logging import configure_logging, get_logger
-from teamshared.memory.semantic import SemanticEpisodicStore
+from teamshared.memory.request_context import RequestContext
 from teamshared.memory.working import WorkingMemory
+from teamshared.server.services import ProductionServices, make_services
 
 log = get_logger(__name__)
 
@@ -28,12 +34,19 @@ class DistillWorker:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.working = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl)
-        self.semantic = SemanticEpisodicStore(settings)
+        self.services: ProductionServices = make_services(settings)
+        self.resolver = PrincipalResolver(
+            api_keys=self.services.api_keys,
+            roles=self.services.roles,
+            tenant_db=self.services.tenant_db,
+            default_org_id=settings.default_org_id,
+            session_secret=settings.session_secret,
+        )
         self._stop = asyncio.Event()
 
     async def start(self) -> None:
         await self.working.connect()
-        await self.semantic.connect()
+        await self.services.tenant_db.connect()
         log.info("distill_worker_started")
         while not self._stop.is_set():
             try:
@@ -56,81 +69,70 @@ class DistillWorker:
     async def stop(self) -> None:
         self._stop.set()
         await self.working.close()
-        await self.semantic.close()
+        await self.services.tenant_db.close()
         log.info("distill_worker_stopped")
 
     async def _handle(self, job: dict[str, Any]) -> None:
         session_id = job["session_id"]
         agent = job.get("agent") or "unknown"
         topic = job.get("topic")
+        org_id = UUID(str(job.get("org_id") or self.settings.default_org_id))
 
-        transcript = await self.working.get_turns(session_id)
+        transcript = await self.working.get_turns(org_id, session_id)
         if not transcript:
             log.info("distill_skipping_empty", session_id=session_id)
             return
 
-        try:
-            payload = await summarize(
-                self.settings, agent=agent, topic=topic, transcript=transcript
-            )
-        except SummarizerError:
-            raise
+        payload = await summarize(
+            self.settings, agent=agent, topic=topic, transcript=transcript
+        )
 
         episode = payload.get("episode") or {}
         facts = payload.get("facts") or []
         decisions = payload.get("decisions") or []
 
+        # Distilled memory is attributed to the originating agent within its org.
+        principal = await self.resolver.agent_principal(org_id, agent)
+        ctx = RequestContext(
+            principal=principal,
+            db=self.services.tenant_db,
+            authorizer=self.services.authorizer(),
+        )
+        ingestion = self.services.ingestion()
+
         if episode.get("summary"):
-            await self.semantic.add(
-                episode["summary"],
-                agent=agent,
-                pillar="episodic",
-                kind="event",
-                subject=topic,
-                tags=list(episode.get("tags") or []),
-                extra_metadata={
-                    "session_id": session_id,
-                    "topic": topic,
-                    "outcome": episode.get("outcome"),
-                },
+            await ingestion.ingest(
+                ctx, episode["summary"], kind="event", pillar="episodic",
+                scope="org", subject=topic, tags=list(episode.get("tags") or []),
+                source="agent",
+                source_ref={"session_id": session_id, "outcome": episode.get("outcome")},
             )
 
         for fact in facts:
             content = (fact.get("content") or "").strip()
             if not content:
                 continue
-            await self.semantic.add(
-                content,
-                agent=agent,
-                pillar="semantic",
-                kind=fact.get("kind") or "fact",
-                subject=fact.get("subject"),
-                extra_metadata={
-                    "confidence": fact.get("confidence"),
-                    "session_id": session_id,
-                },
+            await ingestion.ingest(
+                ctx, content, kind=fact.get("kind") or "fact", pillar="semantic",
+                scope="org", subject=fact.get("subject"), source="agent",
+                confidence=fact.get("confidence"),
+                source_ref={"session_id": session_id},
             )
 
         for decision in decisions:
             content = (decision.get("content") or "").strip()
             if not content:
                 continue
-            await self.semantic.add(
-                content,
-                agent=agent,
-                pillar="semantic",
-                kind="fact",
-                subject=topic,
-                tags=["decision"],
-                extra_metadata={
-                    "rationale": decision.get("rationale"),
-                    "session_id": session_id,
-                },
+            await ingestion.ingest(
+                ctx, content, kind="fact", pillar="semantic", scope="org",
+                subject=topic, tags=["decision"], source="agent",
+                source_ref={"session_id": session_id, "rationale": decision.get("rationale")},
             )
 
         log.info(
             "distill_job_complete",
             session_id=session_id,
+            org_id=str(org_id),
             facts=len(facts),
             decisions=len(decisions),
             episode=bool(episode.get("summary")),

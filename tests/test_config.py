@@ -41,7 +41,7 @@ def test_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s.embed_dims == 768
 
 
-def test_settings_port_falls_back_to_unprefixed_PORT(
+def test_settings_port_falls_back_to_unprefixed_PORT(  # noqa: N802 - PORT names the env var under test
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Railway/Render/Fly/Heroku inject ``$PORT``; teamshared must honor it without
@@ -54,7 +54,7 @@ def test_settings_port_falls_back_to_unprefixed_PORT(
     assert s.port == 4242
 
 
-def test_settings_teamshared_port_wins_over_PORT(
+def test_settings_teamshared_port_wins_over_PORT(  # noqa: N802 - PORT names the env var under test
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_env(monkeypatch)

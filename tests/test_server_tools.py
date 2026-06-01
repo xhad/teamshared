@@ -1,24 +1,41 @@
 """End-to-end tool smoke test using FastMCP's in-memory client.
 
-Memory backends are mocked so this runs without Postgres/Redis/Mem0. The goal
-is to assert that:
+Post-G2 the tools are thin shells over :class:`MemoryFacade`, which is mocked
+here so this runs without Postgres/Redis. The goal is to assert that:
 
 - Every tool is registered and reachable.
-- Tool signatures accept the argument shapes the plan documents.
-- Identity resolution falls through to "anonymous" when no token is bound.
+- Tools resolve a Principal and delegate to the facade with the documented
+  argument shapes.
+- The shared-brain contract holds: recall/episodes default to ``agent_filter``
+  ``None`` and pass an explicit ``agent=`` straight through (see AGENTS.md).
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastmcp import Client, FastMCP
 
+from teamshared.identity.principal import Principal
 from teamshared.memory.types import RecallResult
 from teamshared.server.state import ServerState, clear_state, set_state
 from teamshared.server.tools import register_tools
+
+ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+class _AsyncCM:
+    def __init__(self, conn: object) -> None:
+        self._conn = conn
+
+    async def __aenter__(self) -> object:
+        return self._conn
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
 
 
 @pytest.fixture
@@ -27,72 +44,56 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     register_tools(mcp)
 
     working = MagicMock()
-    working.open_session = AsyncMock(return_value="sess_abc")
-    working.append_turn = AsyncMock(return_value=1)
-    working.close_session = AsyncMock(
-        return_value={"session_id": "sess_abc", "turn_count": 1, "closed_at": "now", "distill_enqueued": True}
-    )
-    working.recent_records = AsyncMock(return_value=[])
     working.client = MagicMock()
     working.client.ping = AsyncMock(return_value=True)
 
-    semantic = MagicMock()
-    semantic.add = AsyncMock(
-        return_value=[{"id": "m1", "memory": "stored", "metadata": {"pillar": "semantic"}}]
-    )
-    semantic.list_episodes = AsyncMock(return_value=[])
-    semantic.delete = AsyncMock(return_value=True)
-    semantic.is_ready = True
+    # services + tenant_db.admin() for the health probe.
+    conn = MagicMock()
+    conn.execute = AsyncMock()
+    conn.fetchone = AsyncMock(return_value=(1,))
+    services = MagicMock()
+    services.tenant_db.admin = MagicMock(return_value=_AsyncCM(conn))
 
-    procedural = MagicMock()
-    procedural.get_procedure = AsyncMock(return_value=None)
-    procedural.set_procedure = AsyncMock(
-        return_value={
-            "id": 1,
-            "name": "p1",
-            "version": 1,
-            "description": "x",
-            "steps_md": "do thing",
-            "tool_recipe": None,
-            "tags": [],
-            "created_by": "anonymous",
-            "created_at": None,
-        }
+    facade = MagicMock()
+    facade.resolver.anonymous = AsyncMock(
+        return_value=Principal(org_id=ORG, type="agent", id=uuid.uuid4(), display="anonymous")
     )
-    procedural.list_procedures = AsyncMock(return_value=[])
-    procedural.pool = MagicMock()
-    pool_ctx = MagicMock()
-    pool_ctx.__aenter__ = AsyncMock(return_value=pool_ctx)
-    pool_ctx.__aexit__ = AsyncMock(return_value=False)
-    pool_ctx.cursor = MagicMock(return_value=pool_ctx)
-    pool_ctx.execute = AsyncMock()
-    pool_ctx.fetchone = AsyncMock(return_value=(1,))
-    procedural.pool.connection = MagicMock(return_value=pool_ctx)
-
-    recall = MagicMock()
-    recall.search = AsyncMock(
+    facade.remember = AsyncMock(
+        return_value={"agent": "anonymous", "pillar": "semantic", "memory_id": "m1", "status": "active"}
+    )
+    facade.recall = AsyncMock(
         return_value=RecallResult(query="q", records=[], counts_by_pillar={"semantic": 0})
     )
-
-    agent_state = MagicMock()
-    agent_state.get = AsyncMock(return_value=None)
-    agent_state.set = AsyncMock()
-
-    audit = MagicMock()
-    audit.record = AsyncMock()
-
-    working.get_metadata = AsyncMock(return_value={"agent": "anonymous"})
+    facade.episodes_list = AsyncMock(return_value={"count": 0, "episodes": []})
+    facade.session_open = AsyncMock(return_value={"session_id": "sess_abc", "agent": "anonymous"})
+    facade.session_append = AsyncMock(return_value={"turn_count": 1})
+    facade.session_close = AsyncMock(
+        return_value={"session_id": "sess_abc", "turn_count": 1, "closed_at": "now",
+                      "distill_enqueued": False}
+    )
+    facade.procedure_set = AsyncMock(
+        return_value={"id": 1, "name": "p1", "version": 1, "description": "x",
+                      "steps_md": "do thing", "tool_recipe": None, "tags": [],
+                      "created_by": "anonymous", "created_at": None}
+    )
+    facade.procedure_get = AsyncMock(return_value=None)
+    facade.procedures_list = AsyncMock(return_value={"count": 0, "procedures": []})
+    facade.graph_relate = AsyncMock(return_value={"ok": False, "reason": "graph_disabled"})
+    facade.graph_related = AsyncMock(return_value={"records": [], "reason": "graph_disabled"})
+    facade.forget = AsyncMock(return_value={"memory_id": "m1", "deleted": True})
+    facade.state_get = AsyncMock(return_value={"repo": "r", "key": "k", "value": None})
+    facade.state_set = AsyncMock(return_value={"repo": "r", "key": "k", "stored": True})
 
     state = ServerState(
         settings=MagicMock(),
         tokens=MagicMock(),
         invites=MagicMock(),
         working=working,
-        agent_state=agent_state,
-        semantic_episodic=semantic,
-        procedural=procedural,
-        recall=recall,
-        audit=audit,
+        agent_state=MagicMock(),
+        procedural=MagicMock(),
+        services=services,
+        facade=facade,
+        audit=MagicMock(),
         graph=None,
     )
     set_state(state)
@@ -110,26 +111,17 @@ async def test_health_tool(mcp_with_mocks: tuple[FastMCP, ServerState]) -> None:
     mcp, _ = mcp_with_mocks
     data = await _call(mcp, "health")
     assert data["components"]["redis"] == "ok"
-    assert data["components"]["mem0"] == "ok"
+    assert data["components"]["postgres"] == "ok"
 
 
-async def test_memory_remember_calls_semantic_add(
+async def test_memory_remember_delegates_to_facade(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:
     mcp, state = mcp_with_mocks
     data = await _call(mcp, "memory_remember", content="user likes dark mode", kind="preference")
     assert data["pillar"] == "semantic"
-    assert data["count"] == 1
-    state.semantic_episodic.add.assert_awaited_once()
-
-
-async def test_memory_remember_event_routes_episodic(
-    mcp_with_mocks: tuple[FastMCP, ServerState],
-) -> None:
-    mcp, state = mcp_with_mocks
-    data = await _call(mcp, "memory_remember", content="rolled out feature x", kind="event")
-    assert data["pillar"] == "episodic"
-    assert state.semantic_episodic.add.await_args.kwargs["pillar"] == "episodic"
+    state.facade.remember.assert_awaited_once()
+    assert state.facade.remember.await_args.kwargs["kind"] == "preference"
 
 
 async def test_memory_remember_rejects_procedure_kind(
@@ -154,23 +146,7 @@ async def test_memory_session_lifecycle(
     assert appended["turn_count"] == 1
     closed = await _call(mcp, "memory_session_close", session_id="sess_abc", distill=False)
     assert closed["session_id"] == "sess_abc"
-    assert state.working.close_session.await_args.kwargs["distill"] is False
-
-
-async def test_memory_session_append_rejects_foreign_session(
-    mcp_with_mocks: tuple[FastMCP, ServerState],
-) -> None:
-    mcp, state = mcp_with_mocks
-    state.working.get_metadata = AsyncMock(return_value={"agent": "hermes"})
-
-    with pytest.raises(Exception):  # FastMCP wraps tool errors
-        await _call(
-            mcp,
-            "memory_session_append",
-            session_id="sess_abc",
-            role="user",
-            content="hi",
-        )
+    assert state.facade.session_close.await_args.kwargs["distill"] is False
 
 
 async def test_memory_recall_returns_result_shape(
@@ -186,17 +162,12 @@ async def test_memory_recall_returns_result_shape(
 async def test_memory_recall_is_unscoped_by_default(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:
-    """The shared brain is the default: durable pillars are not filtered to
-    the caller. This pins the contract so we don't silently regress to the
-    old "default to caller's identity" behavior, which made cross-agent
-    visibility impossible without an explicit override.
-    """
+    """Shared brain default: durable pillars are not filtered to the caller."""
     mcp, state = mcp_with_mocks
     await _call(mcp, "memory_recall", query="anything")
-    state.recall.search.assert_awaited_once()
-    kwargs = state.recall.search.await_args.kwargs
-    assert kwargs["agent"] is None, (
-        "memory_recall must default to agent=None (shared brain); see AGENTS.md"
+    state.facade.recall.assert_awaited_once()
+    assert state.facade.recall.await_args.kwargs["agent_filter"] is None, (
+        "memory_recall must default to agent_filter=None (shared brain); see AGENTS.md"
     )
 
 
@@ -205,8 +176,7 @@ async def test_memory_recall_passes_explicit_agent_filter(
 ) -> None:
     mcp, state = mcp_with_mocks
     await _call(mcp, "memory_recall", query="anything", agent="cursor")
-    kwargs = state.recall.search.await_args.kwargs
-    assert kwargs["agent"] == "cursor"
+    assert state.facade.recall.await_args.kwargs["agent_filter"] == "cursor"
 
 
 async def test_memory_episodes_list_is_unscoped_by_default(
@@ -214,9 +184,8 @@ async def test_memory_episodes_list_is_unscoped_by_default(
 ) -> None:
     mcp, state = mcp_with_mocks
     await _call(mcp, "memory_episodes_list", limit=5)
-    state.semantic_episodic.list_episodes.assert_awaited_once()
-    kwargs = state.semantic_episodic.list_episodes.await_args.kwargs
-    assert kwargs["agent"] is None
+    state.facade.episodes_list.assert_awaited_once()
+    assert state.facade.episodes_list.await_args.kwargs["agent_filter"] is None
 
 
 async def test_memory_episodes_list_passes_explicit_agent_filter(
@@ -224,8 +193,7 @@ async def test_memory_episodes_list_passes_explicit_agent_filter(
 ) -> None:
     mcp, state = mcp_with_mocks
     await _call(mcp, "memory_episodes_list", limit=5, agent="hermes")
-    kwargs = state.semantic_episodic.list_episodes.await_args.kwargs
-    assert kwargs["agent"] == "hermes"
+    assert state.facade.episodes_list.await_args.kwargs["agent_filter"] == "hermes"
 
 
 async def test_memory_graph_tools_noop_when_disabled(
@@ -246,17 +214,11 @@ async def test_memory_procedure_set_and_get(
 ) -> None:
     mcp, state = mcp_with_mocks
     stored = await _call(
-        mcp,
-        "memory_procedure_set",
-        name="p1",
-        steps_md="do thing",
-        description="x",
+        mcp, "memory_procedure_set", name="p1", steps_md="do thing", description="x"
     )
     assert stored["version"] == 1
-    state.procedural.set_procedure.assert_awaited_once()
+    state.facade.procedure_set.assert_awaited_once()
 
-    # get returns None from the mock
-    state.procedural.get_procedure.return_value = None
     result = await _call(mcp, "memory_procedure_get", name="p1")
     assert result is None or result == {}
 
@@ -269,20 +231,13 @@ async def test_memory_state_get_and_set(
     mcp, state = mcp_with_mocks
     token = _current_agent.set(AgentIdentity(agent="cursor", state_id="teamshared_test"))
     try:
-        payload = {"version": 1, "turnsSinceLastRun": 3}
-        state.agent_state.get.return_value = payload
-        got = await _call(
+        await _call(
             mcp,
             "memory_state_get",
             repo="Users-chad-code-sapien-teamshared",
             key="continual-learning/cadence",
         )
-        assert got["value"] == payload
-        state.agent_state.get.assert_awaited_once_with(
-            "teamshared_test",
-            "Users-chad-code-sapien-teamshared",
-            "continual-learning/cadence",
-        )
+        assert state.facade.state_get.await_args.kwargs["state_id"] == "teamshared_test"
 
         stored = await _call(
             mcp,
@@ -292,6 +247,6 @@ async def test_memory_state_get_and_set(
             value={"version": 1, "turnsSinceLastRun": 0},
         )
         assert stored["stored"] is True
-        state.agent_state.set.assert_awaited_once()
+        state.facade.state_set.assert_awaited_once()
     finally:
         _current_agent.reset(token)

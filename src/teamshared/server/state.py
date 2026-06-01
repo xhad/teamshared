@@ -15,27 +15,34 @@ from teamshared.config import Settings
 from teamshared.invite import InviteStore
 from teamshared.memory.agent_state import AgentStateStore
 from teamshared.memory.audit import AuditLog
+from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.graph import GraphStore
-from teamshared.memory.procedural import ProceduralStore
-from teamshared.memory.recall import Recall
-from teamshared.memory.semantic import SemanticEpisodicStore
+from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.working import WorkingMemory
+from teamshared.server.services import ProductionServices
+from teamshared.tenancy.context import TenantDb
 
 
 @dataclass
 class ServerState:
-    """All long-lived resources the server needs at request time."""
+    """All long-lived resources the server needs at request time.
+
+    Post-G2 the MCP tools call through :attr:`facade`, which routes durable
+    pillars to :attr:`services` (pgvector RLS) and the volatile pillars to the
+    org-scoped Redis/Neo4j stores.
+    """
 
     settings: Settings
     tokens: TokenStore
     invites: InviteStore
     working: WorkingMemory
     agent_state: AgentStateStore
-    semantic_episodic: SemanticEpisodicStore
-    procedural: ProceduralStore
-    recall: Recall
+    procedural: OrgProceduralStore
+    services: ProductionServices
+    facade: MemoryFacade
     audit: AuditLog
     graph: GraphStore | None = None
+    audit_db: TenantDb | None = None
 
 
 _state: ServerState | None = None

@@ -26,7 +26,9 @@ def load_teamshared_memory_rule_mdc() -> str:
     except (FileNotFoundError, ModuleNotFoundError, TypeError):
         if _REPO_RULE_MDC.is_file():
             return _REPO_RULE_MDC.read_text(encoding="utf-8")
-        raise FileNotFoundError("teamshared.mdc is not bundled and repo copy is missing")
+        raise FileNotFoundError(
+            "teamshared.mdc is not bundled and repo copy is missing"
+        ) from None
 
 
 def normalize_agent_type(value: str) -> str | None:

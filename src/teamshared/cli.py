@@ -21,6 +21,7 @@ from typing import Any
 
 import psycopg
 import typer
+from psycopg import sql
 from rich.console import Console
 from rich.table import Table
 
@@ -56,12 +57,22 @@ def serve(
     configure_logging(settings.log_level)
 
     if transport == "stdio":
+        from teamshared.identity.legacy_bridge import PrincipalResolver
         from teamshared.server.app import _init_state, _teardown_state, build_mcp
+        from teamshared.server.services import make_services
 
         mcp = build_mcp(settings)
 
         async def _run_stdio() -> None:
-            state = await _init_state(settings)
+            services = make_services(settings)
+            resolver = PrincipalResolver(
+                api_keys=services.api_keys,
+                roles=services.roles,
+                tenant_db=services.tenant_db,
+                default_org_id=settings.default_org_id,
+                session_secret=settings.session_secret,
+            )
+            state = await _init_state(settings, services, resolver)
             try:
                 await mcp.run_async(transport="stdio")
             finally:
@@ -100,19 +111,23 @@ def seed(
     """
 
     async def _run() -> None:
-        from teamshared.memory.procedural import ProceduralStore
+        from teamshared.memory.procedural import OrgProceduralStore
         from teamshared.seed.procedures import STARTER_PROCEDURES
+        from teamshared.tenancy.context import TenantDb
 
         settings = get_settings()
-        store = ProceduralStore(settings.pg_dsn)
-        await store.connect()
+        org_id = settings.default_org_id
+        db = TenantDb(settings.pg_app_dsn)
+        await db.connect()
+        store = OrgProceduralStore(db)
         try:
             for name, description, steps_md, tags in STARTER_PROCEDURES:
-                existing = await store.get_procedure(name)
+                existing = await store.get_procedure(org_id, name)
                 if existing and not force and existing.get("steps_md") == steps_md:
                     console.print(f"  [dim]unchanged[/dim] {name}")
                     continue
                 proc = await store.set_procedure(
+                    org_id,
                     name,
                     steps_md,
                     agent=agent,
@@ -121,7 +136,7 @@ def seed(
                 )
                 console.print(f"  [green]wrote[/green] {name} v{proc['version']}")
         finally:
-            await store.close()
+            await db.close()
 
     asyncio.run(_run())
 
@@ -170,6 +185,218 @@ def migrate(
             cur.execute(sql)
             cur.execute("INSERT INTO teamshared_migrations (name) VALUES (%s)", (path.name,))
     console.print("[bold green]Migrations complete.[/bold green]")
+
+
+@app.command("provision-app-role")
+def provision_app_role() -> None:
+    """Create/refresh the non-superuser ``teamshared_app`` login role.
+
+    RLS is only a real boundary when the application connects as a role that
+    is neither a superuser nor ``BYPASSRLS``. This creates that role with the
+    password from ``TEAMSHARED_PG_APP_PASSWORD`` and grants it CRUD on the
+    current schema. Run it as an admin (after ``migrate``).
+    """
+    settings = get_settings()
+    if not settings.pg_app_user or not settings.pg_app_password:
+        raise typer.BadParameter(
+            "Set TEAMSHARED_PG_APP_USER and TEAMSHARED_PG_APP_PASSWORD first."
+        )
+    role = settings.pg_app_user
+    with psycopg.connect(settings.pg_dsn, autocommit=True) as conn, conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
+        exists = cur.fetchone() is not None
+        # Role DDL cannot bind parameters for PASSWORD; compose a safe literal.
+        verb = sql.SQL("ALTER ROLE") if exists else sql.SQL("CREATE ROLE")
+        cur.execute(
+            sql.SQL("{verb} {role} WITH LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD {pw}").format(
+                verb=verb,
+                role=sql.Identifier(role),
+                pw=sql.Literal(settings.pg_app_password),
+            )
+        )
+        cur.execute(f'GRANT USAGE ON SCHEMA public TO "{role}"')
+        cur.execute(
+            f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{role}"'
+        )
+        cur.execute(f'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO "{role}"')
+        cur.execute(
+            f'ALTER DEFAULT PRIVILEGES IN SCHEMA public '
+            f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{role}"'
+        )
+        cur.execute(
+            f'ALTER DEFAULT PRIVILEGES IN SCHEMA public '
+            f'GRANT USAGE, SELECT ON SEQUENCES TO "{role}"'
+        )
+        for fn in ("auth_lookup_api_key(text)", "auth_touch_api_key(uuid)",
+                   "provision_organization(text, text)"):
+            cur.execute(f'GRANT EXECUTE ON FUNCTION {fn} TO "{role}"')
+    console.print(f"[bold green]Provisioned app role[/bold green] {role}")
+
+
+@app.command("verify-rls")
+def verify_rls() -> None:
+    """Assert tenant isolation: a query with no org context returns zero rows.
+
+    Connects as the application role and confirms ``memory_items`` is empty
+    without ``app.current_org_id`` set. Exits non-zero if any row leaks.
+    """
+    settings = get_settings()
+    leaked = 0
+    with psycopg.connect(settings.pg_app_dsn) as conn, conn.cursor() as cur:
+        for table in ("memory_items", "users", "audit_events", "connectors"):
+            cur.execute(f"SELECT count(*) FROM {table}")
+            row = cur.fetchone()
+            count = int(row[0]) if row else 0
+            if count:
+                console.print(f"[red]LEAK[/red] {table}: {count} rows visible without org context")
+                leaked += count
+            else:
+                console.print(f"  [green]ok[/green] {table}: 0 rows without org context")
+    if leaked:
+        console.print("[bold red]RLS verification FAILED[/bold red]")
+        raise typer.Exit(code=1)
+    console.print("[bold green]RLS verification passed.[/bold green]")
+
+
+@app.command("backfill-mem0")
+def backfill_mem0(
+    limit: int = typer.Option(0, "--limit", help="Max rows to backfill (0 = all)."),
+    agent_fallback: str = typer.Option(
+        "unknown", help="Agent attribution for rows missing a user_id."
+    ),
+) -> None:
+    """Re-ingest existing Mem0 memories into ``memory_items`` under the default org.
+
+    G2 moves recall onto pgvector + RLS. Existing Mem0 rows (the live brain)
+    are invisible to the new path until copied across. This reads the Mem0
+    collection's ``payload`` JSONB and re-ingests each row through the
+    org-scoped ingestion pipeline (dedup makes it safe to re-run). Run it once
+    before relying on the converged recall path.
+    """
+
+    async def _run() -> None:
+        from typing import cast
+
+        from teamshared.identity.legacy_bridge import PrincipalResolver
+        from teamshared.memory.request_context import RequestContext
+        from teamshared.memory.types import MemoryKind
+        from teamshared.server.services import make_services
+
+        settings = get_settings()
+        org_id = settings.default_org_id
+        table = settings.mem0_collection
+
+        select = (
+            "SELECT id, COALESCE(payload->>'data', payload->>'memory', payload->>'text'), "
+            "payload->>'user_id', payload->>'pillar', payload->>'kind', "
+            f'payload->>\'subject\', payload->\'tags\' FROM "{table}"'
+        )
+        if limit > 0:
+            select += f" LIMIT {int(limit)}"
+
+        rows: list[tuple[Any, ...]] = []
+        with psycopg.connect(settings.pg_dsn) as conn, conn.cursor() as cur:
+            cur.execute(select)
+            rows = list(cur.fetchall())
+
+        services = make_services(settings)
+        resolver = PrincipalResolver(
+            api_keys=services.api_keys,
+            roles=services.roles,
+            tenant_db=services.tenant_db,
+            default_org_id=org_id,
+            session_secret=settings.session_secret,
+        )
+        await services.tenant_db.connect()
+        ingestion = services.ingestion()
+        ingested = skipped = 0
+        try:
+            for _rid, content, user_id, pillar, kind, subject, tags in rows:
+                text = (content or "").strip()
+                if not text:
+                    skipped += 1
+                    continue
+                agent = user_id or agent_fallback
+                principal = await resolver.agent_principal(org_id, agent)
+                ctx = RequestContext(
+                    principal=principal,
+                    db=services.tenant_db,
+                    authorizer=services.authorizer(),
+                )
+                memory_kind: MemoryKind = cast(
+                    MemoryKind,
+                    kind if kind in {"fact", "preference", "event", "note"} else "note",
+                )
+                memory_pillar = pillar if pillar in {"semantic", "episodic"} else "semantic"
+                result = await ingestion.ingest(
+                    ctx, text, kind=memory_kind, pillar=memory_pillar, scope="org",
+                    subject=subject, tags=list(tags) if tags else None, source="agent",
+                )
+                if result.status == "duplicate":
+                    skipped += 1
+                else:
+                    ingested += 1
+        finally:
+            await services.tenant_db.close()
+        console.print(
+            f"[bold green]Backfill complete[/bold green]: {ingested} ingested, {skipped} skipped "
+            f"({len(rows)} scanned)"
+        )
+
+    asyncio.run(_run())
+
+
+@app.command("provision-default-org")
+def provision_default_org(
+    email: str | None = typer.Option(
+        None, "--email", help="Owner email (defaults to TEAMSHARED_DASHBOARD_OWNER_EMAIL)."
+    ),
+) -> None:
+    """Seed the default org's owner user + membership + role for /admin login.
+
+    The default org itself is created by migration 010. This adds the owner
+    user (idempotent) so the magic-link dashboard has someone to sign in.
+    """
+
+    async def _run() -> None:
+        from teamshared.identity.roles import RoleStore
+        from teamshared.tenancy.context import TenantDb
+
+        settings = get_settings()
+        owner_email = email or settings.dashboard_owner_email
+        if not owner_email:
+            raise typer.BadParameter(
+                "Provide --email or set TEAMSHARED_DASHBOARD_OWNER_EMAIL."
+            )
+        org_id = settings.default_org_id
+        db = TenantDb(settings.pg_app_dsn)
+        await db.connect()
+        roles = RoleStore(db)
+        try:
+            async with db.org(org_id) as conn:
+                cur = await conn.execute(
+                    "INSERT INTO users (org_id, email, status) VALUES (%s, %s, 'active') "
+                    "ON CONFLICT (org_id, email) DO UPDATE SET status = 'active' RETURNING id",
+                    (str(org_id), owner_email),
+                )
+                row = await cur.fetchone()
+                assert row is not None
+                user_id = row[0]
+                await conn.execute(
+                    "INSERT INTO memberships (org_id, user_id, role) VALUES (%s, %s, 'org_owner') "
+                    "ON CONFLICT (org_id, user_id) DO UPDATE SET role = 'org_owner'",
+                    (str(org_id), str(user_id)),
+                )
+            await roles.bind_role(
+                org_id=org_id, principal_type="user", principal_id=user_id, role_name="org_owner"
+            )
+        finally:
+            await db.close()
+        console.print(
+            f"[bold green]Provisioned default-org owner[/bold green]: {owner_email} ({user_id})"
+        )
+
+    asyncio.run(_run())
 
 
 @token_app.command("mint")

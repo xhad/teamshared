@@ -30,6 +30,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
+from teamshared.identity.legacy_bridge import PrincipalResolver
+from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
 
 log = get_logger(__name__)
@@ -55,6 +57,9 @@ def _derive_state_id(token: str, entry: dict[str, Any]) -> str:
 _current_agent: contextvars.ContextVar[AgentIdentity | None] = contextvars.ContextVar(
     "teamshared_current_agent", default=None
 )
+_current_principal: contextvars.ContextVar[Principal | None] = contextvars.ContextVar(
+    "teamshared_current_principal", default=None
+)
 
 
 def current_agent() -> AgentIdentity | None:
@@ -68,6 +73,19 @@ def require_current_agent() -> AgentIdentity:
     if agent is None:
         raise RuntimeError("No agent identity bound to this request")
     return agent
+
+
+def current_principal() -> Principal | None:
+    """Return the org-scoped Principal bound to the current task, if any."""
+    return _current_principal.get()
+
+
+def require_current_principal() -> Principal:
+    """Same as :func:`current_principal` but raises if missing."""
+    principal = _current_principal.get()
+    if principal is None:
+        raise RuntimeError("No principal bound to this request")
+    return principal
 
 
 class TokenStore:
@@ -147,15 +165,18 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         store: TokenStore,
         *,
         auth_disabled: bool = False,
+        resolver: PrincipalResolver | None = None,
     ) -> None:
         super().__init__(app)
         self.store = store
         self.auth_disabled = auth_disabled
+        self.resolver = resolver
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         path = request.url.path
         if path in {
             "/health",
+            "/metrics",
             "/memory",
             "/",
             "/favicon.ico",
@@ -168,10 +189,21 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         }:
             return await call_next(request)
         if path.startswith(
-            ("/tokens/mint/", "/get-token/", "/install/assets/", "/install/plugin/")
+            (
+                "/tokens/mint/",
+                "/get-token/",
+                "/install/assets/",
+                "/install/plugin/",
+                "/v1",
+                "/admin",
+            )
         ):
+            # The /v1 REST app and the /admin dashboard authenticate with their
+            # own middleware (Principal bearer / session cookie respectively).
             return await call_next(request)
 
+        identity: AgentIdentity | None
+        token: str | None = None
         if self.auth_disabled:
             identity = AgentIdentity(agent="anonymous", state_id="disabled")
         else:
@@ -184,13 +216,44 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
                 )
             token = header[len("bearer ") :].strip()
             identity = self.store.lookup(token)
-            if identity is None:
-                log.warning("auth_rejected", token_prefix=token[:8])
-                return JSONResponse({"error": "invalid_token"}, status_code=401)
+
+        principal = await self._resolve_principal(token, identity)
+        if not self.auth_disabled and identity is None and principal is None:
+            log.warning("auth_rejected", token_prefix=(token or "")[:8])
+            return JSONResponse({"error": "invalid_token"}, status_code=401)
+
+        # A tsk_/session principal carries no legacy AgentIdentity; synthesize
+        # one so working-memory capture and bearer-scoped client state still key
+        # off a stable string.
+        if identity is None and principal is not None:
+            identity = AgentIdentity(
+                agent=principal.display or principal.attribution,
+                state_id=f"p:{principal.type}:{principal.id}",
+            )
 
         request.state.agent = identity
-        token = _current_agent.set(identity)
+        request.state.principal = principal
+        agent_token = _current_agent.set(identity)
+        principal_token = _current_principal.set(principal)
         try:
             return await call_next(request)
         finally:
-            _current_agent.reset(token)
+            _current_agent.reset(agent_token)
+            _current_principal.reset(principal_token)
+
+    async def _resolve_principal(
+        self, token: str | None, identity: AgentIdentity | None
+    ) -> Principal | None:
+        if self.resolver is None:
+            return None
+        try:
+            if self.auth_disabled:
+                return await self.resolver.anonymous()
+            if token is None:
+                return None
+            return await self.resolver.resolve(
+                token, legacy_agent=identity.agent if identity else None
+            )
+        except Exception as exc:  # resolution must not 500 the request
+            log.warning("principal_resolution_failed", error=str(exc))
+            return None

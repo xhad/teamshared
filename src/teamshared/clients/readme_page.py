@@ -50,7 +50,9 @@ def load_readme_md() -> str:
     except (FileNotFoundError, ModuleNotFoundError, TypeError):
         if _REPO_README.is_file():
             return _REPO_README.read_text(encoding="utf-8")
-        raise FileNotFoundError("README.md is not bundled and repo copy is missing")
+        raise FileNotFoundError(
+            "README.md is not bundled and repo copy is missing"
+        ) from None
 
 
 def render_readme_html() -> str:

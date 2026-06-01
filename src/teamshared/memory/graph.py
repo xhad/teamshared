@@ -52,10 +52,11 @@ class GraphStore:
             self._driver = None
 
     async def _ensure_constraints(self) -> None:
+        assert self._driver is not None, "graph store not connected"
         async with self._driver.session() as session:
             await session.run(
-                "CREATE CONSTRAINT entity_name IF NOT EXISTS "
-                "FOR (e:Entity) REQUIRE e.name IS UNIQUE"
+                "CREATE CONSTRAINT entity_org_name IF NOT EXISTS "
+                "FOR (e:Entity) REQUIRE (e.org_id, e.name) IS UNIQUE"
             )
 
     async def add_relation(
@@ -64,21 +65,23 @@ class GraphStore:
         predicate: str,
         object_: str,
         *,
+        org_id: str,
         agent: str,
         weight: float = 1.0,
     ) -> None:
-        """Upsert ``(subject)-[predicate]->(object)`` and bump its weight."""
+        """Upsert ``(subject)-[predicate]->(object)`` within ``org_id``."""
         if self._driver is None:
             raise RuntimeError("GraphStore not connected")
         async with self._driver.session() as session:
             await session.run(
                 """
-                MERGE (s:Entity {name: $subject})
-                MERGE (o:Entity {name: $object})
+                MERGE (s:Entity {org_id: $org_id, name: $subject})
+                MERGE (o:Entity {org_id: $org_id, name: $object})
                 MERGE (s)-[r:RELATES {predicate: $predicate}]->(o)
-                ON CREATE SET r.weight = $weight, r.created_by = $agent
+                ON CREATE SET r.weight = $weight, r.created_by = $agent, r.org_id = $org_id
                 ON MATCH  SET r.weight = coalesce(r.weight, 0) + $weight
                 """,
+                org_id=org_id,
                 subject=subject,
                 predicate=predicate,
                 object=object_,
@@ -86,19 +89,23 @@ class GraphStore:
                 weight=weight,
             )
 
-    async def related(self, name: str, depth: int = 2, limit: int = 20) -> list[MemoryRecord]:
-        """Return entities related to ``name`` up to ``depth`` hops away."""
+    async def related(
+        self, name: str, *, org_id: str, depth: int = 2, limit: int = 20
+    ) -> list[MemoryRecord]:
+        """Return entities related to ``name`` within ``org_id`` up to ``depth`` hops."""
         if self._driver is None:
             raise RuntimeError("GraphStore not connected")
         async with self._driver.session() as session:
             result = await session.run(
                 """
-                MATCH (start:Entity {name: $name})-[r:RELATES*1..$depth]-(o:Entity)
+                MATCH (start:Entity {org_id: $org_id, name: $name})-[r:RELATES*1..$depth]-(o:Entity)
+                WHERE o.org_id = $org_id
                 RETURN o.name AS name, [rel in r | rel.predicate] AS predicates,
                        length(r) AS hops
                 ORDER BY hops ASC
                 LIMIT $limit
                 """,
+                org_id=org_id,
                 name=name,
                 depth=depth,
                 limit=limit,

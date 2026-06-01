@@ -376,18 +376,19 @@ async def handle_memory_dashboard(request: Request, state: ServerState) -> HTMLR
     All store calls run concurrently and tolerate failure: a down backend
     renders an "unavailable" section instead of failing the whole page.
     """
+    org_id = state.settings.default_org_id
     core: list[Any] = await asyncio.gather(
         check_components(state),
-        state.working.stats(),
-        state.semantic_episodic.stats(),
-        state.procedural.stats(),
+        state.working.stats(org_id),
+        state.services.vector_store.pillar_stats(org_id),
+        state.procedural.stats(org_id),
         return_exceptions=True,
     )
     health, working, semantic, procedural = core
     recent: list[Any] = await asyncio.gather(
-        state.semantic_episodic.list_recent(limit=10, pillar="semantic"),
-        state.semantic_episodic.list_recent(limit=10, pillar="episodic"),
-        state.procedural.list_procedures(limit=10),
+        state.services.vector_store.list_recent(org_id, limit=10, pillar="semantic"),
+        state.services.vector_store.list_recent(org_id, limit=10, pillar="episodic"),
+        state.procedural.list_procedures(org_id, limit=10),
         return_exceptions=True,
     )
     recent_semantic, recent_episodic, recent_procs = recent

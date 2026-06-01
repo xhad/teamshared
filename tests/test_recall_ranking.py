@@ -115,7 +115,9 @@ async def test_recall_search_uses_caller_for_working_memory_only(
         "anything", agent="hermes", caller="cursor", scopes=("working",)
     )
 
-    working.recent_records.assert_awaited_once_with("cursor", k=8)
+    from teamshared.config import DEFAULT_ORG_ID
+
+    working.recent_records.assert_awaited_once_with(DEFAULT_ORG_ID, "cursor", k=8)
 
 
 async def test_recall_search_skips_working_when_caller_unbound(

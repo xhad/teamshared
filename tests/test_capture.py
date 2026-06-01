@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -12,6 +13,7 @@ import pytest_asyncio
 
 from teamshared import auth
 from teamshared.auth import AgentIdentity
+from teamshared.identity.principal import Principal
 from teamshared.memory import working as working_mod
 from teamshared.memory.working import WorkingMemory
 from teamshared.server import capture as capture_mod
@@ -21,6 +23,8 @@ from teamshared.server.capture import (
     _summarize_arguments,
     ingest_turns,
 )
+
+ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
 @pytest_asyncio.fixture
@@ -44,8 +48,18 @@ def _ctx(name: str, arguments: dict | None = None) -> _Ctx:
     return _Ctx(message=mt.CallToolRequestParams(name=name, arguments=arguments))
 
 
-def _bind_agent(agent: str):
-    return auth._current_agent.set(AgentIdentity(agent=agent, state_id="sid"))
+def _bind(agent: str) -> tuple[object, object]:
+    """Bind both the legacy AgentIdentity and an org-scoped Principal."""
+    t1 = auth._current_agent.set(AgentIdentity(agent=agent, state_id="sid"))
+    t2 = auth._current_principal.set(
+        Principal(org_id=ORG, type="agent", id=uuid.uuid4(), display=agent, roles=("agent",))
+    )
+    return t1, t2
+
+
+def _unbind(tokens: tuple[object, object]) -> None:
+    auth._current_agent.reset(tokens[0])  # type: ignore[arg-type]
+    auth._current_principal.reset(tokens[1])  # type: ignore[arg-type]
 
 
 def test_summarize_arguments_drops_agent_and_truncates() -> None:
@@ -71,16 +85,16 @@ async def test_middleware_records_tool_call(
     async def call_next(ctx: _Ctx) -> str:
         return "result"
 
-    token = _bind_agent("cursor")
+    tokens = _bind("cursor")
     try:
         out = await mw.on_call_tool(_ctx("memory_recall", {"query": "hi"}), call_next)
     finally:
-        auth._current_agent.reset(token)
+        _unbind(tokens)
 
     assert out == "result"
-    sessions = await memory.list_open_sessions("cursor", limit=5)
+    sessions = await memory.list_open_sessions(ORG, "cursor", limit=5)
     assert len(sessions) == 1
-    turns = await memory.get_turns(sessions[0]["session_id"])
+    turns = await memory.get_turns(ORG, sessions[0]["session_id"])
     assert turns[0]["content"] == "memory_recall(query=hi) -> ok"
 
 
@@ -93,13 +107,13 @@ async def test_middleware_skips_health(
     async def call_next(ctx: _Ctx) -> str:
         return "ok"
 
-    token = _bind_agent("cursor")
+    tokens = _bind("cursor")
     try:
         await mw.on_call_tool(_ctx("health"), call_next)
     finally:
-        auth._current_agent.reset(token)
+        _unbind(tokens)
 
-    assert await memory.list_open_sessions("cursor", limit=5) == []
+    assert await memory.list_open_sessions(ORG, "cursor", limit=5) == []
 
 
 async def test_middleware_skips_when_unauthenticated(
@@ -113,7 +127,7 @@ async def test_middleware_skips_when_unauthenticated(
 
     out = await mw.on_call_tool(_ctx("memory_recall", {"query": "hi"}), call_next)
     assert out == "ok"
-    assert await memory.list_open_sessions("cursor", limit=5) == []
+    assert await memory.list_open_sessions(ORG, "cursor", limit=5) == []
 
 
 async def test_middleware_capture_failure_does_not_break_call(
@@ -128,11 +142,11 @@ async def test_middleware_capture_failure_does_not_break_call(
     async def call_next(ctx: _Ctx) -> str:
         return "still-works"
 
-    token = _bind_agent("cursor")
+    tokens = _bind("cursor")
     try:
         out = await mw.on_call_tool(_ctx("memory_recall", {"query": "hi"}), call_next)
     finally:
-        auth._current_agent.reset(token)
+        _unbind(tokens)
     assert out == "still-works"
 
 
@@ -145,21 +159,22 @@ async def test_middleware_records_on_tool_error(
     async def call_next(ctx: _Ctx) -> str:
         raise ValueError("tool blew up")
 
-    token = _bind_agent("cursor")
+    tokens = _bind("cursor")
     try:
         with pytest.raises(ValueError, match="tool blew up"):
             await mw.on_call_tool(_ctx("memory_remember", {"content": "x"}), call_next)
     finally:
-        auth._current_agent.reset(token)
+        _unbind(tokens)
 
-    sessions = await memory.list_open_sessions("cursor", limit=5)
-    turns = await memory.get_turns(sessions[0]["session_id"])
+    sessions = await memory.list_open_sessions(ORG, "cursor", limit=5)
+    turns = await memory.get_turns(ORG, sessions[0]["session_id"])
     assert turns[0]["content"].endswith("-> error")
 
 
 async def test_ingest_turns_records_valid_turns(memory: WorkingMemory) -> None:
     recorded = await ingest_turns(
         memory,
+        ORG,
         "cursor",
         [
             {"role": "user", "content": "what's in the brain?"},
@@ -169,14 +184,15 @@ async def test_ingest_turns_records_valid_turns(memory: WorkingMemory) -> None:
         max_turns=200,
     )
     assert recorded == 2
-    sessions = await memory.list_open_sessions("cursor", limit=5)
-    turns = await memory.get_turns(sessions[0]["session_id"])
+    sessions = await memory.list_open_sessions(ORG, "cursor", limit=5)
+    turns = await memory.get_turns(ORG, sessions[0]["session_id"])
     assert [t["role"] for t in turns] == ["user", "assistant"]
 
 
 async def test_ingest_turns_skips_invalid(memory: WorkingMemory) -> None:
     recorded = await ingest_turns(
         memory,
+        ORG,
         "cursor",
         [
             {"role": "bogus", "content": "nope"},

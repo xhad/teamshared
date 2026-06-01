@@ -24,15 +24,17 @@ from starlette.routing import Mount, Route
 
 from teamshared.auth import BearerAuthMiddleware, TokenStore
 from teamshared.config import Settings, get_settings
+from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.invite import InviteStore
 from teamshared.logging import configure_logging, get_logger
 from teamshared.memory.agent_state import AgentStateStore
-from teamshared.memory.audit import AuditLog
+from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.graph import GraphStore
-from teamshared.memory.procedural import ProceduralStore
-from teamshared.memory.recall import Recall
-from teamshared.memory.semantic import SemanticEpisodicStore
+from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.working import WorkingMemory
+from teamshared.metrics import METRICS
+from teamshared.server.admin_routes import register_admin_routes
+from teamshared.server.api import build_api_app
 from teamshared.server.capture import ToolCallCaptureMiddleware, ingest_turns
 from teamshared.server.dashboard import handle_memory_dashboard
 from teamshared.server.health import check_components
@@ -42,6 +44,7 @@ from teamshared.server.install_api import (
     handle_install_sh,
     handle_plugin_bundle,
 )
+from teamshared.server.services import ProductionServices, make_services
 from teamshared.server.state import ServerState, clear_state, set_state
 from teamshared.server.token_api import (
     handle_get_token_page,
@@ -77,26 +80,25 @@ def build_mcp(settings: Settings | None = None) -> FastMCP:
     return mcp
 
 
-async def _init_state(settings: Settings) -> ServerState:
+async def _init_state(
+    settings: Settings,
+    services: ProductionServices,
+    resolver: PrincipalResolver,
+) -> ServerState:
     """Connect every backing store and assemble :class:`ServerState`."""
     tokens = TokenStore(settings.tokens_file)
     invites = InviteStore(settings.invites_file)
     working = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl)
-    semantic = SemanticEpisodicStore(settings)
-    procedural = ProceduralStore(settings.pg_dsn)
 
     await working.connect()
-    await procedural.connect()
-    # Mem0 is heavier; connect after the cheap stores so /health is meaningful
-    # even when embeddings are temporarily unreachable.
     try:
-        await semantic.connect()
+        await services.tenant_db.connect()
     except Exception as exc:
-        log.warning("mem0_connect_failed_will_retry_on_demand", error=str(exc))
+        log.warning("tenant_db_connect_failed", error=str(exc))
 
-    recall = Recall(working=working, semantic_episodic=semantic, procedural=procedural)
+    procedural = OrgProceduralStore(services.tenant_db)
     agent_state = AgentStateStore(working.client)
-    audit = AuditLog(procedural.pool)
+    audit = services.audit
 
     graph: GraphStore | None = None
     if settings.neo4j_enabled:
@@ -107,17 +109,27 @@ async def _init_state(settings: Settings) -> ServerState:
             log.warning("graph_store_connect_failed", error=str(exc))
             graph = None
 
+    facade = MemoryFacade(
+        services=services,
+        resolver=resolver,
+        working=working,
+        agent_state=agent_state,
+        procedural=procedural,
+        graph=graph,
+    )
+
     state = ServerState(
         settings=settings,
         tokens=tokens,
         invites=invites,
         working=working,
         agent_state=agent_state,
-        semantic_episodic=semantic,
         procedural=procedural,
-        recall=recall,
+        services=services,
+        facade=facade,
         audit=audit,
         graph=graph,
+        audit_db=services.tenant_db,
     )
     set_state(state)
     return state
@@ -125,10 +137,9 @@ async def _init_state(settings: Settings) -> ServerState:
 
 async def _teardown_state(state: ServerState) -> None:
     await state.working.close()
-    await state.semantic_episodic.close()
-    await state.procedural.close()
     if state.graph is not None:
         await state.graph.close()
+    await state.services.tenant_db.close()
     clear_state()
 
 
@@ -162,6 +173,25 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     mcp = build_mcp(settings)
     mcp_app = mcp.http_app(path="/")
 
+    # Production services back both the /v1 REST surface and the converged MCP
+    # tool surface (G2). Built eagerly (no I/O); the TenantDb pool is opened in
+    # the lifespan below.
+    services: ProductionServices = make_services(settings)
+    resolver = PrincipalResolver(
+        api_keys=services.api_keys,
+        roles=services.roles,
+        tenant_db=services.tenant_db,
+        default_org_id=settings.default_org_id,
+        session_secret=settings.session_secret,
+    )
+    api_app = None
+    if settings.api_enabled:
+        api_app = build_api_app(
+            services,
+            admin_secret=settings.api_admin_secret,
+            session_secret=settings.session_secret,
+        )
+
     async def health_route(request: Request) -> JSONResponse:
         try:
             from teamshared.server.state import get_state
@@ -173,6 +203,9 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
 
     async def favicon_route(_: Request) -> Response:
         return Response(status_code=204)
+
+    async def metrics_route(_: Request) -> Response:
+        return Response(METRICS.render(), media_type="text/plain; version=0.0.4")
 
     async def memory_dashboard_route(request: Request) -> Response:
         try:
@@ -218,10 +251,12 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         if not repo or not key:
             return JSONResponse({"error": "repo and key query params are required"}, status_code=400)
         identity = request.state.agent
+        principal = getattr(request.state, "principal", None)
+        org = str(principal.org_id) if principal else str(settings.default_org_id)
         try:
             from teamshared.server.state import get_state
 
-            value = await get_state().agent_state.get(identity.state_id, repo, key)
+            value = await get_state().agent_state.get(identity.state_id, repo, key, org=org)
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse({"repo": repo, "key": key, "value": value})
@@ -239,10 +274,12 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         if not isinstance(value, dict):
             return JSONResponse({"error": "value must be a JSON object"}, status_code=400)
         identity = request.state.agent
+        principal = getattr(request.state, "principal", None)
+        org = str(principal.org_id) if principal else str(settings.default_org_id)
         try:
             from teamshared.server.state import get_state
 
-            await get_state().agent_state.set(identity.state_id, repo, key, value)
+            await get_state().agent_state.set(identity.state_id, repo, key, value, org=org)
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse({"repo": repo, "key": key, "stored": True})
@@ -269,10 +306,13 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
                 {"error": "turns must be a non-empty array"}, status_code=400
             )
         identity = request.state.agent
+        principal = getattr(request.state, "principal", None)
+        org_id = principal.org_id if principal else settings.default_org_id
         from teamshared.server.state import get_state
 
         recorded = await ingest_turns(
             get_state().working,
+            org_id,
             identity.agent,
             turns,
             idle_seconds=settings.capture_idle_seconds,
@@ -282,7 +322,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
 
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
-        state = await _init_state(settings)
+        state = await _init_state(settings, services, resolver)
         log.info("teamshared_server_started", host=settings.host, port=settings.port)
         async with mcp_app.lifespan(app):
             try:
@@ -296,6 +336,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             BearerAuthMiddleware,
             store=tokens,
             auth_disabled=settings.auth_disabled,
+            resolver=resolver,
         ),
     ]
 
@@ -304,6 +345,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/", root_route, methods=["GET"]),
             Route("/favicon.ico", favicon_route, methods=["GET"]),
             Route("/health", health_route, methods=["GET"]),
+            Route("/metrics", metrics_route, methods=["GET"]),
             Route("/memory", memory_dashboard_route, methods=["GET"]),
             Route("/get-token/{invite}/{agent}", get_token_route, methods=["GET"]),
             Route("/get-token/{invite}", get_token_route, methods=["GET"]),
@@ -327,6 +369,8 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/state", state_get_route, methods=["GET"]),
             Route("/state", state_put_route, methods=["PUT"]),
             Route("/sessions/turns", session_turns_route, methods=["POST"]),
+            *register_admin_routes(settings, services),
+            *([Mount("/v1", app=api_app)] if api_app is not None else []),
             Mount("/mcp", app=mcp_app),
         ],
         middleware=middleware,

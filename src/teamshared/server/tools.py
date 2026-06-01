@@ -1,12 +1,16 @@
 """MCP tool definitions.
 
-Each ``@mcp.tool`` function below corresponds to one entry in the public
-"MCP tools exposed" surface from the plan. Tools are intentionally small and
-side-effect-only at the edges; all real work happens in ``teamshared.memory``.
+Each ``@mcp.tool`` function below is a thin shell over
+:class:`teamshared.memory.facade.MemoryFacade`: it resolves the current
+org-scoped :class:`Principal` and forwards typed arguments. All real work
+(permissions, RLS, ingestion, retrieval, ranking) lives in the facade and the
+:class:`ProductionServices` it wraps (G2: the tool surface is bound to the same
+org-scoped stack as the ``/v1`` REST API).
 
-Agent identity is resolved from the per-request bearer token (see
-``teamshared.auth``). If the caller doesn't pass ``agent`` explicitly, we fall back
-to the authenticated identity.
+Identity comes from the per-request bearer token (see ``teamshared.auth``),
+which the ``BearerAuthMiddleware`` resolves into a Principal via the
+:class:`PrincipalResolver`. Callers may still pass ``agent=`` on write paths to
+override attribution; read paths default to the shared brain (no agent filter).
 """
 
 from __future__ import annotations
@@ -16,7 +20,8 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
-from teamshared.auth import current_agent, require_current_agent
+from teamshared.auth import current_agent, current_principal, require_current_agent
+from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
 from teamshared.memory.types import MemoryKind, MemoryScope, TimeRange
 from teamshared.server.health import check_components
@@ -25,42 +30,25 @@ from teamshared.server.state import get_state
 log = get_logger(__name__)
 
 
-def _resolve_agent(explicit: str | None) -> str:
-    """Resolve the agent identity for *write* paths.
+async def _principal() -> Principal:
+    """Resolve the org-scoped Principal for this request.
 
-    Writes need a stable author for attribution, so we fall back to the
-    bearer-token identity (or ``"anonymous"`` when auth is disabled). Read
-    paths (``memory_recall``, ``memory_episodes_list``) deliberately do not
-    use this helper — they default to *no* filter so the shared brain is
-    actually shared. Pass an explicit ``agent=`` argument on those tools
-    only when you want to narrow results to a single agent's writes.
+    The HTTP bearer middleware binds it; for transports without that middleware
+    (e.g. stdio in local dev) we fall back to the default-org anonymous agent.
     """
-    if explicit:
-        return explicit
-    ident = current_agent()
-    if ident is None:
-        return "anonymous"
-    return ident.agent
+    principal = current_principal()
+    if principal is not None:
+        return principal
+    return await get_state().facade.resolver.anonymous()
 
 
 def _caller_agent() -> str | None:
-    """Bearer-token identity of the requester, or ``None`` when unbound.
-
-    Used by read paths that need the caller (e.g. surfacing the caller's own
-    working-memory turns in recall) without imposing a filter on durable
-    pillars.
-    """
+    """Bearer-token agent string of the requester (drives working-memory lookup)."""
     ident = current_agent()
-    return ident.agent if ident else None
-
-
-async def _require_session_owner(session_id: str, caller: str) -> None:
-    """Ensure the bearer token owns the working-memory session."""
-    state = get_state()
-    meta = await state.working.get_metadata(session_id)
-    owner = meta.get("agent")
-    if owner != caller:
-        raise PermissionError(f"session {session_id} belongs to {owner!r}, not {caller!r}")
+    if ident is not None:
+        return ident.agent
+    principal = current_principal()
+    return principal.display if principal else None
 
 
 def register_tools(mcp: Any) -> None:
@@ -101,33 +89,20 @@ def register_tools(mcp: Any) -> None:
             Field(description="Override agent identity (defaults to bearer-token identity)"),
         ] = None,
     ) -> dict[str, Any]:
-        """Write a memory.
+        """Write a durable memory into the caller's org.
 
-        ``fact`` and ``preference`` -> semantic pillar (Mem0 may extract multiple).
-        ``event`` -> episodic pillar.
-        ``note`` -> semantic with kind=note.
-        ``procedure`` -> rejected; use ``memory_procedure_set`` for procedures.
+        ``fact`` / ``preference`` / ``note`` -> semantic pillar. ``event`` ->
+        episodic. ``procedure`` -> rejected; use ``memory_procedure_set``.
+        Routed through the guarded ingestion pipeline (dedup, PII, injection
+        screening, approval routing) under RLS.
         """
         if kind == "procedure":
             raise ValueError("Use memory_procedure_set for procedures, not memory_remember.")
-
         state = get_state()
-        agent_id = _resolve_agent(agent)
-        pillar = "episodic" if kind == "event" else "semantic"
-        stored = await state.semantic_episodic.add(
-            content,
-            agent=agent_id,
-            pillar=pillar,
-            kind=kind,
-            subject=subject,
-            tags=tags,
+        principal = await _principal()
+        return await state.facade.remember(
+            principal, content=content, kind=kind, subject=subject, tags=tags, agent_override=agent
         )
-        return {
-            "agent": agent_id,
-            "pillar": pillar,
-            "stored": stored,
-            "count": len(stored),
-        }
 
     @mcp.tool()
     async def memory_recall(
@@ -147,32 +122,30 @@ def register_tools(mcp: Any) -> None:
                 description=(
                     "Optional filter — restrict semantic/episodic results to "
                     "this agent's writes. Default (None) is the shared brain: "
-                    "every agent's durable memories are visible. Working "
-                    "memory is always scoped to the caller regardless."
+                    "every agent's durable memories in the org are visible. "
+                    "Working memory is always scoped to the caller regardless."
                 ),
             ),
         ] = None,
     ) -> dict[str, Any]:
-        """Hybrid recall across all four memory pillars.
+        """Hybrid recall across the four memory pillars, within the caller's org.
 
-        By default this is **unscoped** on durable pillars (semantic,
-        episodic, procedural): callers see every agent's writes. Pass
-        ``agent="cursor"`` to narrow to one agent's history. Working memory
-        is always caller-scoped because it's per-session conversation state,
-        not durable knowledge.
-
-        Records include enough metadata (pillar, agent, created_at, tags)
-        for the calling agent to decide what to cite.
+        Default behaviour is the shared brain on durable pillars (semantic,
+        episodic, procedural): callers see every agent's writes in their org.
+        Pass ``agent="cursor"`` to narrow to one agent's history. Working
+        memory is always caller-scoped.
         """
         state = get_state()
+        principal = await _principal()
         scopes = scope or ["semantic", "episodic", "procedural", "working"]
-        result = await state.recall.search(
-            query,
-            agent=agent,
-            caller=_caller_agent(),
+        result = await state.facade.recall(
+            principal,
+            query=query,
             scopes=scopes,
             k=k,
             time_range=time_range,
+            agent_filter=agent,
+            caller_agent=_caller_agent(),
         )
         return result.model_dump(mode="json")
 
@@ -190,9 +163,10 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, str]:
         """Open a working-memory session and return a ``session_id``."""
         state = get_state()
-        agent_id = _resolve_agent(agent)
-        session_id = await state.working.open_session(agent_id, topic=topic, ttl=ttl)
-        return {"session_id": session_id, "agent": agent_id}
+        principal = await _principal()
+        return await state.facade.session_open(
+            principal, topic=topic, ttl=ttl, agent_override=agent
+        )
 
     @mcp.tool()
     async def memory_session_append(
@@ -202,10 +176,10 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, int]:
         """Append a turn to a working-memory session."""
         state = get_state()
-        caller = _resolve_agent(None)
-        await _require_session_owner(session_id, caller)
-        count = await state.working.append_turn(session_id, role, content)
-        return {"turn_count": count}
+        principal = await _principal()
+        return await state.facade.session_append(
+            principal, session_id=session_id, role=role, content=content
+        )
 
     @mcp.tool()
     async def memory_session_close(
@@ -218,12 +192,13 @@ def register_tools(mcp: Any) -> None:
         """Close a working-memory session.
 
         If ``distill`` is true (default), the transcript is queued for the
-        background worker to summarize into durable memories.
+        background worker to summarize into durable org-scoped memories.
         """
         state = get_state()
-        caller = _resolve_agent(None)
-        await _require_session_owner(session_id, caller)
-        return await state.working.close_session(session_id, distill=distill)
+        principal = await _principal()
+        return await state.facade.session_close(
+            principal, session_id=session_id, distill=distill
+        )
 
     @mcp.tool()
     async def memory_episodes_list(
@@ -236,28 +211,17 @@ def register_tools(mcp: Any) -> None:
             Field(
                 description=(
                     "Optional filter — restrict to one agent's episodes. "
-                    "Default (None) returns every agent's timeline."
+                    "Default (None) returns every agent's timeline in the org."
                 ),
             ),
         ] = None,
     ) -> dict[str, Any]:
-        """Browse the episodic timeline.
-
-        Default behavior is the shared brain: episodes from every agent are
-        returned. Pass ``agent="cursor"`` to narrow.
-        """
+        """Browse the episodic timeline (shared within the org by default)."""
         state = get_state()
-        records = await state.semantic_episodic.list_episodes(
-            agent=agent,
-            topic=topic,
-            since=since,
-            until=until,
-            limit=limit,
+        principal = await _principal()
+        return await state.facade.episodes_list(
+            principal, topic=topic, since=since, until=until, limit=limit, agent_filter=agent
         )
-        return {
-            "count": len(records),
-            "episodes": [r.model_dump(mode="json") for r in records],
-        }
 
     @mcp.tool()
     async def memory_procedure_get(
@@ -269,7 +233,8 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, Any] | None:
         """Fetch a stored procedure by name (and optionally version)."""
         state = get_state()
-        proc = await state.procedural.get_procedure(name, version=version)
+        principal = await _principal()
+        proc = await state.facade.procedure_get(principal, name=name, version=version)
         if proc is None:
             return None
         return _serialize_procedure(proc)
@@ -290,14 +255,15 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, Any]:
         """Insert a new version of a procedure. Each call creates a new version."""
         state = get_state()
-        agent_id = _resolve_agent(agent)
-        proc = await state.procedural.set_procedure(
-            name,
-            steps_md,
-            agent=agent_id,
+        principal = await _principal()
+        proc = await state.facade.procedure_set(
+            principal,
+            name=name,
+            steps_md=steps_md,
             description=description,
             tool_recipe=tool_recipe,
             tags=tags,
+            agent_override=agent,
         )
         return _serialize_procedure(proc)
 
@@ -306,12 +272,13 @@ def register_tools(mcp: Any) -> None:
         tag: Annotated[str | None, Field(description="Filter by tag")] = None,
         limit: Annotated[int, Field(ge=1, le=200)] = 50,
     ) -> dict[str, Any]:
-        """List all procedures (latest version of each)."""
+        """List all procedures (latest version of each) in the caller's org."""
         state = get_state()
-        rows = await state.procedural.list_procedures(tag=tag, limit=limit)
+        principal = await _principal()
+        result = await state.facade.procedures_list(principal, tag=tag, limit=limit)
         return {
-            "count": len(rows),
-            "procedures": [_serialize_procedure(r) for r in rows],
+            "count": result["count"],
+            "procedures": [_serialize_procedure(r) for r in result["procedures"]],
         }
 
     @mcp.tool()
@@ -322,20 +289,22 @@ def register_tools(mcp: Any) -> None:
         weight: Annotated[float, Field(ge=0.0, le=10.0)] = 1.0,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Record an explicit relationship in the optional graph store.
+        """Record an explicit relationship in the optional org-scoped graph store.
 
-        No-op (with a warning) when Neo4j isn't enabled. Use this when you
-        learn a structured fact like "alice -> works_on -> teamshared" that vector
+        No-op (with a reason) when Neo4j isn't enabled. Use this when you learn
+        a structured fact like "alice -> works_on -> teamshared" that vector
         recall would obscure.
         """
         state = get_state()
-        if state.graph is None:
-            return {"ok": False, "reason": "graph_disabled"}
-        agent_id = _resolve_agent(agent)
-        await state.graph.add_relation(
-            subject, predicate, object, agent=agent_id, weight=weight
+        principal = await _principal()
+        return await state.facade.graph_relate(
+            principal,
+            subject=subject,
+            predicate=predicate,
+            object_=object,
+            weight=weight,
+            agent_override=agent,
         )
-        return {"ok": True, "subject": subject, "predicate": predicate, "object": object}
 
     @mcp.tool()
     async def memory_graph_related(
@@ -345,35 +314,23 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, Any]:
         """Return entities related to ``name`` via the graph store, up to ``depth`` hops."""
         state = get_state()
-        if state.graph is None:
-            return {"records": [], "reason": "graph_disabled"}
-        records = await state.graph.related(name, depth=depth, limit=limit)
-        return {
-            "count": len(records),
-            "records": [r.model_dump(mode="json") for r in records],
-        }
+        principal = await _principal()
+        return await state.facade.graph_related(principal, name=name, depth=depth, limit=limit)
 
     @mcp.tool()
     async def memory_forget(
-        memory_id: Annotated[str, Field(description="Mem0 memory id from a previous recall")],
+        memory_id: Annotated[str, Field(description="memory_items UUID from a previous recall")],
         reason: Annotated[str, Field(description="Audit reason; required")],
     ) -> dict[str, Any]:
-        """Soft-delete a semantic/episodic memory by id.
+        """Soft-delete a semantic/episodic memory by id (requires memory:delete).
 
-        Procedural deletes are not supported via this tool; use a direct DB
-        operation if you really need to remove a procedure version.
+        ``memory_id`` is the ``memory_items`` UUID returned by ``memory_recall``
+        (post-G2 it is no longer a Mem0 id). Procedural deletes are not
+        supported via this tool.
         """
         state = get_state()
-        agent_id = _resolve_agent(None)
-        log.info("memory_forget", memory_id=memory_id, reason=reason, agent=agent_id)
-        ok = await state.semantic_episodic.delete(memory_id)
-        await state.audit.record(
-            agent=agent_id,
-            action="forget",
-            target_id=memory_id,
-            payload={"reason": reason, "deleted": ok},
-        )
-        return {"memory_id": memory_id, "deleted": ok}
+        principal = await _principal()
+        return await state.facade.forget(principal, memory_id=memory_id, reason=reason)
 
     @mcp.tool()
     async def memory_state_get(
@@ -390,16 +347,13 @@ def register_tools(mcp: Any) -> None:
             Field(description="Opaque state key, e.g. continual-learning/index"),
         ],
     ) -> dict[str, Any]:
-        """Fetch JSON state scoped to the caller's bearer token and ``repo``.
-
-        Returns ``{"repo", "key", "value"}`` where ``value`` is ``null`` when
-        unset. Used by clients (e.g. continual-learning) for incremental
-        bookkeeping that should not live in git.
-        """
+        """Fetch JSON state scoped to the caller's org, bearer token, and ``repo``."""
         ident = require_current_agent()
         state = get_state()
-        value = await state.agent_state.get(ident.state_id, repo, key)
-        return {"repo": repo, "key": key, "value": value}
+        principal = await _principal()
+        return await state.facade.state_get(
+            principal, state_id=ident.state_id, repo=repo, key=key
+        )
 
     @mcp.tool()
     async def memory_state_set(
@@ -407,17 +361,21 @@ def register_tools(mcp: Any) -> None:
         key: Annotated[str, Field(description="Opaque state key")],
         value: Annotated[dict[str, Any], Field(description="JSON object to store")],
     ) -> dict[str, Any]:
-        """Persist JSON state scoped to the caller's bearer token and ``repo``."""
+        """Persist JSON state scoped to the caller's org, bearer token, and ``repo``."""
         ident = require_current_agent()
         state = get_state()
-        await state.agent_state.set(ident.state_id, repo, key, value)
-        return {"repo": repo, "key": key, "stored": True}
+        principal = await _principal()
+        return await state.facade.state_set(
+            principal, state_id=ident.state_id, repo=repo, key=key, value=value
+        )
 
 
 def _serialize_procedure(proc: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {k: v for k, v in proc.items()}
+    out: dict[str, Any] = dict(proc)
     if "id" in out:
         out["id"] = str(out["id"])
+    if "org_id" in out and out["org_id"] is not None:
+        out["org_id"] = str(out["org_id"])
     if isinstance(out.get("created_at"), datetime):
         out["created_at"] = out["created_at"].isoformat()
     return out

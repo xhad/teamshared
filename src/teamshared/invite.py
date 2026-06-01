@@ -45,10 +45,11 @@ class InviteStore:
         if uses <= 0:
             raise ValueError("uses must be positive")
         code = secrets.token_urlsafe(12)
+        created_at = datetime.now(UTC).isoformat()
         record = {
             "agent": agent,
             "uses_left": uses,
-            "created_at": datetime.now(UTC).isoformat(),
+            "created_at": created_at,
         }
         invites = self._load()
         invites[code] = record
@@ -57,7 +58,7 @@ class InviteStore:
             code=code,
             agent=agent,
             uses_left=uses,
-            created_at=record["created_at"],
+            created_at=created_at,
         )
 
     def list_invites(self) -> list[InviteRecord]:

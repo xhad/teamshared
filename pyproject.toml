@@ -41,6 +41,7 @@ dev = [
     "ruff>=0.6.0",
     "mypy>=1.10.0",
     "types-pyyaml>=6.0",
+    "types-Markdown>=3.6",
     "fakeredis>=2.23.0",
     "httpx>=0.27.0",
 ]
@@ -79,8 +80,27 @@ disallow_untyped_defs = true
 exclude = ["tests/"]
 
 [[tool.mypy.overrides]]
-module = ["mem0.*"]
+# Optional dependencies: not installed in the base/dev env, so don't fail the
+# strict run on a missing stub. `neo4j` is gated behind the `neo4j` extra.
+module = ["mem0.*", "neo4j.*", "markdown.*", "opentelemetry.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# redis-py's async client inherits the *sync* command signatures, typed as
+# `ResponseT = Awaitable[T] | T`. Under strict mode mypy then reads every
+# awaited call as a possible non-awaitable (`misc`) and the awaited result as
+# `Any` (`no-any-return`). It is a library-shape limitation, not our bug; the
+# wrappers are covered by integration tests. Scope the relaxation tightly to
+# the two thin redis wrappers so real type errors elsewhere still surface.
+module = ["teamshared.memory.working", "teamshared.server.health"]
+disable_error_code = ["misc", "no-any-return"]
+
+[[tool.mypy.overrides]]
+# FastMCP's `@mcp.tool()` decorator is untyped, which under strict mode marks
+# every registered tool function "untyped". The tool bodies are thin façades
+# pinned by tests/test_server_tools.py; relax only this code, only here.
+module = ["teamshared.server.tools"]
+disable_error_code = ["untyped-decorator"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

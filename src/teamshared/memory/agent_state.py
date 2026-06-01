@@ -38,20 +38,29 @@ def validate_key(key: str) -> str:
     return key
 
 
-def storage_key(state_id: str, repo: str, key: str) -> str:
+def storage_key(state_id: str, repo: str, key: str, *, org: str | None = None) -> str:
     repo = validate_repo(repo)
     key = validate_key(key)
+    if org:
+        return f"agent-state:{org}:{state_id}:{repo}:{key}"
     return f"agent-state:{state_id}:{repo}:{key}"
 
 
 class AgentStateStore:
-    """Small JSON blob store keyed by (state_id, repo, key)."""
+    """Small JSON blob store keyed by (org, state_id, repo, key).
+
+    ``org`` is the principal's org id (G2 tenant namespace). It defaults to
+    ``None`` for backward-compatible callers, but the converged tool surface
+    always passes it so client state is isolated per tenant.
+    """
 
     def __init__(self, client: redis.Redis) -> None:
         self._client = client
 
-    async def get(self, state_id: str, repo: str, key: str) -> dict[str, Any] | None:
-        raw = await self._client.get(storage_key(state_id, repo, key))
+    async def get(
+        self, state_id: str, repo: str, key: str, *, org: str | None = None
+    ) -> dict[str, Any] | None:
+        raw = await self._client.get(storage_key(state_id, repo, key, org=org))
         if raw is None:
             return None
         parsed = json.loads(raw)
@@ -59,13 +68,17 @@ class AgentStateStore:
             raise ValueError("stored agent state must be a JSON object")
         return parsed
 
-    async def set(self, state_id: str, repo: str, key: str, value: dict[str, Any]) -> None:
+    async def set(
+        self, state_id: str, repo: str, key: str, value: dict[str, Any], *, org: str | None = None
+    ) -> None:
         if not isinstance(value, dict):
             raise ValueError("value must be a JSON object")
-        redis_key = storage_key(state_id, repo, key)
+        redis_key = storage_key(state_id, repo, key, org=org)
         await self._client.set(redis_key, json.dumps(value, separators=(",", ":")))
-        log.info("agent_state_set", state_id=state_id, repo=repo, key=key)
+        log.info("agent_state_set", state_id=state_id, repo=repo, key=key, org=org)
 
-    async def delete(self, state_id: str, repo: str, key: str) -> bool:
-        deleted = await self._client.delete(storage_key(state_id, repo, key))
+    async def delete(
+        self, state_id: str, repo: str, key: str, *, org: str | None = None
+    ) -> bool:
+        deleted = await self._client.delete(storage_key(state_id, repo, key, org=org))
         return bool(deleted)

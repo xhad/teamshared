@@ -8,7 +8,9 @@ install stays small.
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
 
 from teamshared.logging import get_logger
 
@@ -16,6 +18,26 @@ if TYPE_CHECKING:
     from starlette.applications import Starlette
 
 log = get_logger(__name__)
+
+
+@contextmanager
+def span(name: str, **attributes: Any) -> Iterator[None]:
+    """Start an OTel span if a tracer is configured; otherwise a no-op.
+
+    Used to trace retrieval and background queue jobs end-to-end. Carrying
+    ``org_id``/``trace_id`` attributes lets traces be correlated per tenant.
+    """
+    try:
+        from opentelemetry import trace
+    except ImportError:
+        yield
+        return
+    tracer = trace.get_tracer("teamshared")
+    with tracer.start_as_current_span(name) as current:
+        for key, value in attributes.items():
+            if value is not None:
+                current.set_attribute(key, value)
+        yield
 
 
 def setup_tracing(service_name: str = "teamshared") -> bool:

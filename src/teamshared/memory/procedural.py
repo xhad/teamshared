@@ -11,11 +11,13 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 from psycopg_pool import AsyncConnectionPool
 
 from teamshared.logging import get_logger
 from teamshared.memory.types import MemoryRecord
+from teamshared.tenancy.context import TenantDb
 
 log = get_logger(__name__)
 
@@ -249,6 +251,110 @@ class ProceduralStore:
                 )
             )
         return records
+
+
+class OrgProceduralStore:
+    """Org-scoped procedural memory over :class:`TenantDb` (RLS-enforced).
+
+    The converged (G2) procedural pillar. Identical surface to
+    :class:`ProceduralStore` but every statement runs inside
+    ``db.org(org_id)`` and writes carry ``org_id`` so RLS isolates playbooks per
+    tenant and reads through the same boundary actually see them.
+    """
+
+    _FIELDS = (
+        "id", "name", "version", "description", "steps_md", "tool_recipe", "tags",
+        "created_by", "created_at",
+    )
+    _SELECT = (
+        "id, name, version, description, steps_md, tool_recipe, tags, created_by, created_at"
+    )
+
+    def __init__(self, db: TenantDb) -> None:
+        self.db = db
+
+    async def set_procedure(
+        self,
+        org_id: UUID,
+        name: str,
+        steps_md: str,
+        *,
+        agent: str,
+        tool_recipe: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
+        recipe_json = json.dumps(tool_recipe) if tool_recipe is not None else None
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                "SELECT COALESCE(MAX(version), 0) + 1 FROM procedures WHERE name = %s",
+                (name,),
+            )
+            row = await cur.fetchone()
+            next_version = int(row[0]) if row else 1
+            cur = await conn.execute(
+                f"INSERT INTO procedures "
+                f"(org_id, scope, name, version, description, steps_md, tool_recipe, tags, "
+                f" created_by, created_at) "
+                f"VALUES (%s,'org',%s,%s,%s,%s,%s::jsonb,%s,%s,%s) RETURNING {self._SELECT}",
+                (
+                    str(org_id), name, next_version, description, steps_md, recipe_json,
+                    tags or [], agent, datetime.now(UTC),
+                ),
+            )
+            inserted = await cur.fetchone()
+        if inserted is None:
+            raise RuntimeError("INSERT did not return a row")
+        return dict(zip(self._FIELDS, inserted, strict=False))
+
+    async def get_procedure(
+        self, org_id: UUID, name: str, version: int | None = None
+    ) -> dict[str, Any] | None:
+        async with self.db.org(org_id) as conn:
+            if version is None:
+                cur = await conn.execute(
+                    f"SELECT {self._SELECT} FROM procedures WHERE name = %s "
+                    f"ORDER BY version DESC LIMIT 1",
+                    (name,),
+                )
+            else:
+                cur = await conn.execute(
+                    f"SELECT {self._SELECT} FROM procedures WHERE name = %s AND version = %s",
+                    (name, version),
+                )
+            row = await cur.fetchone()
+        return dict(zip(self._FIELDS, row, strict=False)) if row else None
+
+    async def list_procedures(
+        self, org_id: UUID, *, tag: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        async with self.db.org(org_id) as conn:
+            if tag:
+                cur = await conn.execute(
+                    f"SELECT DISTINCT ON (name) {self._SELECT} FROM procedures "
+                    f"WHERE %s = ANY(tags) ORDER BY name, version DESC LIMIT %s",
+                    (tag, limit),
+                )
+            else:
+                cur = await conn.execute(
+                    f"SELECT DISTINCT ON (name) {self._SELECT} FROM procedures "
+                    f"ORDER BY name, version DESC LIMIT %s",
+                    (limit,),
+                )
+            rows = await cur.fetchall()
+        return [dict(zip(self._FIELDS, r, strict=False)) for r in rows]
+
+    async def stats(self, org_id: UUID) -> dict[str, Any]:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute("SELECT COUNT(DISTINCT name), COUNT(*) FROM procedures")
+            row = await cur.fetchone()
+            playbooks = int(row[0]) if row else 0
+            versions = int(row[1]) if row else 0
+            cur = await conn.execute(
+                "SELECT created_by, COUNT(*) FROM procedures GROUP BY 1 ORDER BY 2 DESC"
+            )
+            by_author = {str(r[0]): int(r[1]) for r in await cur.fetchall()}
+        return {"playbooks": playbooks, "versions": versions, "by_author": by_author}
 
 
 def _row_to_dict(row: tuple[Any, ...] | None) -> dict[str, Any]:

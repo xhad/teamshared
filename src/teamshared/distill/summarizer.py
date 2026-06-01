@@ -76,7 +76,10 @@ async def _call_ollama(settings: Settings, user_msg: str) -> str:
 
 def _parse_json(raw: str) -> dict[str, Any]:
     try:
-        return json.loads(raw)
+        data = json.loads(raw)
     except json.JSONDecodeError as exc:
         log.error("summarizer_invalid_json", error=str(exc), raw=raw[:500])
         raise SummarizerError("LLM returned invalid JSON") from exc
+    if not isinstance(data, dict):
+        raise SummarizerError("LLM returned a non-object JSON value")
+    return data

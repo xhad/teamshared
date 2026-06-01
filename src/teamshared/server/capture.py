@@ -22,7 +22,8 @@ import mcp.types as mt
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools import ToolResult
 
-from teamshared.auth import current_agent
+from teamshared.auth import current_agent, current_principal
+from teamshared.config import get_settings
 from teamshared.logging import get_logger
 from teamshared.memory.working import WorkingMemory
 from teamshared.server.state import get_state
@@ -37,6 +38,7 @@ _INGEST_ROLES = frozenset({"user", "assistant", "tool", "system"})
 
 async def ingest_turns(
     working: WorkingMemory,
+    org_id: Any,
     agent: str,
     turns: list[Any],
     *,
@@ -59,7 +61,7 @@ async def ingest_turns(
         if not isinstance(content, str) or not content.strip():
             continue
         await working.record_turn(
-            agent, role, content, idle_seconds=idle_seconds, max_turns=max_turns
+            org_id, agent, role, content, idle_seconds=idle_seconds, max_turns=max_turns
         )
         recorded += 1
     return recorded
@@ -136,8 +138,11 @@ class ToolCallCaptureMiddleware(Middleware):
             if not name or name in _SKIP_TOOLS:
                 return
             content = _build_turn(name, getattr(message, "arguments", None), ok=ok)
+            principal = current_principal()
+            org_id = principal.org_id if principal else get_settings().default_org_id
             state = get_state()
             await state.working.record_tool_call(
+                org_id,
                 identity.agent,
                 content,
                 idle_seconds=self._idle_seconds,

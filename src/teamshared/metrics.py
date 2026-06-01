@@ -1,0 +1,136 @@
+"""Tiny, dependency-free Prometheus-style metrics registry.
+
+Avoids a hard ``prometheus_client`` dependency while still exposing the
+text exposition format at ``/metrics``. Supports counters, gauges, and simple
+fixed-bucket histograms with labels. Thread-safety is sufficient for the
+asyncio single-loop server; swap in ``prometheus_client`` if multiprocess
+scraping is needed.
+
+Key SLO signals: retrieval latency, embedding spend, queue depth,
+permission-denied rate, and the cross-tenant-violation counter (which should
+always be zero -- any increment pages on-call).
+"""
+
+from __future__ import annotations
+
+import threading
+from dataclasses import dataclass, field
+
+_LATENCY_BUCKETS = (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0)
+
+
+def _label_key(labels: dict[str, str]) -> tuple[tuple[str, str], ...]:
+    return tuple(sorted(labels.items()))
+
+
+def _fmt_labels(labels: tuple[tuple[str, str], ...]) -> str:
+    if not labels:
+        return ""
+    inner = ",".join(f'{k}="{v}"' for k, v in labels)
+    return "{" + inner + "}"
+
+
+@dataclass
+class _Counter:
+    name: str
+    help: str
+    values: dict[tuple[tuple[str, str], ...], float] = field(default_factory=dict)
+
+    def inc(self, amount: float = 1.0, **labels: str) -> None:
+        key = _label_key(labels)
+        self.values[key] = self.values.get(key, 0.0) + amount
+
+    def render(self) -> list[str]:
+        out = [f"# HELP {self.name} {self.help}", f"# TYPE {self.name} counter"]
+        if not self.values:
+            out.append(f"{self.name} 0")
+        for key, val in self.values.items():
+            out.append(f"{self.name}{_fmt_labels(key)} {val}")
+        return out
+
+
+@dataclass
+class _Gauge:
+    name: str
+    help: str
+    values: dict[tuple[tuple[str, str], ...], float] = field(default_factory=dict)
+
+    def set(self, value: float, **labels: str) -> None:
+        self.values[_label_key(labels)] = value
+
+    def render(self) -> list[str]:
+        out = [f"# HELP {self.name} {self.help}", f"# TYPE {self.name} gauge"]
+        for key, val in self.values.items():
+            out.append(f"{self.name}{_fmt_labels(key)} {val}")
+        return out
+
+
+@dataclass
+class _Histogram:
+    name: str
+    help: str
+    buckets: tuple[float, ...] = _LATENCY_BUCKETS
+    counts: dict[tuple[tuple[str, str], ...], list[int]] = field(default_factory=dict)
+    sums: dict[tuple[tuple[str, str], ...], float] = field(default_factory=dict)
+
+    def observe(self, value: float, **labels: str) -> None:
+        key = _label_key(labels)
+        counts = self.counts.setdefault(key, [0] * (len(self.buckets) + 1))
+        self.sums[key] = self.sums.get(key, 0.0) + value
+        placed = False
+        for i, edge in enumerate(self.buckets):
+            if value <= edge:
+                counts[i] += 1
+                placed = True
+                break
+        if not placed:
+            counts[-1] += 1
+
+    def render(self) -> list[str]:
+        out = [f"# HELP {self.name} {self.help}", f"# TYPE {self.name} histogram"]
+        for key, counts in self.counts.items():
+            cumulative = 0
+            base = _fmt_labels(key)[:-1] if key else "{"
+            for i, edge in enumerate(self.buckets):
+                cumulative += counts[i]
+                sep = "," if key else ""
+                out.append(f'{self.name}_bucket{base}{sep}le="{edge}"}} {cumulative}')
+            cumulative += counts[-1]
+            sep = "," if key else ""
+            out.append(f'{self.name}_bucket{base}{sep}le="+Inf"}} {cumulative}')
+            out.append(f"{self.name}_sum{_fmt_labels(key)} {self.sums.get(key, 0.0)}")
+            out.append(f"{self.name}_count{_fmt_labels(key)} {cumulative}")
+        return out
+
+
+class Metrics:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.retrieval_latency = _Histogram(
+            "teamshared_retrieval_latency_seconds", "Memory retrieval latency"
+        )
+        self.embed_calls = _Counter("teamshared_embed_calls_total", "Embedding API calls")
+        self.embed_texts = _Counter("teamshared_embed_texts_total", "Texts embedded")
+        self.queue_depth = _Gauge("teamshared_queue_depth", "Pending jobs per stream")
+        self.permission_denied = _Counter(
+            "teamshared_permission_denied_total", "Permission checks denied"
+        )
+        self.cross_tenant_violation = _Counter(
+            "teamshared_cross_tenant_violation_total",
+            "Out-of-scope rows dropped post-retrieval (should always be 0)",
+        )
+        self.memory_writes = _Counter("teamshared_memory_writes_total", "Memory items written")
+
+    def render(self) -> str:
+        with self._lock:
+            lines: list[str] = []
+            for metric in (
+                self.retrieval_latency, self.embed_calls, self.embed_texts,
+                self.queue_depth, self.permission_denied, self.cross_tenant_violation,
+                self.memory_writes,
+            ):
+                lines.extend(metric.render())
+            return "\n".join(lines) + "\n"
+
+
+METRICS = Metrics()

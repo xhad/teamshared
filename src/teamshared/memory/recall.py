@@ -15,6 +15,7 @@ import asyncio
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
+from teamshared.config import DEFAULT_ORG_ID
 from teamshared.logging import get_logger
 from teamshared.memory.procedural import ProceduralStore
 from teamshared.memory.semantic import SemanticEpisodicStore
@@ -102,7 +103,7 @@ class Recall:
             kinds.append("procedural")
         if ("working" in scopes_tuple or "all" in scopes_tuple) and caller:
             tasks.append(
-                asyncio.create_task(self.working.recent_records(caller, k=k))
+                asyncio.create_task(self.working.recent_records(DEFAULT_ORG_ID, caller, k=k))
             )
             kinds.append("working")
 
