@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Consent{% endblock %}
+{% block head %}
+<style>
+  .pill { display: inline-block; padding: .1rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .pill.active { background: rgba(52,211,153,.16); color: #6ee7b7; }
+  .pill.off, .pill.expired { background: rgba(255,255,255,.06); color: var(--muted); }
+  .pill.revoked { background: rgba(248,113,113,.16); color: #fca5a5; }
+  form.inline { display: inline; margin: 0; }
+  .grant-form { display: grid; gap: .85rem; max-width: 540px; }
+  .grant-form label.fld { font-weight: 600; font-size: .88rem; display: block; margin-bottom: .3rem; }
+  .grant-form input[type=text], .grant-form select { padding: .5rem; border: 1px solid var(--border-strong); border-radius: 8px; width: 100%; background: var(--panel-2); color: var(--text); }
+  .scopes { display: flex; gap: 1.2rem; flex-wrap: wrap; }
+  .scopes label { font-weight: 400; display: flex; gap: .4rem; align-items: center; font-size: .9rem; }
+  .btn { padding: .55rem 1rem; border: 0; border-radius: 8px; background: var(--indigo); color: #fff; cursor: pointer; font-size: .9rem; font-weight: 600; }
+  .btn:hover { background: var(--indigo-bright); }
+  .btn.link { background: none; color: #fca5a5; padding: .2rem .4rem; }
+  .toggle-row { display: flex; justify-content: space-between; padding: .45rem 0; border-bottom: 1px solid var(--border); font-size: .9rem; }
+  .toggle-row .on { color: #6ee7b7; font-weight: 600; }
+  .lock { color: var(--faint); font-size: .8rem; }
+</style>
+{% endblock %}
+{% block content %}
+  <h1>Capture &amp; consent</h1>
+  <p class="sub">Control what each agent may share into team memory. Nothing is captured without an active grant.</p>
+
+  <div class="panel">
+    <h3>Consent grants</h3>
+    {% if grants %}
+    <table>
+      <thead><tr><th>Agent</th><th>Mode</th><th>Scope</th><th>Granted by</th><th>Expires</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for g in grants %}
+        <tr>
+          <td>{{ g.agent }}</td>
+          <td>{{ g.mode }}</td>
+          <td>{{ g.scope | join(', ') if g.scope else '\u2014' }}</td>
+          <td>{{ g.granted_by or '\u2014' }}</td>
+          <td>{{ (g.expires_at[:10]) if g.expires_at else 'never' }}</td>
+          <td><span class="pill {{ g.status }}">{{ g.status }}</span></td>
+          <td>
+            {% if g.status == 'active' %}
+            <form class="inline" method="post" action="/app/consent/{{ g.id }}/revoke">
+              <button class="btn link" type="submit">Revoke</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No consent grants yet &mdash; capture is off until you grant consent.</p>
+    {% endif %}
+  </div>
+
+  <h2>Grant consent</h2>
+  <div class="panel">
+    <form class="grant-form" method="post" action="/app/consent/grant">
+      <div>
+        <label class="fld" for="agent">Agent</label>
+        <input id="agent" name="agent" type="text" placeholder="cursor" required />
+      </div>
+      <div>
+        <label class="fld" for="mode">Mode</label>
+        <select id="mode" name="mode">
+          {% for m in modes %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="fld">Scope</label>
+        <div class="scopes">
+          {% for s in scopes %}
+          <label><input type="checkbox" name="scope" value="{{ s }}" /> {{ s }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div><button class="btn" type="submit">Grant consent</button></div>
+    </form>
+  </div>
+
+  <h2>Sanitization profile (baseline)</h2>
+  <div class="panel">
+    <p class="muted">Clients enforce this profile locally before sending. Baseline rules cannot be loosened.</p>
+    {% for rule, on in baseline.items() %}
+    <div class="toggle-row">
+      <span>{{ rule.replace('_', ' ') }}</span>
+      <span><span class="on">{{ 'on' if on else 'off' }}</span>{% if rule in locked %} <span class="lock">(locked)</span>{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+{% endblock %}

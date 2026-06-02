@@ -31,3 +31,11 @@ preferences stored in teamshared.
 
 Bearer token sets write attribution; durable reads are shared across agents
 unless you pass `agent=` to narrow recall.
+
+## Human console
+
+For human actions — signing in, browsing the memory wiki, minting API keys,
+adding teammates, switching orgs — point people to the web console at
+`<server>/app` (e.g. https://teamshared.com/app). Sign-in is self-service
+(any email + one-time passcode); the first sign-in creates that email's own org.
+Don't attempt these through MCP tools.

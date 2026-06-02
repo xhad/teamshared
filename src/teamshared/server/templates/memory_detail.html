@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Memory{% endblock %}
+{% block head %}
+<style>
+  .meta { display: grid; grid-template-columns: 150px 1fr; gap: .4rem 1rem; font-size: .9rem; }
+  .meta dt { color: var(--muted); font-weight: 600; }
+  .meta dd { margin: 0; }
+  .body { white-space: pre-wrap; background: #0a0b12; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin: 0 0 1.25rem; }
+  .tag { display: inline-block; background: rgba(255,255,255,.06); border-radius: 5px; padding: 0 .4rem; margin: 0 .25rem .25rem 0; font-size: .78rem; }
+</style>
+{% endblock %}
+{% block content %}
+  <h1>Memory record</h1>
+  <p class="sub"><a href="/app/memory">&larr; Back to explorer</a></p>
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+  {% if item %}
+  <div class="panel">
+    <div class="body">{{ item.content }}</div>
+    <dl class="meta">
+      <dt>Pillar</dt><dd>{{ item.pillar }}</dd>
+      <dt>Kind</dt><dd>{{ item.kind or '\u2014' }}</dd>
+      <dt>Subject</dt><dd>{{ item.subject or '\u2014' }}</dd>
+      <dt>Tags</dt><dd>{% for t in item.tags %}<span class="tag">{{ t }}</span>{% else %}\u2014{% endfor %}</dd>
+      <dt>Scope</dt><dd>{{ item.scope or '\u2014' }}</dd>
+      <dt>Visibility</dt><dd>{{ item.visibility or '\u2014' }}</dd>
+      <dt>Source</dt><dd>{{ item.source or '\u2014' }}</dd>
+      <dt>Confidence</dt><dd>{{ item.confidence if item.confidence is not none else '\u2014' }}</dd>
+      <dt>Status</dt><dd>{{ item.status }}</dd>
+      <dt>Version</dt><dd>{{ item.version }}</dd>
+      <dt>Created</dt><dd>{{ (item.created_at | string)[:16] | replace('T', ' ') }}</dd>
+      <dt>ID</dt><dd>{{ item.id }}</dd>
+    </dl>
+  </div>
+  {% endif %}
+{% endblock %}

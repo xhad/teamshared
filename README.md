@@ -40,7 +40,7 @@ flowchart LR
 ## Quick start
 
 ```bash
-# 1. Bring up Postgres + Redis + teamshared server + distiller
+# 1. Bring up Postgres + Redis + teamshared server + distiller + curator
 cp .env.example .env   # then edit (esp. OPENAI_API_KEY)
 docker compose -f infra/docker-compose.yml up -d --build
 
@@ -56,16 +56,16 @@ docker compose -f infra/docker-compose.yml run --rm server teamshared token mint
 curl -fsS http://localhost:8077/health | jq
 ```
 
-**Ollama in Docker:** set `TEAMSHARED_EMBED_PROVIDER` / `TEAMSHARED_LLM_PROVIDER` to `ollama` in `.env` and
-run Ollama on the host. The image installs the `ollama` Python client Mem0 needs at startup.
+**Ollama on the host:** set `TEAMSHARED_EMBED_PROVIDER` / `TEAMSHARED_LLM_PROVIDER` to `ollama` in `.env`
+and run Ollama on the host. The image installs the `ollama` Python client Mem0 needs at startup.
+There is one compose file (`make build`); `server`/`distiller` reach the host via
+`host.docker.internal` (wired through `extra_hosts: host-gateway`).
 
-- **macOS / Docker Desktop:** `make build` — compose sets `host.docker.internal` via `extra_hosts`.
-- **Linux (host Ollama):** if `curl` from the server container to Ollama times out, use host
-  networking for server + distiller:
-
-  ```bash
-  make build-ollama-host
-  ```
+- **macOS / Docker Desktop:** works out of the box — `host.docker.internal` already routes to the host.
+- **Linux:** make the host Ollama reachable from the docker bridge:
+  - start Ollama with `OLLAMA_HOST=0.0.0.0:11434` (bind all interfaces), and
+  - allow the docker bridge subnet to port `11434`, e.g.
+    `sudo ufw allow from 172.16.0.0/12 to any port 11434 proto tcp`.
 
 ## Connect your agents
 
@@ -76,15 +76,15 @@ Hermes, Claude, OpenClaw), downloads plugin files and MCP config from the server
 and places them in the right paths:
 
 ```bash
-curl -fsSL https://actx.teamshared.com/install.sh | bash
+curl -fsSL https://teamshared.com/install.sh | bash
 ```
 
-The script prompts for your bearer token ([`/get-token`](https://actx.teamshared.com/get-token))
-and writes it into the harness MCP config. Details: [`/install`](https://actx.teamshared.com/install).
+The script prompts for your bearer token ([`/get-token`](https://teamshared.com/get-token))
+and writes it into the harness MCP config. Details: [`/install`](https://teamshared.com/install).
 
 **Cursor (recommended):** install the **teamshared** plugin.
 
-**Marketplace:** Settings → Plugins → Add marketplace → `https://github.com/xhad/actx`, then `/add-plugin teamshared`.
+**Marketplace:** Settings → Plugins → Add marketplace → `https://github.com/xhad/teamshared`, then `/add-plugin teamshared`.
 
 **Local symlink:**
 
@@ -119,6 +119,44 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | `memory_state_get`          | Read token+repo scoped JSON state (client bookkeeping)         |
 | `memory_state_set`          | Write token+repo scoped JSON state                           |
 | `memory_forget`             | Soft-delete a semantic/episodic memory                       |
+
+## Team console (web UI)
+
+A server-rendered console for humans lives at [`/app`](https://teamshared.com/app)
+(Jinja2 + a little HTMX, no build step). Sign in with a **one-time passcode (OTP)**:
+enter your email, then type the short numeric code (stored hashed in Redis with
+a `TEAMSHARED_OTP_TTL_SECONDS` TTL, single-use, attempt-capped) — no bearer token
+needed in the browser. The code is **emailed via SMTP** (`TEAMSHARED_SMTP_*`); in
+`auth_disabled` dev mode it's shown on the page instead.
+
+**Self-service, multi-tenant.** Login is open: *any* email can sign in. Your email
+is one global **account** (the `accounts` table) that can belong to many orgs. The
+first time you sign in you get your own private org (you're the owner); after that
+you land in the org(s) you belong to. The header has an **org switcher** to move
+between them and a **New org** action to create more.
+
+- **Memory wiki** (`/app/wiki`) — semantic facts, the episodic timeline, and
+  procedural playbooks rendered as a continuously-updating, human-readable knowledge
+  base. Topic pages prefer an LLM-**curated** article (synthesized by the curator
+  worker) and fall back to the raw source records grouped by kind. Agent-authored
+  markdown is rendered through an allowlist sanitizer.
+- **Memory explorer** (`/app/memory`) — keyword search and per-record inspection
+  across pillars.
+- **Agents** (`/app/agents`) — add or enable/disable agent identities.
+- **API keys** (`/app/keys`) — mint (`tsk_…`, shown once) and revoke keys.
+- **People & roles** (`/app/people`) — list members, **add a teammate by email**
+  (they sign in with their own OTP and land in this org), and grant/revoke roles.
+- **Organizations** (`/app/orgs`) — list the orgs your account belongs to, switch
+  between them, and create a new one.
+- **Approvals** (`/app/approvals`) — approve/reject captured memory before it goes live.
+- **Consent** (`/app/consent`) — grant/revoke the capture scopes that gate ingestion.
+
+Each new org is isolated by RLS, so opening signup only lets people create their own
+private space — the shared team brain (the default org) is reached only by an admin
+**adding your email** to it. Write actions are RBAC-checked (`org:admin` for
+agents/keys/roles/members, `memory:approve` for approvals) and audited. Agent/MCP
+bearer tokens are unaffected and keep resolving to their bound org. The public,
+no-auth memory status page stays at [`/memory`](https://teamshared.com/memory).
 
 ## Local development without Docker
 
@@ -159,7 +197,7 @@ Two reference topologies live in [`infra/`](infra):
   2. User runs:
 
   ```bash
-  curl -fsS 'https://actx.teamshared.com/?invite=INVITE_CODE&agent=cursor'
+  curl -fsS 'https://teamshared.com/?invite=INVITE_CODE&agent=cursor'
   ```
 
 - **Memory dashboard**: `GET /memory` is a public, zero-dependency HTML page
@@ -181,6 +219,14 @@ Two reference topologies live in [`infra/`](infra):
   distill, open new) after `TEAMSHARED_CAPTURE_IDLE_SECONDS` of inactivity or
   `TEAMSHARED_CAPTURE_MAX_TURNS` turns; set `TEAMSHARED_CAPTURE_ENABLED=false`
   to disable all capture.
+
+- **Memory wiki curation**: a separate `curator` worker process (alongside the
+  `distiller`) keeps the wiki readable. When the distiller writes new facts or
+  decisions it marks the affected subjects dirty; after `TEAMSHARED_CURATE_THRESHOLD`
+  updates a subject is enqueued (debounced) and the curator calls the LLM to
+  (re)synthesize a `wiki_pages` article, versioned with source provenance. Run it
+  with `teamshared curator` (the compose stack starts one automatically). Its
+  heartbeat shows up in `GET /health`.
 
 See [`AGENTS.md`](AGENTS.md) for the conventions agents (human or LLM) should
 follow when modifying this repo.

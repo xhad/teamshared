@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Approvals{% endblock %}
+{% block content %}
+  <h1>Pending approvals</h1>
+  <p class="sub">Memories awaiting human review before they go live.</p>
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  <div class="panel">
+    {% if pending %}
+    <table>
+      <thead><tr><th>Created</th><th>Reason</th><th>Content</th><th></th></tr></thead>
+      <tbody>
+        {% for p in pending %}
+        <tr>
+          <td>{{ p.created }}</td>
+          <td>{{ p.reason }}</td>
+          <td>{{ p.content | truncate(160) }}</td>
+          <td class="actions">
+            <form method="post" action="/app/approvals/{{ p.id }}/decide">
+              <input type="hidden" name="decision" value="approve" />
+              <button type="submit">Approve</button>
+            </form>
+            <form method="post" action="/app/approvals/{{ p.id }}/decide">
+              <input type="hidden" name="decision" value="reject" />
+              <button type="submit" class="danger">Reject</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">Nothing awaiting review.</p>{% endif %}
+  </div>
+{% endblock %}

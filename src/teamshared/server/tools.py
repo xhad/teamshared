@@ -62,7 +62,10 @@ def register_tools(mcp: Any) -> None:
     async def health() -> dict[str, Any]:
         """Liveness + dependency probe.
 
-        Returns ``{"status": "ok", "components": {...}}``. Always cheap; safe
+        Returns ``{"status", "version", "components": {server, redis, postgres,
+        semantic, distiller, graph, ollama}}``. ``semantic`` is the pgvector +
+        embedder store (post-Mem0). Optional deps report ``"disabled"`` when off
+        and do not degrade overall status. Always cheap; safe
         to poll on a 10s interval. Used by Docker healthcheck and the
         ``/health`` HTTP route.
         """

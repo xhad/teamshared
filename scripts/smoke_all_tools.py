@@ -6,7 +6,7 @@ client state, and optional forget cleanup.
 
 Live HTTP (recommended — hits real Postgres, Redis, Mem0):
 
-    export TEAMSHARED_SMOKE_URL=https://actx.teamshared.com/mcp/
+    export TEAMSHARED_SMOKE_URL=https://teamshared.com/mcp/
     export TEAMSHARED_SMOKE_TOKEN=teamshared_...
     python scripts/smoke_all_tools.py
 
@@ -618,7 +618,7 @@ def main() -> None:
     parser.add_argument(
         "--repo",
         default=os.environ.get(
-            "TEAMSHARED_SMOKE_REPO", "Users-chad-code-sapien-actx"
+            "TEAMSHARED_SMOKE_REPO", "Users-chad-code-sapien-teamshared"
         ),
         help="Workspace slug for memory_state_* tests",
     )

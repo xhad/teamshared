@@ -387,6 +387,19 @@ class VectorStore:
             "quarantined": int(row[2]) if row else 0,
         }
 
+    async def health(self, org_id: UUID) -> str:
+        """Confirm the durable semantic/episodic store is queryable under RLS.
+
+        Cheap existence check on the vector schema (distinct from the plain
+        ``SELECT 1`` Postgres probe: this fails if the memory migrations never
+        ran). Returns the active embedder model so callers can see which
+        embedding backend is in use.
+        """
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute("SELECT 1 FROM memory_embeddings LIMIT 1")
+            await cur.fetchone()
+        return self.embedder_model
+
     async def pillar_stats(self, org_id: UUID) -> dict[str, Any]:
         """Per-pillar / per-agent / per-kind / top-tag breakdown for the dashboard.
 
@@ -448,6 +461,50 @@ class VectorStore:
         """
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(sql, [*params, limit])
+            rows = await cur.fetchall()
+        return [_row_to_record(r, org_id, score_is_distance=False) for r in rows]
+
+    async def list_subjects(
+        self, org_id: UUID, *, limit: int = 200
+    ) -> list[dict[str, Any]]:
+        """Distinct semantic subjects with their item count and last update.
+
+        Powers the wiki topic index: one knowledge-base page per ``subject``.
+        """
+        sql = """
+            SELECT mi.subject, COUNT(*) AS n, MAX(mi.created_at) AS updated_at
+            FROM memory_items mi
+            WHERE mi.status = 'active' AND mi.pillar = 'semantic'
+              AND mi.subject IS NOT NULL AND mi.subject <> ''
+            GROUP BY mi.subject
+            ORDER BY updated_at DESC
+            LIMIT %s
+        """
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(sql, (limit,))
+            rows = await cur.fetchall()
+        return [
+            {"subject": r[0], "count": int(r[1]), "updated_at": r[2]}
+            for r in rows
+        ]
+
+    async def list_by_subject(
+        self, org_id: UUID, subject: str, *, limit: int = 200
+    ) -> list[MemoryRecord]:
+        """Active semantic records for one subject, newest first (wiki topic page)."""
+        sql = """
+            SELECT mi.id, mi.pillar, mi.kind, mi.content, mi.subject, mi.tags,
+                   mi.scope, mi.scope_ref_id, mi.visibility, mi.source, mi.confidence,
+                   mi.importance, mi.version, mi.status, mi.created_at, a.name AS agent,
+                   NULL AS score
+            FROM memory_items mi
+            LEFT JOIN agents a ON a.id = mi.owner_id AND mi.owner_type = 'agent'
+            WHERE mi.status = 'active' AND mi.pillar = 'semantic' AND mi.subject = %s
+            ORDER BY mi.created_at DESC
+            LIMIT %s
+        """
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(sql, (subject, limit))
             rows = await cur.fetchall()
         return [_row_to_record(r, org_id, score_is_distance=False) for r in rows]
 

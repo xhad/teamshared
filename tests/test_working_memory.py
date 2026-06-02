@@ -12,6 +12,8 @@ import pytest_asyncio
 from teamshared.memory import working as working_mod
 from teamshared.memory.working import (
     AUTO_CAPTURE_TOPIC,
+    CURATE_PENDING_KEY,
+    CURATE_QUEUE_KEY,
     DISTILL_QUEUE_KEY,
     WorkingMemory,
     _auto_session_key,
@@ -189,3 +191,82 @@ async def test_record_turn_shares_session_with_tool_calls(memory: WorkingMemory)
         ORG, "cursor", "memory_recall(query=hi) -> ok", idle_seconds=1800, max_turns=200
     )
     assert sid_turn == sid_tool
+
+
+# --------------------------------------------------------------------------- #
+# Curate queue + debounce (Phase 4b)
+# --------------------------------------------------------------------------- #
+async def test_mark_subject_dirty_enqueues_on_threshold(memory: WorkingMemory) -> None:
+    # Below threshold: nothing queued yet.
+    assert await memory.mark_subject_dirty(ORG, "infra", threshold=3) is False
+    assert await memory.mark_subject_dirty(ORG, "infra", threshold=3) is False
+    assert int(await memory.client.llen(CURATE_QUEUE_KEY)) == 0
+    # The third new fact crosses the threshold and enqueues.
+    assert await memory.mark_subject_dirty(ORG, "infra", threshold=3) is True
+    assert int(await memory.client.llen(CURATE_QUEUE_KEY)) == 1
+
+
+async def test_mark_subject_dirty_ignores_blank_subject(memory: WorkingMemory) -> None:
+    assert await memory.mark_subject_dirty(ORG, "   ", threshold=1) is False
+    assert int(await memory.client.llen(CURATE_QUEUE_KEY)) == 0
+
+
+async def test_enqueue_curate_dedupes_pending(memory: WorkingMemory) -> None:
+    assert await memory.enqueue_curate(ORG, "infra") is True
+    # Already pending: not queued again.
+    assert await memory.enqueue_curate(ORG, "infra") is False
+    assert int(await memory.client.llen(CURATE_QUEUE_KEY)) == 1
+
+
+async def test_pop_curate_job_clears_pending_and_allows_requeue(memory: WorkingMemory) -> None:
+    await memory.enqueue_curate(ORG, "infra")
+    job = await memory.pop_curate_job(timeout=1)
+    assert job is not None
+    assert job["subject"] == "infra"
+    assert job["org_id"] == ORG
+    # Pending flag cleared, so the subject can be enqueued for a fresh pass.
+    assert int(await memory.client.scard(CURATE_PENDING_KEY)) == 0
+    assert await memory.enqueue_curate(ORG, "infra") is True
+
+
+# --------------------------------------------------------------------------- #
+# Console sign-in OTP
+# --------------------------------------------------------------------------- #
+EMAIL = "owner@example.com"
+
+
+async def test_login_otp_roundtrip_is_single_use(memory: WorkingMemory) -> None:
+    await memory.set_login_otp(EMAIL, "123456", ttl=30)
+    assert await memory.verify_login_otp(EMAIL, "123456") is True
+    # Consumed on success: a replay fails.
+    assert await memory.verify_login_otp(EMAIL, "123456") is False
+
+
+async def test_login_otp_email_is_case_insensitive(memory: WorkingMemory) -> None:
+    await memory.set_login_otp("Owner@Example.com ", "654321", ttl=30)
+    assert await memory.verify_login_otp("owner@example.com", "654321") is True
+
+
+async def test_login_otp_unknown_email_returns_false(memory: WorkingMemory) -> None:
+    assert await memory.verify_login_otp("nobody@example.com", "000000") is False
+
+
+async def test_login_otp_caps_wrong_attempts(memory: WorkingMemory) -> None:
+    await memory.set_login_otp(EMAIL, "111111", ttl=30, max_attempts=2)
+    assert await memory.verify_login_otp(EMAIL, "999999") is False  # attempt 1
+    assert await memory.verify_login_otp(EMAIL, "888888") is False  # attempt 2 -> cap
+    # Even the correct code is now rejected; the code was burned.
+    assert await memory.verify_login_otp(EMAIL, "111111") is False
+
+
+async def test_login_otp_sets_ttl(memory: WorkingMemory) -> None:
+    await memory.set_login_otp(EMAIL, "222222", ttl=30)
+    ttl = await memory.client.ttl(working_mod._otp_key(EMAIL))
+    assert 0 < ttl <= 30
+
+
+async def test_set_login_otp_overwrites_prior_code(memory: WorkingMemory) -> None:
+    await memory.set_login_otp(EMAIL, "111111", ttl=30)
+    await memory.set_login_otp(EMAIL, "222222", ttl=30)
+    assert await memory.verify_login_otp(EMAIL, "111111") is False
+    assert await memory.verify_login_otp(EMAIL, "222222") is True

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Agents{% endblock %}
+{% block content %}
+  <h1>Agents</h1>
+  <p class="sub">Agent identities that can read and write team memory.</p>
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  <div class="panel">
+    <form method="post" action="/app/agents/add" class="inline-form">
+      <input name="name" placeholder="New agent name" required />
+      <button type="submit">Add agent</button>
+    </form>
+  </div>
+
+  <div class="panel" style="margin-top:1rem">
+    {% if agents %}
+    <table>
+      <thead><tr><th>Name</th><th>Kind</th><th>Status</th><th>Created</th><th></th></tr></thead>
+      <tbody>
+        {% for a in agents %}
+        <tr>
+          <td>{{ a.name }}</td>
+          <td>{{ a.kind }}</td>
+          <td><span class="status-pill {{ a.status }}">{{ a.status }}</span></td>
+          <td>{{ a.created }}</td>
+          <td class="actions">
+            <form method="post" action="/app/agents/{{ a.id }}/status">
+              {% if a.status == 'disabled' %}
+              <input type="hidden" name="status" value="active" />
+              <button type="submit" class="ghost">Enable</button>
+              {% else %}
+              <input type="hidden" name="status" value="disabled" />
+              <button type="submit" class="danger">Disable</button>
+              {% endif %}
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No agents yet.</p>{% endif %}
+  </div>
+{% endblock %}

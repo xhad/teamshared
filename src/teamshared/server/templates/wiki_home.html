@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Wiki{% endblock %}
+{% block content %}
+  <h1>Team wiki</h1>
+  <p class="sub">A continuously updating, human-readable view of the team's memory.</p>
+  {% set active_tab = 'topics' %}
+  {% include "_wiki_tabs.html" %}
+
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if tags %}
+  <h2>Tags</h2>
+  <div class="tagcloud">
+    {% for tag, count in tags %}
+    <span class="tag">{{ tag }}<span class="n">{{ count }}</span></span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <h2>Topics</h2>
+  {% if topics %}
+  <div class="topic-list">
+    {% for t in topics %}
+    <a class="topic" href="/app/wiki/topic/{{ t.slug }}">
+      <div class="name">{{ t.subject }}</div>
+      <div class="meta">{{ t.count }} record{{ '' if t.count == 1 else 's' }} &middot; updated {{ t.updated }}</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">No subjects yet. Facts written with a <code>subject</code> become topic pages here.</p>
+  {% endif %}
+
+  <h2>Recently updated</h2>
+  {% if recent %}
+  <div class="panel">
+    <table>
+      <thead><tr><th>Content</th><th>Subject</th><th>Agent</th><th>When</th></tr></thead>
+      <tbody>
+        {% for r in recent %}
+        <tr>
+          <td><a href="/app/memory/{{ r.id }}">{{ r.content | truncate(120) }}</a></td>
+          <td>{{ r.subject or '\u2014' }}</td>
+          <td>{{ r.agent or '\u2014' }}</td>
+          <td>{{ (r.created_at | string)[:16] | replace('T', ' ') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Nothing captured yet.</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Memory{% endblock %}
+{% block head %}
+<style>
+  .mem-search { display: flex; gap: .6rem; margin: 0 0 1.25rem; flex-wrap: wrap; }
+  .mem-search input[type=text] { flex: 1 1 320px; padding: .55rem .7rem; border: 1px solid var(--border-strong); border-radius: 8px; font-size: .95rem; background: var(--panel-2); color: var(--text); }
+  .mem-search select { padding: .55rem; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel-2); color: var(--text); }
+  .mem-search button { padding: .55rem 1rem; border: 0; border-radius: 8px; background: var(--indigo); color: #fff; cursor: pointer; font-weight: 600; }
+  .mem-search button:hover { background: var(--indigo-bright); }
+  td.content { max-width: 520px; }
+  .pp { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .73rem; font-weight: 600; }
+  .pp.semantic { background: rgba(99,102,241,.18); color: #a5b4fc; }
+  .pp.episodic { background: rgba(56,189,248,.16); color: #7dd3fc; }
+</style>
+{% endblock %}
+{% block content %}
+  <h1>Memory explorer</h1>
+  <p class="sub">Browse and search the team's durable memory.</p>
+
+  <form class="mem-search" method="get" action="/app/memory">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search the team's memory&hellip;" />
+    <select name="pillar">
+      <option value="">All pillars</option>
+      <option value="semantic"{% if pillar == 'semantic' %} selected{% endif %}>semantic</option>
+      <option value="episodic"{% if pillar == 'episodic' %} selected{% endif %}>episodic</option>
+    </select>
+    <button type="submit">Search</button>
+  </form>
+
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+  <div class="panel">
+    {% if records %}
+    <table>
+      <thead><tr><th>Content</th><th>Pillar</th><th>Agent</th><th>Kind</th><th>Created</th></tr></thead>
+      <tbody>
+        {% for r in records %}
+        <tr>
+          <td class="content"><a href="/app/memory/{{ r.id }}">{{ r.content | truncate(140) }}</a></td>
+          <td><span class="pp {{ r.pillar }}">{{ r.pillar }}</span></td>
+          <td>{{ r.agent or '\u2014' }}</td>
+          <td>{{ r.kind or '\u2014' }}</td>
+          <td>{{ (r.created_at | string)[:16] | replace('T', ' ') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% elif not note %}
+    <p class="muted">No matching memories.</p>
+    {% endif %}
+  </div>
+{% endblock %}

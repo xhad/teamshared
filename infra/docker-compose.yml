@@ -1,8 +1,16 @@
-# teamshared local/dev stack.
+# teamshared stack (single source of truth for local dev AND production).
 #
-# Bring up:   docker compose -f infra/docker-compose.yml up -d
-# Migrate:    docker compose -f infra/docker-compose.yml run --rm server teamshared migrate
-# Mint token: docker compose -f infra/docker-compose.yml run --rm server teamshared token mint cursor
+# Bring up:   make build      (docker compose --env-file .env -f infra/docker-compose.yml up -d --build)
+# Migrate:    make migrate
+# Mint token: make token-mint
+#
+# server/distiller run on the compose bridge network and reach a HOST Ollama
+# via host.docker.internal (wired through extra_hosts: host-gateway below), so
+# there is no separate host-networking compose file. On Linux, host Ollama must
+# be reachable from the docker bridge:
+#   - run Ollama with OLLAMA_HOST=0.0.0.0:11434 (bind all interfaces), and
+#   - allow the docker bridge subnet to port 11434
+#     (e.g. `sudo ufw allow from 172.16.0.0/12 to any port 11434 proto tcp`).
 #
 # Production deployment is the same image, fronted by Tailscale Serve or
 # Caddy/Traefik for TLS. See infra/tailscale.example.md.
@@ -50,12 +58,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      neo4j:
+        condition: service_healthy
     environment:
       TEAMSHARED_PG_HOST: postgres
       TEAMSHARED_PG_PORT: 5432
       TEAMSHARED_PG_USER: ${TEAMSHARED_PG_USER:-teamshared}
       TEAMSHARED_PG_PASSWORD: ${TEAMSHARED_PG_PASSWORD:-teamshared}
       TEAMSHARED_PG_DB: ${TEAMSHARED_PG_DB:-teamshared}
+      # Non-superuser app role so RLS is enforced (see provision-app-role).
+      TEAMSHARED_PG_APP_USER: ${TEAMSHARED_PG_APP_USER:-}
+      TEAMSHARED_PG_APP_PASSWORD: ${TEAMSHARED_PG_APP_PASSWORD:-}
       TEAMSHARED_REDIS_URL: redis://redis:6379/0
       TEAMSHARED_TOKENS_FILE: /data/tokens.json
       TEAMSHARED_INVITES_FILE: /data/invites.json
@@ -65,6 +78,16 @@ services:
       TEAMSHARED_SESSION_SECRET: ${TEAMSHARED_SESSION_SECRET:-}
       TEAMSHARED_DASHBOARD_OWNER_EMAIL: ${TEAMSHARED_DASHBOARD_OWNER_EMAIL:-}
       TEAMSHARED_API_ADMIN_SECRET: ${TEAMSHARED_API_ADMIN_SECRET:-}
+      TEAMSHARED_CONNECTOR_ENCRYPTION_KEY: ${TEAMSHARED_CONNECTOR_ENCRYPTION_KEY:-}
+      # Console sign-in OTP + SMTP delivery (read by teamshared.server.mailer).
+      TEAMSHARED_OTP_TTL_SECONDS: ${TEAMSHARED_OTP_TTL_SECONDS:-30}
+      TEAMSHARED_OTP_MAX_ATTEMPTS: ${TEAMSHARED_OTP_MAX_ATTEMPTS:-5}
+      TEAMSHARED_SMTP_HOST: ${TEAMSHARED_SMTP_HOST:-}
+      TEAMSHARED_SMTP_PORT: ${TEAMSHARED_SMTP_PORT:-587}
+      TEAMSHARED_SMTP_USERNAME: ${TEAMSHARED_SMTP_USERNAME:-}
+      TEAMSHARED_SMTP_PASSWORD: ${TEAMSHARED_SMTP_PASSWORD:-}
+      TEAMSHARED_SMTP_FROM: ${TEAMSHARED_SMTP_FROM:-}
+      TEAMSHARED_SMTP_STARTTLS: ${TEAMSHARED_SMTP_STARTTLS:-true}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       TEAMSHARED_EMBED_PROVIDER: ${TEAMSHARED_EMBED_PROVIDER:-openai}
       TEAMSHARED_EMBED_MODEL: ${TEAMSHARED_EMBED_MODEL:-text-embedding-3-small}
@@ -72,6 +95,9 @@ services:
       TEAMSHARED_LLM_PROVIDER: ${TEAMSHARED_LLM_PROVIDER:-openai}
       TEAMSHARED_LLM_MODEL: ${TEAMSHARED_LLM_MODEL:-gpt-4o-mini}
       TEAMSHARED_OLLAMA_BASE_URL: ${TEAMSHARED_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      TEAMSHARED_NEO4J_URL: bolt://neo4j:7687
+      TEAMSHARED_NEO4J_USER: ${TEAMSHARED_NEO4J_USER:-neo4j}
+      TEAMSHARED_NEO4J_PASSWORD: ${TEAMSHARED_NEO4J_PASSWORD:-neo4j}
     volumes:
       - teamshareddata:/data
     ports:
@@ -94,6 +120,9 @@ services:
       TEAMSHARED_PG_USER: ${TEAMSHARED_PG_USER:-teamshared}
       TEAMSHARED_PG_PASSWORD: ${TEAMSHARED_PG_PASSWORD:-teamshared}
       TEAMSHARED_PG_DB: ${TEAMSHARED_PG_DB:-teamshared}
+      # Non-superuser app role so RLS is enforced (see provision-app-role).
+      TEAMSHARED_PG_APP_USER: ${TEAMSHARED_PG_APP_USER:-}
+      TEAMSHARED_PG_APP_PASSWORD: ${TEAMSHARED_PG_APP_PASSWORD:-}
       TEAMSHARED_REDIS_URL: redis://redis:6379/0
       TEAMSHARED_TOKENS_FILE: /data/tokens.json
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -107,7 +136,41 @@ services:
       - teamshareddata:/data
     command: ["teamshared", "worker"]
 
-  # Optional: enable when TEAMSHARED_NEO4J_ENABLED=true and you want the relationship graph.
+  curator:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TEAMSHARED_PG_HOST: postgres
+      TEAMSHARED_PG_PORT: 5432
+      TEAMSHARED_PG_USER: ${TEAMSHARED_PG_USER:-teamshared}
+      TEAMSHARED_PG_PASSWORD: ${TEAMSHARED_PG_PASSWORD:-teamshared}
+      TEAMSHARED_PG_DB: ${TEAMSHARED_PG_DB:-teamshared}
+      # Non-superuser app role so RLS is enforced (see provision-app-role).
+      TEAMSHARED_PG_APP_USER: ${TEAMSHARED_PG_APP_USER:-}
+      TEAMSHARED_PG_APP_PASSWORD: ${TEAMSHARED_PG_APP_PASSWORD:-}
+      TEAMSHARED_REDIS_URL: redis://redis:6379/0
+      TEAMSHARED_TOKENS_FILE: /data/tokens.json
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TEAMSHARED_EMBED_PROVIDER: ${TEAMSHARED_EMBED_PROVIDER:-openai}
+      TEAMSHARED_EMBED_MODEL: ${TEAMSHARED_EMBED_MODEL:-text-embedding-3-small}
+      TEAMSHARED_EMBED_DIMS: ${TEAMSHARED_EMBED_DIMS:-1536}
+      TEAMSHARED_LLM_PROVIDER: ${TEAMSHARED_LLM_PROVIDER:-openai}
+      TEAMSHARED_LLM_MODEL: ${TEAMSHARED_LLM_MODEL:-gpt-4o-mini}
+      TEAMSHARED_OLLAMA_BASE_URL: ${TEAMSHARED_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    volumes:
+      - teamshareddata:/data
+    command: ["teamshared", "curator"]
+
+  # Relationship graph (always on). Use a password >= 8 chars; Neo4j 5 rejects
+  # the factory default "neo4j".
   neo4j:
     image: neo4j:5
     environment:
@@ -117,6 +180,14 @@ services:
       - "7687:7687"
     volumes:
       - neo4jdata:/data
+    healthcheck:
+      # HTTP endpoint is up once the server is accepting connections (does not
+      # depend on auth), so the app can start as soon as Neo4j is reachable.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
 
 volumes:
   pgdata:

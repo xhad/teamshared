@@ -31,11 +31,10 @@ from teamshared.memory.agent_state import AgentStateStore
 from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import OrgProceduralStore
-from teamshared.memory.working import WorkingMemory
 from teamshared.metrics import METRICS
-from teamshared.server.admin_routes import register_admin_routes
 from teamshared.server.api import build_api_app
 from teamshared.server.capture import ToolCallCaptureMiddleware, ingest_turns
+from teamshared.server.console import register_console_routes
 from teamshared.server.dashboard import handle_memory_dashboard
 from teamshared.server.health import check_components
 from teamshared.server.install_api import (
@@ -88,7 +87,9 @@ async def _init_state(
     """Connect every backing store and assemble :class:`ServerState`."""
     tokens = TokenStore(settings.tokens_file)
     invites = InviteStore(settings.invites_file)
-    working = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl)
+    # Single WorkingMemory instance, owned by services and shared with ServerState
+    # (the console reaches it via services.working for sign-in OTP storage).
+    working = services.working
 
     await working.connect()
     try:
@@ -100,14 +101,14 @@ async def _init_state(
     agent_state = AgentStateStore(working.client)
     audit = services.audit
 
-    graph: GraphStore | None = None
-    if settings.neo4j_enabled:
-        graph = GraphStore(settings.neo4j_url, settings.neo4j_user, settings.neo4j_password)
-        try:
-            await graph.connect()
-        except Exception as exc:
-            log.warning("graph_store_connect_failed", error=str(exc))
-            graph = None
+    graph: GraphStore | None = GraphStore(
+        settings.neo4j_url, settings.neo4j_user, settings.neo4j_password
+    )
+    try:
+        await graph.connect()
+    except Exception as exc:
+        log.warning("graph_store_connect_failed", error=str(exc))
+        graph = None
 
     facade = MemoryFacade(
         services=services,
@@ -159,6 +160,9 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     - ``POST /tokens/invites`` -- create invite codes (admin secret).
     - ``GET  /get-token`` -- browser page to redeem an invite.
     - ``GET  /get-token/{invite}/{agent}`` -- browser redeem via path params.
+    - ``GET  /login`` -- console magic-link sign-in (HTML); ``POST`` sends the link.
+    - ``GET  /login/verify`` -- exchange a magic token for a ``ts_session`` cookie.
+    - ``GET  /app`` -- signed-in web console (home overview); ``/app/*`` sections.
     - ``GET  /install`` -- install instructions (HTML).
     - ``GET  /install.sh`` -- unified installer (prompts for harness).
     - ``GET  /install/assets/{path}`` -- harness config snippets (remote pull).
@@ -310,8 +314,17 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         org_id = principal.org_id if principal else settings.default_org_id
         from teamshared.server.state import get_state
 
+        state = get_state()
+        # Consent-first: raw conversation turns require an active grant whose
+        # scope includes raw_turns. No grant -> 403, nothing recorded.
+        if not await state.services.consent.capture_allowed(
+            org_id, identity.agent, "raw_turns"
+        ):
+            return JSONResponse(
+                {"recorded": 0, "consent_required": True}, status_code=403
+            )
         recorded = await ingest_turns(
-            get_state().working,
+            state.working,
             org_id,
             identity.agent,
             turns,
@@ -369,7 +382,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/state", state_get_route, methods=["GET"]),
             Route("/state", state_put_route, methods=["PUT"]),
             Route("/sessions/turns", session_turns_route, methods=["POST"]),
-            *register_admin_routes(settings, services),
+            *register_console_routes(settings, services),
             *([Mount("/v1", app=api_app)] if api_app is not None else []),
             Mount("/mcp", app=mcp_app),
         ],

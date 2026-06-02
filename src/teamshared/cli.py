@@ -4,6 +4,7 @@ Subcommands:
 
 - ``teamshared serve [--transport http|stdio]`` -- run the MCP server.
 - ``teamshared worker`` -- run the distillation worker.
+- ``teamshared curator`` -- run the wiki curation worker.
 - ``teamshared migrate`` -- apply SQL migrations against the configured Postgres.
 - ``teamshared token mint <agent>`` -- issue a bearer token for an agent.
 - ``teamshared token invite-create [--agent] [--uses]`` -- create a one-time invite code.
@@ -150,6 +151,14 @@ def worker() -> None:
 
 
 @app.command()
+def curator() -> None:
+    """Run the wiki curation worker (long-running)."""
+    from teamshared.distill.curator_worker import main as curator_main
+
+    curator_main()
+
+
+@app.command()
 def migrate(
     migrations_dir: Path = typer.Option(
         Path("infra/migrations"),
@@ -228,7 +237,8 @@ def provision_app_role() -> None:
             f'GRANT USAGE, SELECT ON SEQUENCES TO "{role}"'
         )
         for fn in ("auth_lookup_api_key(text)", "auth_touch_api_key(uuid)",
-                   "provision_organization(text, text)"):
+                   "provision_organization(text, text)",
+                   "provision_account(text, text)", "auth_account_orgs(text)"):
             cur.execute(f'GRANT EXECUTE ON FUNCTION {fn} TO "{role}"')
     console.print(f"[bold green]Provisioned app role[/bold green] {role}")
 
@@ -352,7 +362,7 @@ def provision_default_org(
         None, "--email", help="Owner email (defaults to TEAMSHARED_DASHBOARD_OWNER_EMAIL)."
     ),
 ) -> None:
-    """Seed the default org's owner user + membership + role for /admin login.
+    """Seed the default org's owner user + membership + role for /app console login.
 
     The default org itself is created by migration 010. This adds the owner
     user (idempotent) so the magic-link dashboard has someone to sign in.

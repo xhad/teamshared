@@ -195,11 +195,13 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
                 "/install/assets/",
                 "/install/plugin/",
                 "/v1",
-                "/admin",
+                "/app",
+                "/login",
+                "/logout",
             )
         ):
-            # The /v1 REST app and the /admin dashboard authenticate with their
-            # own middleware (Principal bearer / session cookie respectively).
+            # The /v1 REST app and the /app console authenticate with their own
+            # middleware (Principal bearer / ts_session cookie respectively).
             return await call_next(request)
 
         identity: AgentIdentity | None

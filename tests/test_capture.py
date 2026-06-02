@@ -5,6 +5,8 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import fakeredis.aioredis
 import mcp.types as mt
@@ -37,6 +39,12 @@ async def memory(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[WorkingMemory
         yield mem
     finally:
         await mem.close()
+
+
+def _state(memory: WorkingMemory, *, allow: bool = True) -> SimpleNamespace:
+    """Fake ServerState with a consent store that allows/denies capture."""
+    consent = SimpleNamespace(capture_allowed=AsyncMock(return_value=allow))
+    return SimpleNamespace(working=memory, services=SimpleNamespace(consent=consent))
 
 
 @dataclass
@@ -79,7 +87,7 @@ def test_build_turn_marks_status() -> None:
 async def test_middleware_records_tool_call(
     memory: WorkingMemory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(capture_mod, "get_state", lambda: type("S", (), {"working": memory})())
+    monkeypatch.setattr(capture_mod, "get_state", lambda: _state(memory))
     mw = ToolCallCaptureMiddleware(idle_seconds=1800, max_turns=200)
 
     async def call_next(ctx: _Ctx) -> str:
@@ -98,10 +106,30 @@ async def test_middleware_records_tool_call(
     assert turns[0]["content"] == "memory_recall(query=hi) -> ok"
 
 
+async def test_middleware_skips_without_consent(
+    memory: WorkingMemory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(capture_mod, "get_state", lambda: _state(memory, allow=False))
+    mw = ToolCallCaptureMiddleware(idle_seconds=1800, max_turns=200)
+
+    async def call_next(ctx: _Ctx) -> str:
+        return "result"
+
+    tokens = _bind("cursor")
+    try:
+        out = await mw.on_call_tool(_ctx("memory_recall", {"query": "hi"}), call_next)
+    finally:
+        _unbind(tokens)
+
+    assert out == "result"  # tool call still succeeds
+    # Capture is off without an active consent grant: nothing recorded.
+    assert await memory.list_open_sessions(ORG, "cursor", limit=5) == []
+
+
 async def test_middleware_skips_health(
     memory: WorkingMemory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(capture_mod, "get_state", lambda: type("S", (), {"working": memory})())
+    monkeypatch.setattr(capture_mod, "get_state", lambda: _state(memory))
     mw = ToolCallCaptureMiddleware(idle_seconds=1800, max_turns=200)
 
     async def call_next(ctx: _Ctx) -> str:
@@ -119,7 +147,7 @@ async def test_middleware_skips_health(
 async def test_middleware_skips_when_unauthenticated(
     memory: WorkingMemory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(capture_mod, "get_state", lambda: type("S", (), {"working": memory})())
+    monkeypatch.setattr(capture_mod, "get_state", lambda: _state(memory))
     mw = ToolCallCaptureMiddleware(idle_seconds=1800, max_turns=200)
 
     async def call_next(ctx: _Ctx) -> str:
@@ -153,7 +181,7 @@ async def test_middleware_capture_failure_does_not_break_call(
 async def test_middleware_records_on_tool_error(
     memory: WorkingMemory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(capture_mod, "get_state", lambda: type("S", (), {"working": memory})())
+    monkeypatch.setattr(capture_mod, "get_state", lambda: _state(memory))
     mw = ToolCallCaptureMiddleware(idle_seconds=1800, max_turns=200)
 
     async def call_next(ctx: _Ctx) -> str:

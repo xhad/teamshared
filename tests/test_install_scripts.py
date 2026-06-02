@@ -19,7 +19,7 @@ from teamshared.server.install_api import (
 
 
 def test_unified_install_script() -> None:
-    body = unified_install_script(base_url="https://actx.teamshared.com")
+    body = unified_install_script(base_url="https://teamshared.com")
     assert "#!/usr/bin/env bash" in body
     assert "_ts_choose_harness" in body
     assert "teamshared install:" in body
@@ -29,7 +29,7 @@ def test_unified_install_script() -> None:
     assert "/dev/tty" in body
     assert "_ts_prompt_token" in body
     assert "/get-token" in body
-    assert "https://actx.teamshared.com/mcp" in body
+    assert "https://teamshared.com/mcp" in body
     assert "/install/assets" in body
     # Hermes ships a conversation-capture shell hook wired by the installer.
     assert "_ts_install_hermes_hook" in body
@@ -50,7 +50,7 @@ def test_install_routes() -> None:
             Route("/install/plugin/teamshared.tar.gz", handle_plugin_bundle, methods=["GET"]),
         ]
     )
-    with TestClient(app, base_url="https://actx.teamshared.com") as client:
+    with TestClient(app, base_url="https://teamshared.com") as client:
         index = client.get("/install")
         assert index.status_code == 200
         assert "install.sh" in index.text
@@ -62,7 +62,7 @@ def test_install_routes() -> None:
 
         codex = client.get("/install/assets/codex/mcp.toml")
         assert codex.status_code == 200
-        assert "https://actx.teamshared.com/mcp" in codex.text
+        assert "https://teamshared.com/mcp" in codex.text
         assert "__MCP_URL__" not in codex.text
 
         cursor_mcp = client.get("/install/assets/cursor/mcp.json")

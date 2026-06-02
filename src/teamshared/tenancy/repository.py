@@ -42,13 +42,28 @@ class TenancyRepository:
         return _org(row) if row else None
 
     async def create_user(
-        self, org_id: UUID, email: str, display_name: str | None = None
+        self,
+        org_id: UUID,
+        email: str,
+        display_name: str | None = None,
+        account_id: UUID | None = None,
     ) -> User:
+        """Create (or re-activate) the per-org user row, linked to a global account.
+
+        Idempotent on ``(org_id, email)`` so adding the same email twice just
+        re-activates and (re)links it rather than failing.
+        """
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                "INSERT INTO users (org_id, email, display_name) VALUES (%s, %s, %s) "
+                "INSERT INTO users (org_id, email, display_name, account_id) "
+                "VALUES (%s, %s, %s, %s) "
+                "ON CONFLICT (org_id, email) DO UPDATE SET "
+                "  display_name = COALESCE(EXCLUDED.display_name, users.display_name), "
+                "  status = 'active', "
+                "  account_id = COALESCE(EXCLUDED.account_id, users.account_id), "
+                "  updated_at = now() "
                 "RETURNING id, org_id, email, display_name, status, created_at",
-                (str(org_id), email, display_name),
+                (str(org_id), email, display_name, str(account_id) if account_id else None),
             )
             row = await cur.fetchone()
         if row is None:

@@ -17,7 +17,7 @@ COPY plugins/teamshared ./plugins/teamshared
 COPY install_assets ./install_assets
 
 RUN pip install --upgrade pip \
- && pip install .
+ && pip install '.[neo4j]'
 
 ENV TEAMSHARED_HOST=0.0.0.0 \
     TEAMSHARED_PORT=8077

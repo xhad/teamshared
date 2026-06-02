@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ subject or 'Topic' }}{% endblock %}
+{% block content %}
+  <h1>{{ subject or 'Topic' }}</h1>
+  <p class="sub"><a href="/app/wiki">&larr; All topics</a></p>
+  {% set active_tab = 'topics' %}
+  {% include "_wiki_tabs.html" %}
+
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if curated_html %}
+  <div class="panel">
+    <div class="kb-kind">Curated article &middot; v{{ curated_version }} &middot; updated {{ curated_updated }}</div>
+    <div class="prose">{{ curated_html | safe }}</div>
+  </div>
+  {% endif %}
+
+  {% if groups %}
+  {% if curated_html %}<h2>Source records</h2>{% endif %}
+  <div class="panel">
+    {% for kind, entries in groups %}
+    <div class="kb-kind">{{ kind }}</div>
+    {% for e in entries %}
+    <div class="entry">
+      <div class="body">{{ e.content }}</div>
+      <div class="prov">
+        {{ e.agent or 'unknown' }} &middot; {{ (e.created_at | string)[:16] | replace('T', ' ') }}
+        {% if e.tags %}&middot; {% for t in e.tags %}<span class="tag">{{ t }}</span> {% endfor %}{% endif %}
+        &middot; <a href="/app/memory/{{ e.id }}">source</a>
+      </div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+  </div>
+  {% elif not note %}
+  <p class="muted">No records for this topic.</p>
+  {% endif %}
+{% endblock %}

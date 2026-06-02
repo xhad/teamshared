@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     public_url: str | None = Field(
         default=None,
         description=(
-            "Public HTTPS origin for invite links (e.g. https://actx.teamshared.com). "
+            "Public HTTPS origin for invite links (e.g. https://teamshared.com). "
             "Used by `teamshared token invite-create` when printing share URLs."
         ),
     )
@@ -81,6 +81,35 @@ class Settings(BaseSettings):
         default=None,
         description="HMAC secret for human dashboard JWT sessions (verify_session).",
     )
+    otp_ttl_seconds: int = Field(
+        default=30,
+        description=(
+            "Lifetime of a console sign-in one-time passcode (OTP). Kept short; the "
+            "code is single-use and capped by otp_max_attempts."
+        ),
+    )
+    otp_max_attempts: int = Field(
+        default=5,
+        description="Max wrong OTP entries before the code is invalidated.",
+    )
+    smtp_host: str | None = Field(
+        default=None,
+        description=(
+            "SMTP server host for delivering console sign-in OTP emails. When unset "
+            "(and not in auth_disabled dev mode), codes are not delivered."
+        ),
+    )
+    smtp_port: int = Field(default=587, description="SMTP server port.")
+    smtp_username: str | None = Field(default=None, description="SMTP auth username.")
+    smtp_password: str | None = Field(default=None, description="SMTP auth password.")
+    smtp_from: str | None = Field(
+        default=None,
+        description="From address for console OTP emails (e.g. 'teamshared <no-reply@…>').",
+    )
+    smtp_starttls: bool = Field(
+        default=True,
+        description="Issue STARTTLS after connecting (typical for port 587).",
+    )
     default_org_id: UUID = Field(
         default=DEFAULT_ORG_ID,
         description=(
@@ -91,8 +120,8 @@ class Settings(BaseSettings):
     dashboard_owner_email: str | None = Field(
         default=None,
         description=(
-            "Email of the default-org owner who can sign into the /admin "
-            "dashboard via magic link. Seeded by `teamshared provision-default-org`."
+            "Email of the default-org owner who can sign into the /app "
+            "console via magic link. Seeded by `teamshared provision-default-org`."
         ),
     )
     api_enabled: bool = Field(
@@ -144,7 +173,6 @@ class Settings(BaseSettings):
 
     ollama_base_url: str = "http://localhost:11434"
 
-    neo4j_enabled: bool = False
     neo4j_url: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "neo4j"
@@ -168,6 +196,13 @@ class Settings(BaseSettings):
     capture_max_turns: int = Field(
         default=200,
         description="Force a capture-session rollover once it reaches this many turns.",
+    )
+    curate_threshold: int = Field(
+        default=3,
+        description=(
+            "Number of new facts a subject must accumulate before the curator "
+            "re-synthesizes its wiki page (debounce against per-turn thrashing)."
+        ),
     )
 
     @model_validator(mode="after")

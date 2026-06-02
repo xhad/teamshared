@@ -31,6 +31,13 @@ log = get_logger(__name__)
 class DistillWorker:
     """Long-running consumer for ``working:distill:queue``."""
 
+    # Liveness: beat every _HEARTBEAT_INTERVAL with a _HEARTBEAT_TTL key so the
+    # /health probe reports the worker as up even mid-job (a long summarize()
+    # call must not let the heartbeat lapse), and as down within the TTL once
+    # the process exits.
+    _HEARTBEAT_INTERVAL = 10
+    _HEARTBEAT_TTL = 30
+
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.working = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl)
@@ -47,24 +54,40 @@ class DistillWorker:
     async def start(self) -> None:
         await self.working.connect()
         await self.services.tenant_db.connect()
+        await self.working.heartbeat("distiller", ttl=self._HEARTBEAT_TTL)
+        heartbeat = asyncio.create_task(self._heartbeat_loop())
         log.info("distill_worker_started")
+        try:
+            while not self._stop.is_set():
+                try:
+                    job = await self.working.pop_distill_job(timeout=5)
+                except Exception as exc:
+                    log.warning("distill_pop_failed", error=str(exc))
+                    await asyncio.sleep(1.0)
+                    continue
+                if job is None:
+                    continue
+                try:
+                    await self._handle(job)
+                except SummarizerError as exc:
+                    log.warning("distill_summarizer_failed", error=str(exc), job=job)
+                    await self.working.requeue_distill_job(job)
+                except Exception as exc:
+                    log.error("distill_job_failed", error=str(exc), job=job)
+                    await self.working.requeue_distill_job(job)
+        finally:
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat
+
+    async def _heartbeat_loop(self) -> None:
         while not self._stop.is_set():
             try:
-                job = await self.working.pop_distill_job(timeout=5)
+                await self.working.heartbeat("distiller", ttl=self._HEARTBEAT_TTL)
             except Exception as exc:
-                log.warning("distill_pop_failed", error=str(exc))
-                await asyncio.sleep(1.0)
-                continue
-            if job is None:
-                continue
-            try:
-                await self._handle(job)
-            except SummarizerError as exc:
-                log.warning("distill_summarizer_failed", error=str(exc), job=job)
-                await self.working.requeue_distill_job(job)
-            except Exception as exc:
-                log.error("distill_job_failed", error=str(exc), job=job)
-                await self.working.requeue_distill_job(job)
+                log.warning("distill_heartbeat_failed", error=str(exc))
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(self._stop.wait(), timeout=self._HEARTBEAT_INTERVAL)
 
     async def stop(self) -> None:
         self._stop.set()
@@ -128,6 +151,19 @@ class DistillWorker:
                 subject=topic, tags=["decision"], source="agent",
                 source_ref={"session_id": session_id, "rationale": decision.get("rationale")},
             )
+
+        # Feed the wiki: count new facts per subject and enqueue (debounced)
+        # curation when a subject crosses the threshold. Best-effort; a curation
+        # hiccup must never fail the distill job.
+        subjects = {f.get("subject") for f in facts if f.get("subject")}
+        if topic and decisions:
+            subjects.add(topic)
+        threshold = getattr(self.settings, "curate_threshold", 3)
+        for subject in subjects:
+            try:
+                await self.working.mark_subject_dirty(org_id, subject, threshold=threshold)
+            except Exception as exc:
+                log.warning("curate_enqueue_failed", subject=subject, error=str(exc))
 
         log.info(
             "distill_job_complete",

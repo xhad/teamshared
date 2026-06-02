@@ -58,12 +58,32 @@ Skip sessions for one-shot questions.
 - **Writes:** `memory_remember`, `memory_session_*`, `memory_procedure_set`, and
   `memory_graph_relate` attribute to the bearer token unless `agent=` overrides.
 
+## Human console (`/app`)
+
+teamshared has a web console for humans at `<server>/app`
+(e.g. https://teamshared.com/app). When a teammate asks how to *see* the
+memory, sign in, get an API key, onboard, or manage their team, point them there —
+these are human/browser actions, not MCP tools:
+
+- **Sign in:** any email + a one-time passcode (no password). First sign-in
+  creates that email's own private org; they can create more orgs and switch
+  between them from the header.
+- **Memory wiki** (`/app/wiki`): semantic facts, the episodic timeline, and
+  playbooks rendered as a browsable, human-readable knowledge base.
+- **Manage:** agents, **API keys** (`tsk_…`, the bearer token MCP/agents use),
+  people (add a teammate by email), approvals, and capture consent.
+
+A fresh self-serve org starts empty and isolated; joining the shared team brain
+is an admin action (People → add member). The public, no-auth status page is at
+`<server>/memory`.
+
 ## Tool reference
 
 ### `health`
 
 Probe server liveness and dependencies. Returns
-`{"status": "ok"|"degraded", "components": {"redis", "postgres", "mem0"}}`.
+`{"status": "ok"|"degraded", "components": {...}}` covering redis, postgres, and
+the memory/LLM backends (semantic, distiller, curator, graph, ollama).
 Use when MCP seems broken or before blaming empty recall on missing data.
 Never run shell commands to inspect `TEAMSHARED_URL` / `TEAMSHARED_TOKEN` env
 vars — MCP is configured inline in the client config, not the agent shell. If

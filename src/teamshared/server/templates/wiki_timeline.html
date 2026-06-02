@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Timeline{% endblock %}
+{% block content %}
+  <h1>Timeline</h1>
+  <p class="sub">The team's episodic journal &mdash; distilled sessions and logged events, newest first.</p>
+  {% set active_tab = 'timeline' %}
+  {% include "_wiki_tabs.html" %}
+
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if entries %}
+  <div class="panel">
+    {% for e in entries %}
+    <div class="entry">
+      <div class="prov">{{ (e.created_at | string)[:16] | replace('T', ' ') }} &middot; {{ e.agent or 'unknown' }}
+        {% if e.subject %}&middot; {{ e.subject }}{% endif %}
+        &middot; <a href="/app/memory/{{ e.id }}">permalink</a></div>
+      <div class="body">{{ e.content }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% elif not note %}
+  <p class="muted">No timeline entries yet.</p>
+  {% endif %}
+{% endblock %}

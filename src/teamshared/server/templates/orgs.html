@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Organizations{% endblock %}
+{% block content %}
+  <h1>Organizations</h1>
+  <p class="sub">Every org your account ({{ who }}) belongs to. Switch from the header, or create a new one.</p>
+
+  <div class="panel">
+    {% if orgs %}
+    <table>
+      <thead><tr><th>Organization</th><th>Slug</th><th>Your role</th><th></th></tr></thead>
+      <tbody>
+        {% for o in orgs %}
+        <tr>
+          <td>{{ o.name }}</td>
+          <td class="muted">{{ o.slug }}</td>
+          <td>{{ o.role or '\u2014' }}</td>
+          <td class="actions">
+            {% if o.org_id|string == active_org_id %}
+            <span class="status-pill active">active</span>
+            {% else %}
+            <form method="post" action="/app/orgs/switch">
+              <input type="hidden" name="org_id" value="{{ o.org_id }}" />
+              <button type="submit" class="ghost">Switch</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No organizations yet.</p>{% endif %}
+  </div>
+
+  <h2>Create a new organization</h2>
+  <div class="panel">
+    <form method="post" action="/app/orgs/create" class="inline-form">
+      <input type="text" name="name" placeholder="Organization name" required />
+      <button type="submit">Create org</button>
+    </form>
+    <p class="muted" style="margin:.5rem 0 0; font-size:.82rem">
+      You become its owner and are switched into it. Invite teammates from the People page.
+    </p>
+  </div>
+{% endblock %}

@@ -137,10 +137,16 @@ class ToolCallCaptureMiddleware(Middleware):
             name = getattr(message, "name", None)
             if not name or name in _SKIP_TOOLS:
                 return
-            content = _build_turn(name, getattr(message, "arguments", None), ok=ok)
             principal = current_principal()
             org_id = principal.org_id if principal else get_settings().default_org_id
             state = get_state()
+            # Consent-first: never record without an active grant covering tool
+            # calls. A missing grant (or a consent-store failure) fails closed.
+            if not await state.services.consent.capture_allowed(
+                org_id, identity.agent, "tool_calls"
+            ):
+                return
+            content = _build_turn(name, getattr(message, "arguments", None), ok=ok)
             await state.working.record_tool_call(
                 org_id,
                 identity.agent,

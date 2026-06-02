@@ -83,6 +83,7 @@ def build_api_app(
             raise ApiError(400, "bad_request", "org_slug, org_name, owner_email are required")
         result = await signup_org(
             repo=services.tenancy, api_keys=services.api_keys, roles=services.roles,
+            accounts=services.accounts,
             org_slug=slug, org_name=name, owner_email=email,
         )
         return JSONResponse(

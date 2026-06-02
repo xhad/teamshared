@@ -7,6 +7,7 @@ import uuid
 import pytest
 
 from teamshared.config import get_settings
+from teamshared.identity.accounts import AccountStore
 from teamshared.identity.api_keys import ApiKeyStore
 from teamshared.identity.hashing import hash_secret, verify_secret
 from teamshared.identity.provisioning import signup_org
@@ -40,6 +41,7 @@ async def test_signup_authenticate_and_rbac() -> None:
             repo=repo,
             api_keys=keys,
             roles=roles,
+            accounts=AccountStore(db),
             org_slug=f"org-{uuid.uuid4().hex[:8]}",
             org_name="Acme",
             owner_email="owner@acme.test",

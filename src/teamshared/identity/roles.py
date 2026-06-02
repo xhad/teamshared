@@ -49,6 +49,26 @@ class RoleStore:
             )
             return cur.rowcount > 0
 
+    async def unbind_role(
+        self,
+        *,
+        org_id: UUID,
+        principal_type: PrincipalType,
+        principal_id: UUID,
+        role_name: str,
+    ) -> bool:
+        """Remove a role binding from a principal. False if it wasn't bound."""
+        role_id = await self.resolve_role_id(org_id, role_name)
+        if role_id is None:
+            return False
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                "DELETE FROM role_bindings WHERE principal_type = %s "
+                "AND principal_id = %s AND role_id = %s",
+                (principal_type, str(principal_id), str(role_id)),
+            )
+            return cur.rowcount > 0
+
     async def list_bindings(self, org_id: UUID) -> list[dict[str, object]]:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(

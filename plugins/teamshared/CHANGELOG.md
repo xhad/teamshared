@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-06-01
+
+- Rule + skill now point teammates to the **web console** (`/app`) for human
+  actions: self-service OTP sign-in, multi-tenant orgs (own org on first login,
+  create/switch, add members), the browsable memory wiki, and managing agents,
+  API keys, approvals, and consent.
+- Onboarding (README + MARKETPLACE) updated: mint a bearer token from the console
+  **API Keys** page (self-service) in addition to `/get-token` / invite links.
+- `health` tool description corrected to reflect the full component set.
+
 ## 0.2.0 — 2026-05-28
 
 - Unified `teamshared-memory` and continual-learning into one **teamshared** plugin.

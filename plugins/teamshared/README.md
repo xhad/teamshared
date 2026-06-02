@@ -5,7 +5,7 @@ AGENTS.md continual learning, and copy-paste snippets for other clients.
 
 | Component | Purpose |
 |---|---|
-| `rules/teamshared.mdc` | Recall-first protocol (`alwaysApply`) |
+| `rules/teamshared.mdc` | Recall-first protocol + console (`/app`) pointer (`alwaysApply`) |
 | `skills/teamshared/` | Memory tool chooser + session workflow |
 | `skills/continual-learning/` | Orchestrates AGENTS.md updates from transcripts |
 | `hooks/` | Stop hook — cadence gating + teamshared-backed state |
@@ -18,7 +18,7 @@ The continual-learning hook is based on [Cursor's continual-learning plugin](htt
 
 ### From marketplace (recommended)
 
-1. **Settings → Plugins → Add marketplace** → `https://github.com/xhad/actx`
+1. **Settings → Plugins → Add marketplace** → `https://github.com/xhad/teamshared`
 2. Run **`/add-plugin teamshared`** or enable it under Settings → Plugins
 3. Add the MCP server to `~/.cursor/mcp.json` (below) and reload
 
@@ -32,7 +32,13 @@ ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 
 ## Setup
 
-1. **teamshared server + bearer token** — get one from your admin or your server's `/get-token` page.
+1. **teamshared server + bearer token** — sign in to the web console at
+   `<server>/app` (e.g. https://teamshared.com/app) with your email and a
+   one-time passcode, then mint a key under **API Keys** (`tsk_…`). The
+   `/get-token` page works too, or ask an admin for an invite link. First sign-in
+   is self-service: any email gets its own org, and you can create/switch orgs and
+   add teammates (People → add member) from the console. The bearer token below is
+   what Cursor's MCP client uses.
 2. **MCP server config** — put the URL and bearer token **directly** in `~/.cursor/mcp.json`
    (no environment variables). The `/get-token` page and `install.sh` write this for you;
    to do it manually, merge:
@@ -41,7 +47,7 @@ ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 {
   "mcpServers": {
     "teamshared": {
-      "url": "https://actx.teamshared.com/mcp",
+      "url": "https://teamshared.com/mcp",
       "headers": { "Authorization": "Bearer teamshared_..." }
     }
   }
@@ -56,7 +62,11 @@ Do not install the upstream Cursor `continual-learning` marketplace plugin — t
 ## What you get
 
 - **MCP tools**: `memory_recall`, `memory_remember`, `memory_session_*`, etc.
-- **Rule**: injects the recall-first protocol on every agent turn.
+- **Rule**: injects the recall-first protocol on every agent turn, and points
+  teammates to the web console (`/app`) for human actions.
+- **Web console** (`<server>/app`): self-service OTP sign-in, multi-tenant orgs
+  (own org on first login, create/switch, add members), a browsable memory wiki,
+  and management of agents, API keys, approvals, and capture consent.
 - **Continual learning**: on cadence, updates `AGENTS.md` from chat transcripts;
   state keys `continual-learning/cadence` and `continual-learning/index` on
   teamshared (token + repo scoped), with local fallback under

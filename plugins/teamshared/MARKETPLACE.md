@@ -11,7 +11,7 @@ Once this repo is public (or teammates have access):
 2. Paste the repository URL:
 
    ```
-   https://github.com/xhad/actx
+   https://github.com/xhad/teamshared
    ```
 
 3. Install the plugin:
@@ -29,7 +29,7 @@ Once this repo is public (or teammates have access):
    {
      "mcpServers": {
        "teamshared": {
-         "url": "https://actx.teamshared.com/mcp",
+         "url": "https://teamshared.com/mcp",
          "headers": { "Authorization": "Bearer teamshared_..." }
        }
      }
@@ -55,7 +55,10 @@ ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 | Bun | `stop` hook runs TypeScript via `bun run` |
 | Open repo with `AGENTS.md` | Continual learning writes learned bullets there |
 
-Get a token: open your server's `/get-token` page or ask an admin for an invite link.
+Get a token: sign in to the web console at `<server>/app` (self-service — any
+email + a one-time passcode; first sign-in creates your own org) and mint one
+under **API Keys**, open your server's `/get-token` page, or ask an admin for an
+invite link.
 
 ## Publish to Cursor Marketplace (official listing)
 
@@ -87,7 +90,7 @@ Cursor reviews all marketplace plugins manually. Checklist before submitting at
 ## Repo layout (marketplace)
 
 ```
-actx/
+teamshared/
 ├── .cursor-plugin/
 │   └── marketplace.json       # indexes plugins/teamshared
 └── plugins/

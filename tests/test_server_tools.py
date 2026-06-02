@@ -46,6 +46,7 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     working = MagicMock()
     working.client = MagicMock()
     working.client.ping = AsyncMock(return_value=True)
+    working.last_heartbeat = AsyncMock(return_value="2026-01-01T00:00:00+00:00")
 
     # services + tenant_db.admin() for the health probe.
     conn = MagicMock()
@@ -53,6 +54,7 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     conn.fetchone = AsyncMock(return_value=(1,))
     services = MagicMock()
     services.tenant_db.admin = MagicMock(return_value=_AsyncCM(conn))
+    services.vector_store.health = AsyncMock(return_value="text-embedding-3-small")
 
     facade = MagicMock()
     facade.resolver.anonymous = AsyncMock(
@@ -84,8 +86,15 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.state_get = AsyncMock(return_value={"repo": "r", "key": "k", "value": None})
     facade.state_set = AsyncMock(return_value={"repo": "r", "key": "k", "stored": True})
 
+    settings = MagicMock()
+    settings.embed_provider = "openai"
+    settings.llm_provider = "openai"
+
+    graph = MagicMock()
+    graph.verify = AsyncMock(return_value=None)
+
     state = ServerState(
-        settings=MagicMock(),
+        settings=settings,
         tokens=MagicMock(),
         invites=MagicMock(),
         working=working,
@@ -94,7 +103,7 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
         services=services,
         facade=facade,
         audit=MagicMock(),
-        graph=None,
+        graph=graph,
     )
     set_state(state)
     yield mcp, state
@@ -110,8 +119,17 @@ async def _call(mcp: FastMCP, tool: str, **kwargs: Any) -> Any:
 async def test_health_tool(mcp_with_mocks: tuple[FastMCP, ServerState]) -> None:
     mcp, _ = mcp_with_mocks
     data = await _call(mcp, "health")
-    assert data["components"]["redis"] == "ok"
-    assert data["components"]["postgres"] == "ok"
+    assert data["status"] == "ok"
+    assert "version" in data
+    comps = data["components"]
+    assert comps["server"] == "ok"
+    assert comps["redis"] == "ok"
+    assert comps["postgres"] == "ok"
+    assert comps["semantic"] == "ok (text-embedding-3-small)"
+    assert comps["distiller"] == "ok"
+    assert comps["graph"] == "ok"
+    # Ollama is unused in the mock (openai providers); "disabled" must not degrade.
+    assert comps["ollama"] == "disabled"
 
 
 async def test_memory_remember_delegates_to_facade(

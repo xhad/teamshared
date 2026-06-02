@@ -250,7 +250,13 @@ def _health_badges(health: Any) -> str:
     overall_dot = "ok" if overall == "ok" else "warn"
     badges = [f'<span class="badge"><span class="dot {overall_dot}"></span>{escape(str(overall))}</span>']
     for name, value in (health.get("components") or {}).items():
-        dot = "ok" if value == "ok" else ("warn" if value == "not_ready" else "bad")
+        text = str(value)
+        if text == "ok" or text.startswith("ok "):
+            dot = "ok"
+        elif text in ("not_ready", "disabled"):
+            dot = "warn"
+        else:
+            dot = "bad"
         badges.append(
             f'<span class="badge"><span class="dot {dot}"></span>{escape(str(name))}: {escape(str(value))}</span>'
         )
@@ -340,7 +346,7 @@ def _render_page(
 <body>
   <div class="bar-wrap">
     <h1>teamshared memory status</h1>
-    <p class="muted">Shared brain across the team. <a href="/">Home</a> &middot; <a href="/get-token">Get a token</a></p>
+    <p class="muted">Shared brain across the team. <a href="/">Home</a> &middot; <a href="/app">Team console</a> &middot; <a href="/get-token">Get a token</a></p>
     {_health_badges(health)}
 
     <h2>Overview</h2>

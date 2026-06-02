@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Sign in &middot; TeamShared</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07080d; --panel: #11131d; --panel-2: #161927;
+      --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.16);
+      --text: #f4f5fb; --muted: #9aa0b4; --indigo: #6366f1; --indigo-bright: #818cf8;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      position: relative; overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+    body::before { content: ""; position: absolute; inset: -30% 0 auto 0; height: 620px; pointer-events: none;
+      background:
+        radial-gradient(600px 380px at 50% 0%, rgba(99,102,241,.32), transparent 70%),
+        radial-gradient(500px 320px at 20% 10%, rgba(129,140,248,.16), transparent 70%),
+        radial-gradient(500px 320px at 80% 5%, rgba(56,189,248,.12), transparent 70%); }
+    form.login { position: relative; width: 380px; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 18px; padding: 2.25rem; box-shadow: 0 40px 90px -50px rgba(99,102,241,.7); }
+    .brand { display: flex; align-items: center; gap: .55rem; font-weight: 700; color: #fff; font-size: 1.25rem; margin: 0 0 1.4rem; }
+    .brand-mark { width: 1.15rem; height: 1.15rem; border-radius: 6px;
+      background: linear-gradient(135deg, var(--indigo-bright), var(--indigo)); box-shadow: 0 0 18px rgba(99,102,241,.6); }
+    h1 { font-size: 1.4rem; margin: 0 0 1rem; letter-spacing: -.02em; }
+    label { display: block; margin-bottom: .35rem; font-weight: 600; font-size: .9rem; }
+    input[type=email], input[name=code] { width: 100%; padding: .65rem; border: 1px solid var(--border-strong);
+      border-radius: 9px; font-size: 1rem; background: var(--panel-2); color: var(--text); }
+    input[type=email]::placeholder { color: #5b6172; }
+    input:focus { outline: none; border-color: var(--indigo); box-shadow: 0 0 0 3px rgba(99,102,241,.25); }
+    input[name=code] { letter-spacing: .35rem; text-align: center; font-size: 1.4rem; }
+    button { margin-top: 1rem; width: 100%; padding: .7rem 1rem; background: var(--indigo); color: #fff; border: 0;
+      border-radius: 9px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background .15s ease;
+      box-shadow: 0 8px 24px -8px rgba(99,102,241,.8); }
+    button:hover { background: var(--indigo-bright); }
+    .note { background: rgba(99,102,241,.12); border: 1px solid rgba(129,140,248,.35); border-radius: 9px; padding: .7rem .9rem;
+      margin: 0 0 1rem; font-size: .88rem; color: #c7cdf0; }
+    .note.err { background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.35); color: #fca5a5; }
+    .otp { display: block; margin-top: .4rem; font-size: 1.6rem; font-weight: 700;
+      letter-spacing: .35rem; color: #fff; }
+    .alt { margin: .9rem 0 0; font-size: .85rem; text-align: center; }
+    .alt a { color: var(--muted); }
+    .alt a:hover { color: #fff; }
+    .tagline { color: var(--muted); font-size: .9rem; margin: -.5rem 0 1.4rem; }
+  </style>
+</head>
+<body>
+  {% if stage == 'code' %}
+  <form class="login" method="post" action="/login/verify">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>TeamShared</div>
+    {% if message %}<div class="note{% if error %} err{% endif %}">{{ message }}
+      {% if otp_code %}<strong class="otp" data-otp="{{ otp_code }}">{{ otp_code }}</strong>{% endif %}</div>{% endif %}
+    <input type="hidden" name="email" value="{{ email }}" />
+    <label for="code">One-time code</label>
+    <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code"
+      pattern="[0-9]*" maxlength="6" placeholder="000000" required autofocus />
+    <button type="submit">Verify &amp; sign in</button>
+    <p class="alt"><a href="/login">Use a different email</a></p>
+  </form>
+  {% else %}
+  <form class="login" method="post" action="/login">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>TeamShared</div>
+    <p class="tagline">Sign in or create your free account &mdash; just your email.</p>
+    {% if message %}<div class="note{% if error %} err{% endif %}">{{ message }}</div>{% endif %}
+    <label for="email">Your email</label>
+    <input id="email" name="email" type="email" placeholder="you@example.com" required autofocus />
+    <button type="submit">Send code</button>
+  </form>
+  {% endif %}
+</body>
+</html>

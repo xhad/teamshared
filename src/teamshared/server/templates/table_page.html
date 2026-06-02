@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ section_title }}{% endblock %}
+{% block content %}
+  <h1>{{ section_title }}</h1>
+  {% if subtitle %}<p class="sub">{{ subtitle }}</p>{% endif %}
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+  <div class="panel">
+    {% if rows %}
+    <table>
+      <thead><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% elif not note %}
+    <p class="muted">Nothing here yet.</p>
+    {% endif %}
+  </div>
+{% endblock %}

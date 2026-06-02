@@ -16,6 +16,8 @@ distillation worker (``working:distill:queue``, global; the job payload carries
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import hmac
 import json
 import secrets
 from datetime import UTC, datetime
@@ -32,6 +34,36 @@ log = get_logger(__name__)
 DISTILL_QUEUE_KEY = "working:distill:queue"
 DISTILL_DEAD_LETTER_KEY = "working:distill:dead"
 MAX_DISTILL_ATTEMPTS = 3
+
+# Curation queue: subjects whose wiki page needs (re)synthesis. A subject is
+# enqueued once it accumulates CURATE_THRESHOLD new facts (debounce), and a
+# pending set keeps a busy subject from being queued repeatedly before the
+# CuratorWorker drains it.
+CURATE_QUEUE_KEY = "working:curate:queue"
+CURATE_DEAD_LETTER_KEY = "working:curate:dead"
+CURATE_PENDING_KEY = "working:curate:pending"
+MAX_CURATE_ATTEMPTS = 3
+
+
+def _curate_count_key(org_id: UUID | str, subject: str) -> str:
+    return f"working:{_org(org_id)}:curate:count:{subject}"
+
+# Console sign-in one-time passcodes (OTP). Stored hashed under a short TTL,
+# keyed by email, single-use, with a wrong-attempt cap.
+_OTP_PREFIX = "auth:otp:login:"
+
+
+def _otp_key(email: str) -> str:
+    return f"{_OTP_PREFIX}{email.strip().lower()}"
+
+
+def _hash_otp(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+# Liveness heartbeats: a process (e.g. the distill worker) periodically writes a
+# short-TTL key so the health probe can tell whether it is still running.
+_HEARTBEAT_PREFIX = "working:heartbeat:"
 
 # Topic stamped on sessions assembled implicitly by the tool-call capture
 # middleware (see ``teamshared.server.capture``), as opposed to sessions an
@@ -83,6 +115,60 @@ class WorkingMemory:
         if self._client is None:
             raise RuntimeError("WorkingMemory not connected; call connect() first")
         return self._client
+
+    # --- console sign-in OTP --------------------------------------------
+
+    async def set_login_otp(
+        self,
+        email: str,
+        code: str,
+        *,
+        ttl: int = 30,
+        max_attempts: int = 5,
+    ) -> None:
+        """Store a hashed, short-lived sign-in code for ``email`` (single-use).
+
+        Email-only: the code proves ownership of an email address, and the
+        console resolves which org(s) that email belongs to *after* verifying.
+        Overwrites any prior code for the same email, so requesting a new code
+        invalidates the old one.
+        """
+        key = _otp_key(email)
+        pipe = self.client.pipeline()
+        pipe.delete(key)
+        pipe.hset(
+            key,
+            mapping={
+                "hash": _hash_otp(code),
+                "attempts": "0",
+                "max": str(max_attempts),
+            },
+        )
+        pipe.expire(key, ttl)
+        await pipe.execute()
+
+    async def verify_login_otp(self, email: str, code: str) -> bool:
+        """Check a sign-in code for ``email``. Returns ``True`` on success.
+
+        Codes are single-use (consumed on success) and capped at ``max``
+        wrong attempts, after which the code is dropped. Expiry is enforced by
+        the Redis TTL set in :meth:`set_login_otp`.
+        """
+        key = _otp_key(email)
+        data = await self.client.hgetall(key)
+        if not data:
+            return False
+        attempts = int(data.get("attempts", "0"))
+        max_attempts = int(data.get("max", "5"))
+        if attempts >= max_attempts:
+            await self.client.delete(key)
+            return False
+        if code and hmac.compare_digest(_hash_otp(code), data.get("hash", "")):
+            await self.client.delete(key)
+            return True
+        # Wrong code: burn an attempt but keep the existing TTL.
+        await self.client.hincrby(key, "attempts", 1)
+        return False
 
     async def open_session(
         self,
@@ -322,6 +408,18 @@ class WorkingMemory:
             )
         return out
 
+    async def heartbeat(self, component: str, *, ttl: int = 30) -> None:
+        """Stamp a short-TTL liveness key for ``component`` (e.g. ``distiller``)."""
+        await self.client.set(
+            f"{_HEARTBEAT_PREFIX}{component}",
+            datetime.now(UTC).isoformat(),
+            ex=ttl,
+        )
+
+    async def last_heartbeat(self, component: str) -> str | None:
+        """Return the last heartbeat timestamp for ``component`` (None if stale/absent)."""
+        return await self.client.get(f"{_HEARTBEAT_PREFIX}{component}")
+
     async def pop_distill_job(self, timeout: int = 5) -> dict[str, Any] | None:
         """Blocking-pop the next distillation job. Returns None on timeout."""
         result = await self.client.blpop([DISTILL_QUEUE_KEY], timeout=timeout)
@@ -349,6 +447,64 @@ class WorkingMemory:
             session_id=job.get("session_id"),
             attempts=attempts,
         )
+
+    async def mark_subject_dirty(
+        self, org_id: UUID | str, subject: str, *, threshold: int = 3
+    ) -> bool:
+        """Count one new fact for ``subject``; enqueue curation on the Nth.
+
+        Debounce: increment a per-subject counter; once it reaches ``threshold``
+        reset it and enqueue the subject for (re)curation. Returns True when a
+        curation job was enqueued this call.
+        """
+        subject = (subject or "").strip()
+        if not subject:
+            return False
+        key = _curate_count_key(org_id, subject)
+        count = int(await self.client.incr(key))
+        await self.client.expire(key, self._default_ttl)
+        if count < max(1, threshold):
+            return False
+        await self.client.delete(key)
+        return await self.enqueue_curate(org_id, subject)
+
+    async def enqueue_curate(self, org_id: UUID | str, subject: str) -> bool:
+        """Queue ``subject`` for curation unless it is already pending.
+
+        Returns True if newly enqueued, False if a job for it was already queued.
+        """
+        member = f"{_org(org_id)}::{subject}"
+        added = await self.client.sadd(CURATE_PENDING_KEY, member)
+        if not added:
+            return False
+        await self.client.rpush(
+            CURATE_QUEUE_KEY, json.dumps({"org_id": _org(org_id), "subject": subject})
+        )
+        log.info("subject_enqueued_for_curation", org_id=_org(org_id), subject=subject)
+        return True
+
+    async def pop_curate_job(self, timeout: int = 5) -> dict[str, Any] | None:
+        """Blocking-pop the next curation job; clears its pending flag. None on timeout."""
+        result = await self.client.blpop([CURATE_QUEUE_KEY], timeout=timeout)
+        if result is None:
+            return None
+        _, payload = result
+        job: dict[str, Any] = json.loads(payload)
+        member = f"{job.get('org_id')}::{job.get('subject')}"
+        await self.client.srem(CURATE_PENDING_KEY, member)
+        return job
+
+    async def requeue_curate_job(self, job: dict[str, Any]) -> None:
+        """Retry a failed curation job or move it to the dead-letter queue."""
+        attempts = int(job.get("attempts", 0)) + 1
+        job["attempts"] = attempts
+        payload = json.dumps(job)
+        if attempts >= MAX_CURATE_ATTEMPTS:
+            await self.client.rpush(CURATE_DEAD_LETTER_KEY, payload)
+            log.error("curate_job_dead_letter", subject=job.get("subject"), attempts=attempts)
+            return
+        await self.client.rpush(CURATE_QUEUE_KEY, payload)
+        log.warning("curate_job_requeued", subject=job.get("subject"), attempts=attempts)
 
     async def _require_open(self, org_id: UUID | str, session_id: str) -> None:
         meta = await self.client.hgetall(_session_key(org_id, session_id))

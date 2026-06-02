@@ -22,7 +22,7 @@ def test_normalize_agent_type() -> None:
 def test_cursor_setup_includes_mcp_json() -> None:
     setup = agent_setup(
         "cursor",
-        mcp_url="https://actx.teamshared.com/mcp",
+        mcp_url="https://teamshared.com/mcp",
         token="teamshared_testtoken",
     )
     assert setup is not None
@@ -49,7 +49,7 @@ def test_load_teamshared_memory_rule_mdc() -> None:
 def test_codex_setup_uses_inline_token_toml() -> None:
     setup = agent_setup(
         "codex",
-        mcp_url="https://actx.teamshared.com/mcp",
+        mcp_url="https://teamshared.com/mcp",
         token="teamshared_testtoken",
     )
     assert setup is not None

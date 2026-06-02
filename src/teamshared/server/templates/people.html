@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}People{% endblock %}
+{% block content %}
+  <h1>People</h1>
+  <p class="sub">Members of this organization and their roles.</p>
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  <div class="panel" style="margin-bottom:1rem">
+    <form method="post" action="/app/people/add" class="inline-form">
+      <input type="email" name="email" placeholder="teammate@example.com" required />
+      <select name="role">
+        {% for r in roles %}<option value="{{ r }}"{% if r == 'member' %} selected{% endif %}>{{ r }}</option>{% endfor %}
+      </select>
+      <button type="submit">Add member</button>
+    </form>
+    <p class="muted" style="margin:.5rem 0 0; font-size:.82rem">
+      They can sign in with this email (one-time code) and will land in this org.
+    </p>
+  </div>
+
+  <div class="panel">
+    {% if members %}
+    <table>
+      <thead><tr><th>Email</th><th>Name</th><th>Membership</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for m in members %}
+        <tr>
+          <td>{{ m.email }}</td>
+          <td>{{ m.display_name or '\u2014' }}</td>
+          <td>{{ m.role }}</td>
+          <td>{{ m.status }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No members yet.</p>{% endif %}
+  </div>
+
+  <h2>Role bindings</h2>
+  <div class="panel">
+    <form method="post" action="/app/people/grant" class="inline-form">
+      <select name="principal_id" required>
+        <option value="">Member&hellip;</option>
+        {% for m in members %}<option value="{{ m.user_id }}">{{ m.email }}</option>{% endfor %}
+      </select>
+      <select name="role_name" required>
+        {% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select>
+      <button type="submit">Grant role</button>
+    </form>
+  </div>
+
+  <div class="panel" style="margin-top:1rem">
+    {% if bindings %}
+    <table>
+      <thead><tr><th>Principal</th><th>Type</th><th>Role</th><th></th></tr></thead>
+      <tbody>
+        {% for b in bindings %}
+        <tr>
+          <td>{{ b.principal_id }}</td>
+          <td>{{ b.principal_type }}</td>
+          <td>{{ b.role }}</td>
+          <td class="actions">
+            <form method="post" action="/app/people/revoke">
+              <input type="hidden" name="principal_type" value="{{ b.principal_type }}" />
+              <input type="hidden" name="principal_id" value="{{ b.principal_id }}" />
+              <input type="hidden" name="role_name" value="{{ b.role }}" />
+              <button type="submit" class="danger">Revoke</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No explicit role bindings.</p>{% endif %}
+  </div>
+{% endblock %}

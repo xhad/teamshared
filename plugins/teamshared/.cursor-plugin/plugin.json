@@ -1,13 +1,13 @@
 {
-  "name": "teamshared",
-  "displayName": "teamshared",
-  "version": "0.2.0",
-  "description": "Shared team memory for Cursor: MCP wiring, recall-first rules, AGENTS.md continual learning, and client snippets for Hermes and Claude.",
+  "name": "TeamShared",
+  "displayName": "TeamShared",
+  "version": "0.3.0",
+  "description": "Shared team memory for Cursor: MCP wiring, recall-first rules, a self-service web console (/app), AGENTS.md continual learning, and client snippets for Hermes and Claude.",
   "author": {
     "name": "Sapien"
   },
-  "homepage": "https://github.com/xhad/actx/tree/main/plugins/teamshared",
-  "repository": "https://github.com/xhad/actx",
+  "homepage": "https://github.com/xhad/teamshared/tree/main/plugins/teamshared",
+  "repository": "https://github.com/xhad/teamshared",
   "license": "MIT",
   "logo": "assets/logo.svg",
   "keywords": [

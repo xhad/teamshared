@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>{% block title %}Console{% endblock %} &middot; TeamShared</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07080d;
+      --bg-soft: #0d0f17;
+      --panel: #11131d;
+      --panel-2: #161927;
+      --border: rgba(255,255,255,0.08);
+      --border-strong: rgba(255,255,255,0.16);
+      --text: #f4f5fb;
+      --muted: #9aa0b4;
+      --faint: #6b7180;
+      --indigo: #6366f1;
+      --indigo-bright: #818cf8;
+      --slate: #0d0f17;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: var(--indigo-bright); text-decoration: none; }
+    a:hover { color: #fff; }
+    .layout { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+    aside { background: var(--bg-soft); border-right: 1px solid var(--border); color: var(--muted); padding: 1.25rem 0; }
+    aside .brand { display: flex; align-items: center; gap: .55rem; font-weight: 700; color: #fff;
+      font-size: 1.12rem; padding: 0 1.25rem 1.1rem; }
+    .brand-mark { width: 1.05rem; height: 1.05rem; border-radius: 6px; flex: none;
+      background: linear-gradient(135deg, var(--indigo-bright), var(--indigo)); box-shadow: 0 0 18px rgba(99,102,241,.6); }
+    aside nav { display: flex; flex-direction: column; gap: .15rem; padding: 0 .6rem; }
+    aside nav a { color: var(--muted); padding: .5rem .8rem; border-radius: 8px; font-size: .92rem; font-weight: 500; }
+    aside nav a:hover { background: rgba(255,255,255,.05); color: #fff; }
+    aside nav a.active { background: var(--indigo); color: #fff; }
+    .main { display: flex; flex-direction: column; min-width: 0; }
+    header.topbar { display: flex; align-items: center; justify-content: space-between;
+      padding: .85rem 1.5rem; background: rgba(13,15,23,.72); backdrop-filter: saturate(160%) blur(12px);
+      border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+    header.topbar .org { font-weight: 600; color: #fff; }
+    header.topbar .who { font-size: .88rem; color: var(--muted); }
+    header.topbar .who a { margin-left: .5rem; }
+    main.content { padding: 1.75rem; max-width: 1200px; }
+    h1 { font-size: 1.55rem; margin: 0 0 .25rem; letter-spacing: -.02em; color: #fff; }
+    h2 { font-size: 1.1rem; margin: 1.75rem 0 .75rem; letter-spacing: -.01em; color: #fff; }
+    .sub { color: var(--muted); margin: 0 0 .5rem; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1rem 1.25rem;
+      transition: border-color .15s ease, transform .15s ease; }
+    .card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+    .card .num { font-size: 2rem; font-weight: 700; color: #fff; }
+    .card .label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+    .card .hint { font-size: .78rem; color: var(--faint); margin-top: .25rem; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem 1.25rem; }
+    .panel h3 { margin: 0 0 .9rem; font-size: 1rem; color: #fff; }
+    .badges { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0 0; }
+    .badge { display: inline-flex; align-items: center; gap: .4rem; padding: .25rem .6rem;
+      border-radius: 999px; font-size: .8rem; background: rgba(255,255,255,.05); border: 1px solid var(--border); }
+    .dot { width: .6rem; height: .6rem; border-radius: 50%; background: var(--faint); }
+    .dot.ok { background: #34d399; } .dot.bad { background: #f87171; } .dot.warn { background: #fbbf24; }
+    .bar-row { display: grid; grid-template-columns: 130px 1fr 48px; align-items: center; gap: .6rem; margin: .4rem 0; }
+    .bar-row .name { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-row .track { background: rgba(255,255,255,.06); border-radius: 6px; height: 14px; overflow: hidden; }
+    .bar-row .fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, var(--indigo), var(--indigo-bright)); }
+    .bar-row .val { font-size: .8rem; text-align: right; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .72rem; letter-spacing: .03em; }
+    .muted { color: var(--faint); }
+    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
+    .unavailable { color: #fcd34d; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.28); border-radius: 8px;
+      padding: .6rem .8rem; font-size: .85rem; }
+    .tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--border); margin: 0 0 1.25rem; }
+    .tabs a { padding: .5rem .85rem; font-size: .9rem; color: var(--muted); border-bottom: 2px solid transparent; }
+    .tabs a.on { color: var(--indigo-bright); border-bottom-color: var(--indigo-bright); font-weight: 600; }
+    .tagcloud { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .tag { display: inline-block; background: rgba(255,255,255,.05); border: 1px solid var(--border); border-radius: 999px;
+      padding: .15rem .6rem; font-size: .8rem; color: var(--text); }
+    .tag .n { color: var(--faint); margin-left: .3rem; }
+    .topic-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .75rem; }
+    .topic { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: .85rem 1rem;
+      transition: border-color .15s ease, transform .15s ease; }
+    .topic:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+    .topic .name { font-weight: 600; color: #fff; }
+    .topic .meta { font-size: .78rem; color: var(--faint); margin-top: .25rem; }
+    .kb-kind { margin: 1.25rem 0 .5rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .entry { border-left: 2px solid var(--border); padding: 0 0 0 .9rem; margin: 0 0 .9rem; }
+    .entry .body { white-space: pre-wrap; }
+    .entry .prov { font-size: .76rem; color: var(--faint); margin-top: .2rem; }
+    .prose { font-size: .92rem; }
+    .prose h1,.prose h2,.prose h3 { margin: 1rem 0 .5rem; }
+    .prose pre { background: #0a0b12; border: 1px solid var(--border); border-radius: 8px; padding: .75rem; overflow: auto; }
+    .prose code { background: rgba(255,255,255,.06); border-radius: 4px; padding: 0 .25rem; color: var(--indigo-bright); }
+    .prose pre code { background: none; padding: 0; color: inherit; }
+    .pb { margin: 0 0 1.5rem; }
+    .pb .head { display: flex; align-items: baseline; gap: .6rem; }
+    .pb .ver { font-size: .78rem; color: var(--faint); }
+    .inline-form { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    .inline-form input, .inline-form select { padding: .45rem .6rem; border: 1px solid var(--border-strong);
+      border-radius: 8px; font-size: .9rem; background: var(--panel-2); color: var(--text); }
+    button { padding: .45rem .9rem; border: 0; border-radius: 8px; background: var(--indigo);
+      color: #fff; cursor: pointer; font-size: .85rem; font-weight: 600; transition: background .15s ease; }
+    button:hover { background: var(--indigo-bright); }
+    button.danger { background: #dc2626; }
+    button.danger:hover { background: #ef4444; }
+    button.ghost { background: rgba(255,255,255,.06); color: var(--text); }
+    button.ghost:hover { background: rgba(255,255,255,.12); }
+    td.actions { white-space: nowrap; }
+    td.actions form { display: inline; margin-right: .3rem; }
+    .token-reveal { border-color: rgba(52,211,153,.45); background: rgba(52,211,153,.08); }
+    .token-reveal code { display: block; margin-top: .4rem; background: #05060a; color: #6ee7b7;
+      padding: .6rem .8rem; border-radius: 8px; word-break: break-all; font-size: .85rem; }
+    .status-pill { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
+      font-size: .73rem; font-weight: 600; }
+    .status-pill.active { background: rgba(52,211,153,.16); color: #6ee7b7; }
+    .status-pill.disabled, .status-pill.revoked { background: rgba(248,113,113,.16); color: #fca5a5; }
+    .orgswitch { display: flex; align-items: center; gap: .5rem; }
+    .orgswitch select { padding: .35rem .55rem; border: 1px solid var(--border-strong); border-radius: 8px;
+      font-size: .88rem; font-weight: 600; background: var(--panel-2); color: #fff; max-width: 240px; }
+    .orgswitch .new { font-size: .82rem; }
+    @media (max-width: 720px) {
+      .layout { grid-template-columns: 1fr; }
+      aside { padding: .75rem 0; border-right: 0; border-bottom: 1px solid var(--border); }
+      aside .brand { padding-bottom: .5rem; }
+      aside nav { flex-direction: row; flex-wrap: wrap; }
+      main.content { padding: 1.1rem; }
+      .panel { overflow-x: auto; }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="layout">
+    <aside>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>TeamShared</div>
+      <nav>
+        {% for href, label, key in nav %}
+        <a href="{{ href }}"{% if key == active %} class="active"{% endif %}>{{ label }}</a>
+        {% endfor %}
+      </nav>
+    </aside>
+    <div class="main">
+      <header class="topbar">
+        {% if orgs and orgs|length > 0 %}
+        <div class="orgswitch">
+          <form method="post" action="/app/orgs/switch">
+            <select name="org_id" onchange="this.form.submit()" aria-label="Active organization">
+              {% for o in orgs %}
+              <option value="{{ o.org_id }}"{% if o.org_id|string == active_org_id %} selected{% endif %}>{{ o.name }}</option>
+              {% endfor %}
+            </select>
+          </form>
+          <a class="new" href="/app/orgs">+ New org</a>
+        </div>
+        {% else %}
+        <span class="org">{{ org_name }}</span>
+        {% endif %}
+        <span class="who">{{ who }}<a href="/logout">Sign out</a></span>
+      </header>
+      <main class="content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+</body>
+</html>

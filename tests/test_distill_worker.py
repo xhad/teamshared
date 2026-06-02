@@ -30,6 +30,7 @@ def _worker(ingest: AsyncMock, *, org: uuid.UUID) -> DistillWorker:
     w.working.get_turns = AsyncMock(
         return_value=[{"role": "user", "content": "hi"}, {"role": "assistant", "content": "yo"}]
     )
+    w.working.mark_subject_dirty = AsyncMock(return_value=False)
 
     ingestion = MagicMock()
     ingestion.ingest = ingest
@@ -100,3 +101,16 @@ async def test_empty_transcript_skips_ingestion() -> None:
     await w._handle({"session_id": "sess3", "agent": "cursor", "org_id": str(JOB_ORG)})
 
     ingest.assert_not_awaited()
+
+
+async def test_distill_enqueues_curation_for_subjects() -> None:
+    ingest = AsyncMock()
+    w = _worker(ingest, org=JOB_ORG)
+
+    await w._handle({"session_id": "sess4", "agent": "cursor", "topic": "migration",
+                     "org_id": str(JOB_ORG)})
+
+    # The decision is filed under the topic subject, so curation is marked for it.
+    w.working.mark_subject_dirty.assert_awaited()
+    subjects = {call.args[1] for call in w.working.mark_subject_dirty.await_args_list}
+    assert "migration" in subjects

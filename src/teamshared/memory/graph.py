@@ -1,13 +1,11 @@
-"""Optional Neo4j-backed relationship graph.
+"""Neo4j-backed relationship graph.
 
-Activated when ``TEAMSHARED_NEO4J_ENABLED=true``. The graph stores explicit
-``(:Entity)-[r:RELATES]->(:Entity)`` edges that complement Mem0's vector
-recall. Most agents won't need this; turn it on when you have enough
-relational data (people, projects, products) that vector search starts to
-miss connections.
+The graph stores explicit ``(:Entity)-[r:RELATES]->(:Entity)`` edges that
+complement vector recall: people, projects, and products whose connections
+vector search alone would miss.
 
-The neo4j driver is an optional dep (``pip install '.[neo4j]'``); we import
-it lazily so the base install stays slim.
+The neo4j driver ships via the ``neo4j`` extra (``pip install '.[neo4j]'``,
+baked into the server image); we import it lazily inside ``connect()``.
 """
 
 from __future__ import annotations
@@ -50,6 +48,14 @@ class GraphStore:
         if self._driver is not None:
             await self._driver.close()
             self._driver = None
+
+    async def verify(self) -> None:
+        """Run a trivial query to confirm the driver can reach Neo4j."""
+        if self._driver is None:
+            raise RuntimeError("GraphStore not connected")
+        async with self._driver.session() as session:
+            result = await session.run("RETURN 1 AS ok")
+            await result.single()
 
     async def _ensure_constraints(self) -> None:
         assert self._driver is not None, "graph store not connected"

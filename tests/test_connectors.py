@@ -67,6 +67,7 @@ async def test_connector_sync_imports_to_approval_queue() -> None:
 
         result = await signup_org(
             repo=services.tenancy, api_keys=services.api_keys, roles=services.roles,
+            accounts=services.accounts,
             org_slug=f"c2-{uuid.uuid4().hex[:8]}", org_name="ConnCo2", owner_email="o@c.test",
         )
         principal = await services.api_keys.authenticate(result.api_key.token)

@@ -1,8 +1,11 @@
-"""Short-lived JWT sessions for human (dashboard) auth.
+"""Short-lived JWT sessions for human (console) auth.
 
-API keys cover programmatic/agent access; humans logging into the dashboard
-get a signed JWT carrying their org + user id. OIDC/SAML federation slots in
-above this by minting the same session token after an external assertion.
+API keys cover programmatic/agent access; humans logging into the console
+prove ownership of their member email via a one-time passcode (see
+``WorkingMemory.set_login_otp`` / ``verify_login_otp``) and then receive a
+signed ``typ=user`` JWT carrying their org + user id. OIDC/SAML federation
+slots in above this by minting the same session token after an external
+assertion.
 """
 
 from __future__ import annotations
@@ -18,44 +21,29 @@ _ALG = "HS256"
 
 
 def issue_session(
-    *, secret: str, org_id: UUID, user_id: UUID, ttl_seconds: int = 3600
+    *,
+    secret: str,
+    org_id: UUID,
+    user_id: UUID,
+    email: str | None = None,
+    ttl_seconds: int = 3600,
 ) -> str:
     now = datetime.now(UTC)
-    payload = {
+    payload: dict[str, object] = {
         "sub": str(user_id),
         "org": str(org_id),
         "typ": "user",
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=ttl_seconds)).timestamp()),
     }
+    if email:
+        # The global account email: stable across orgs, drives the org switcher.
+        payload["email"] = email
     return jwt.encode(payload, secret, algorithm=_ALG)
 
 
 def verify_session(token: str, *, secret: str) -> Principal | None:
     return _verify(token, secret=secret, expected_typ="user")
-
-
-def issue_magic(
-    *, secret: str, org_id: UUID, user_id: UUID, ttl_seconds: int = 900
-) -> str:
-    """Issue a short-lived single-purpose magic-link token (``typ=magic``).
-
-    Exchanged at the verify endpoint for a real ``typ=user`` session. Kept
-    short (15 min default) since the link travels over email.
-    """
-    now = datetime.now(UTC)
-    payload = {
-        "sub": str(user_id),
-        "org": str(org_id),
-        "typ": "magic",
-        "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(seconds=ttl_seconds)).timestamp()),
-    }
-    return jwt.encode(payload, secret, algorithm=_ALG)
-
-
-def verify_magic(token: str, *, secret: str) -> Principal | None:
-    return _verify(token, secret=secret, expected_typ="magic")
 
 
 def _verify(token: str, *, secret: str, expected_typ: str) -> Principal | None:
@@ -70,6 +58,7 @@ def _verify(token: str, *, secret: str, expected_typ: str) -> Principal | None:
             org_id=UUID(payload["org"]),
             type="user",
             id=UUID(payload["sub"]),
+            display=payload.get("email"),
         )
     except (KeyError, ValueError):
         return None

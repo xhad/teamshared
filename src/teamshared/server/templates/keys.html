@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}API keys{% endblock %}
+{% block content %}
+  <h1>API keys</h1>
+  <p class="sub">Programmatic access keys (tsk_) for agents and services.</p>
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if new_token %}
+  <div class="panel token-reveal">
+    <strong>New key minted &mdash; copy it now, it is shown only once:</strong>
+    <code>{{ new_token }}</code>
+  </div>
+  {% endif %}
+
+  <div class="panel" style="margin-top:1rem">
+    <form method="post" action="/app/keys/mint" class="inline-form">
+      <select name="agent_id" required>
+        <option value="">Bind to agent&hellip;</option>
+        {% for a in agents %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+      </select>
+      <input name="name" placeholder="Key name" required />
+      <button type="submit">Mint key</button>
+    </form>
+  </div>
+
+  <div class="panel" style="margin-top:1rem">
+    {% if keys %}
+    <table>
+      <thead><tr><th>Name</th><th>Prefix</th><th>Principal</th><th>Created</th>
+        <th>Last used</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for k in keys %}
+        <tr>
+          <td>{{ k.name }}</td>
+          <td><code>{{ k.prefix }}</code></td>
+          <td>{{ k.principal }}</td>
+          <td>{{ k.created }}</td>
+          <td>{{ k.last_used }}</td>
+          <td><span class="status-pill {{ 'revoked' if k.revoked else 'active' }}">
+            {{ 'revoked' if k.revoked else 'active' }}</span></td>
+          <td class="actions">
+            {% if not k.revoked %}
+            <form method="post" action="/app/keys/{{ k.id }}/revoke">
+              <button type="submit" class="danger">Revoke</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No keys yet.</p>{% endif %}
+  </div>
+{% endblock %}

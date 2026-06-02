@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Playbooks{% endblock %}
+{% block content %}
+  <h1>Playbooks</h1>
+  <p class="sub">Procedural memory &mdash; versioned how-tos the team's agents follow.</p>
+  {% set active_tab = 'playbooks' %}
+  {% include "_wiki_tabs.html" %}
+
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if playbooks %}
+  {% for p in playbooks %}
+  <div class="pb panel">
+    <div class="head">
+      <h3 style="margin:0">{{ p.name }}</h3>
+      <span class="ver">v{{ p.version }}</span>
+    </div>
+    {% if p.description %}<p class="sub">{{ p.description }}</p>{% endif %}
+    {% if p.tags %}<div class="tagcloud" style="margin:.4rem 0">{% for t in p.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>{% endif %}
+    <div class="prose">{{ p.body_html | safe }}</div>
+  </div>
+  {% endfor %}
+  {% elif not note %}
+  <p class="muted">No playbooks yet. Agents create these with <code>memory_procedure_set</code>.</p>
+  {% endif %}
+{% endblock %}

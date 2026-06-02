@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
+from teamshared.identity.accounts import AccountStore
 from teamshared.identity.api_keys import ApiKeyStore, MintedKey
 from teamshared.identity.roles import RoleStore
 from teamshared.tenancy.repository import TenancyRepository
@@ -27,13 +28,16 @@ async def signup_org(
     repo: TenancyRepository,
     api_keys: ApiKeyStore,
     roles: RoleStore,
+    accounts: AccountStore,
     org_slug: str,
     org_name: str,
     owner_email: str,
     owner_name: str | None = None,
 ) -> SignupResult:
+    owner_email = owner_email.strip().lower()
+    account_id = await accounts.upsert(owner_email, owner_name)
     org = await repo.create_organization(org_slug, org_name)
-    owner = await repo.create_user(org.id, owner_email, owner_name)
+    owner = await repo.create_user(org.id, owner_email, owner_name, account_id=account_id)
     await repo.add_membership(org.id, owner.id, role="org_owner")
     await roles.bind_role(
         org_id=org.id,
