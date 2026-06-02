@@ -25,6 +25,7 @@ from starlette.routing import Mount, Route
 from teamshared.auth import BearerAuthMiddleware, TokenStore
 from teamshared.config import Settings, get_settings
 from teamshared.config_validate import validate_settings
+from teamshared.identity.agent_tokens import AgentTokenMinter
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.invite import InviteStore
 from teamshared.logging import configure_logging, get_logger
@@ -227,20 +228,25 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
                 status_code=503,
             )
 
-    async def root_route(request: Request) -> Response:
-        return await handle_root(request, settings, tokens, invites)
-
     tokens = TokenStore(settings.tokens_file)
     invites = InviteStore(settings.invites_file)
+    agent_minter = AgentTokenMinter(
+        api_keys=services.api_keys,
+        resolver=resolver,
+        org_id=settings.default_org_id,
+    )
+
+    async def root_route(request: Request) -> Response:
+        return await handle_root(request, settings, agent_minter, invites)
 
     async def token_mint_route(request: Request) -> JSONResponse:
-        return await handle_token_mint(request, settings, tokens, invites)
+        return await handle_token_mint(request, settings, agent_minter, invites)
 
     async def token_invite_create_route(request: Request) -> JSONResponse:
         return await handle_token_invite_create(request, settings, invites)
 
     async def get_token_route(request: Request) -> Response:
-        return await handle_get_token_page(request, settings, tokens, invites)
+        return await handle_get_token_page(request, settings, agent_minter, invites)
 
     async def install_index_route(request: Request) -> HTMLResponse:
         return await handle_install_index(request)

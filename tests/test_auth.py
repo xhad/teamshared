@@ -70,6 +70,18 @@ def test_token_store_legacy_token_gets_stable_state_id(tmp_path: Path) -> None:
     assert first.state_id != "teamshar"
 
 
+def test_token_store_legacy_entries(tmp_path: Path) -> None:
+    store = TokenStore(tmp_path / "tokens.json")
+    t1 = store.mint("cursor")
+    t2 = store.mint("hermes")
+    entries = store.legacy_entries()
+    assert len(entries) == 2
+    agents = {agent for _, agent in entries}
+    assert agents == {"cursor", "hermes"}
+    tokens = {tok for tok, _ in entries}
+    assert t1 in tokens and t2 in tokens
+
+
 def test_token_store_revoke(tmp_path: Path) -> None:
     store = TokenStore(tmp_path / "tokens.json")
     token = store.mint("hermes")

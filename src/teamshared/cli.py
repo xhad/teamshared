@@ -30,7 +30,10 @@ from teamshared.auth import TokenStore
 from teamshared.clients.agent_setup import normalize_agent_type
 from teamshared.config import get_settings
 from teamshared.config_validate import validate_settings
+from teamshared.identity.agent_tokens import AgentTokenMinter
+from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.invite import InviteStore
+from teamshared.server.services import make_services
 from teamshared.logging import configure_logging
 from teamshared.server.token_api import get_token_path, invite_redeem_curl, invite_redeem_url
 
@@ -412,18 +415,104 @@ def provision_default_org(
 
 
 @token_app.command("mint")
-def token_mint(agent: str) -> None:
-    """Mint a new bearer token for ``agent``.
+def token_mint(
+    agent: str = typer.Argument(..., help="Agent type: cursor, codex, hermes, claude, or openclaw."),
+) -> None:
+    """Mint a new ``tsk_`` API key for ``agent`` in the default org.
 
-    The raw token is printed ONCE. Copy it into the agent's MCP config; we
-    can't recover it later (only a prefix is stored).
+    The raw token is printed ONCE. Copy it into the agent's MCP config; only a
+    hash is stored in Postgres.
+    """
+    agent_type = normalize_agent_type(agent)
+    if agent_type is None:
+        raise typer.BadParameter("agent must be one of: cursor, codex, hermes, claude, openclaw")
+
+    async def _run() -> None:
+        settings = get_settings()
+        services = make_services(settings)
+        await services.tenant_db.connect()
+        try:
+            resolver = PrincipalResolver(
+                api_keys=services.api_keys,
+                roles=services.roles,
+                tenant_db=services.tenant_db,
+                default_org_id=settings.default_org_id,
+                session_secret=settings.session_secret,
+            )
+            minter = AgentTokenMinter(
+                api_keys=services.api_keys,
+                resolver=resolver,
+                org_id=settings.default_org_id,
+            )
+            _, token = await minter.mint(agent_type)
+            console.print(f"[bold]agent[/bold]: {agent_type}")
+            console.print(f"[bold]token[/bold]: [cyan]{token}[/cyan]")
+            console.print("[dim]Org-scoped tsk_ API key (Postgres). Legacy tokens.json is not updated.[/dim]")
+        finally:
+            await services.tenant_db.close()
+
+    asyncio.run(_run())
+
+
+@token_app.command("migrate-legacy")
+def token_migrate_legacy(
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print what would be minted without writing API keys.",
+    ),
+) -> None:
+    """Mint ``tsk_`` API keys for every legacy ``teamshared_*`` entry in tokens.json.
+
+    Prints agent, legacy token prefix, and the new secret (once per row). Does
+    not remove legacy tokens — revoke them after you update MCP configs.
     """
     settings = get_settings()
     store = TokenStore(settings.tokens_file)
-    token = store.mint(agent)
-    console.print(f"[bold]agent[/bold]: {agent}")
-    console.print(f"[bold]token[/bold]: [cyan]{token}[/cyan]")
-    console.print(f"[dim]Stored in {settings.tokens_file}[/dim]")
+    entries = store.legacy_entries()
+    if not entries:
+        console.print("[dim]No legacy tokens in[/dim]", settings.tokens_file)
+        return
+
+    async def _run() -> None:
+        services = make_services(settings)
+        await services.tenant_db.connect()
+        try:
+            resolver = PrincipalResolver(
+                api_keys=services.api_keys,
+                roles=services.roles,
+                tenant_db=services.tenant_db,
+                default_org_id=settings.default_org_id,
+                session_secret=settings.session_secret,
+            )
+            minter = AgentTokenMinter(
+                api_keys=services.api_keys,
+                resolver=resolver,
+                org_id=settings.default_org_id,
+            )
+            table = Table(title="legacy → tsk_ migration")
+            table.add_column("agent")
+            table.add_column("legacy_prefix")
+            table.add_column("new_token")
+            for legacy_token, agent_name in entries:
+                agent_type = normalize_agent_type(agent_name) or agent_name
+                if dry_run:
+                    table.add_row(agent_type, legacy_token[:16] + "...", "(dry-run)")
+                    continue
+                _, new_token = await minter.mint(agent_type)
+                table.add_row(agent_type, legacy_token[:16] + "...", new_token)
+            console.print(table)
+            if dry_run:
+                console.print("[dim]Re-run without --dry-run to mint keys.[/dim]")
+            else:
+                console.print(
+                    "[yellow]Update MCP configs with the new tokens, then revoke legacy "
+                    "entries when ready.[/yellow]"
+                )
+        finally:
+            await services.tenant_db.close()
+
+    asyncio.run(_run())
 
 
 @token_app.command("invite-create")

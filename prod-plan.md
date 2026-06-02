@@ -982,11 +982,11 @@ keeps `main` deployable; prefer feature flags and tests that pin contracts.
 
 ### Stage 2 — Identity plane consolidation (2–3 weeks)
 
-| Phase | Work |
-|-------|------|
-| 2a | Mint `tsk_*` API keys only; migration CLI; dual-read legacy |
-| 2b | `legacy_token_used` metric + deprecation window |
-| 2c | Remove `TokenStore` from hot path; org-bound keys only |
+| Phase | Work | Status |
+|-------|------|--------|
+| 2a | Mint `tsk_*` API keys only; migration CLI; dual-read legacy | **Done** |
+| 2b | `legacy_token_used` metric + deprecation window | Pending |
+| 2c | Remove `TokenStore` from hot path; org-bound keys only | Pending |
 
 ### Stage 3 — Memory path consistency (1–2 weeks)
 

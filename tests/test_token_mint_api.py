@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import secrets
 from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from teamshared.auth import TokenStore
 from teamshared.config import Settings
 from teamshared.invite import InviteStore
 from teamshared.server.token_api import (
@@ -20,9 +20,16 @@ from teamshared.server.token_api import (
 )
 
 
-def _mint_app(settings: Settings, store: TokenStore, invites: InviteStore) -> Starlette:
+class _StubMinter:
+    """Stand-in for :class:`AgentTokenMinter` (no Postgres in unit tests)."""
+
+    async def mint(self, agent_type: str) -> tuple[str, str]:
+        return agent_type, f"tsk_test_{agent_type}_{secrets.token_urlsafe(8)}"
+
+
+def _mint_app(settings: Settings, minter: _StubMinter, invites: InviteStore) -> Starlette:
     async def route(request):  # type: ignore[no-untyped-def]
-        return await handle_token_mint(request, settings, store, invites)
+        return await handle_token_mint(request, settings, minter, invites)
 
     return Starlette(
         routes=[
@@ -39,9 +46,9 @@ def _invite_app(settings: Settings, invites: InviteStore) -> Starlette:
     return Starlette(routes=[Route("/tokens/invites", route, methods=["POST"])])
 
 
-def _get_token_app(settings: Settings, store: TokenStore, invites: InviteStore) -> Starlette:
+def _get_token_app(settings: Settings, minter: _StubMinter, invites: InviteStore) -> Starlette:
     async def route(request):  # type: ignore[no-untyped-def]
-        return await handle_get_token_page(request, settings, store, invites)
+        return await handle_get_token_page(request, settings, minter, invites)
 
     return Starlette(
         routes=[
@@ -59,9 +66,9 @@ def test_token_mint_disabled_when_both_paths_off(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
-    with TestClient(_mint_app(settings, store, invites)) as client:
+    with TestClient(_mint_app(settings, minter, invites)) as client:
         resp = client.post("/tokens/mint", json={"agent": "cursor"})
         assert resp.status_code == 404
         assert resp.json() == {"error": "mint_disabled"}
@@ -75,9 +82,9 @@ def test_token_mint_requires_secret(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
-    with TestClient(_mint_app(settings, store, invites)) as client:
+    with TestClient(_mint_app(settings, minter, invites)) as client:
         resp = client.post("/tokens/mint", json={"agent": "cursor"})
         assert resp.status_code == 401
         assert resp.json() == {"error": "invalid_mint_secret"}
@@ -90,9 +97,9 @@ def test_token_mint_admin_success(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
-    with TestClient(_mint_app(settings, store, invites)) as client:
+    with TestClient(_mint_app(settings, minter, invites)) as client:
         resp = client.post(
             "/tokens/mint",
             json={"agent": "cursor"},
@@ -101,8 +108,8 @@ def test_token_mint_admin_success(tmp_path: Path) -> None:
         assert resp.status_code == 200
         body = resp.json()
         assert body["agent"] == "cursor"
-        assert body["token"].startswith("teamshared_")
-        assert store.lookup(body["token"]) is not None
+        assert body["token"].startswith("tsk_")
+        assert body.get("token_type") == "tsk"
 
 
 def test_token_mint_rejects_invalid_agent(tmp_path: Path) -> None:
@@ -112,9 +119,9 @@ def test_token_mint_rejects_invalid_agent(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
-    with TestClient(_mint_app(settings, store, invites)) as client:
+    with TestClient(_mint_app(settings, minter, invites)) as client:
         resp = client.post(
             "/tokens/mint",
             json={"agent": "bad name"},
@@ -131,10 +138,10 @@ def test_token_mint_with_invite(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent="cursor", uses=1)
-    with TestClient(_mint_app(settings, store, invites)) as client:
+    with TestClient(_mint_app(settings, minter, invites)) as client:
         resp = client.post(
             "/tokens/mint",
             json={"invite": record.code, "agent": "cursor-chad"},
@@ -142,7 +149,7 @@ def test_token_mint_with_invite(tmp_path: Path) -> None:
         assert resp.status_code == 200
         body = resp.json()
         assert body["agent"] == "cursor"
-        assert body["token"].startswith("teamshared_")
+        assert body["token"].startswith("tsk_")
         assert invites.get(record.code) is None
 
 
@@ -153,10 +160,10 @@ def test_token_mint_invite_requires_agent_when_unbound(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
     record = invites.create(uses=1)
-    with TestClient(_mint_app(settings, store, invites)) as client:
+    with TestClient(_mint_app(settings, minter, invites)) as client:
         resp = client.post("/tokens/mint", json={"invite": record.code})
         assert resp.status_code == 400
         assert invites.get(record.code) is not None
@@ -202,15 +209,15 @@ def test_token_mint_with_invite_path(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent="cursor", uses=1)
-    with TestClient(_mint_app(settings, store, invites)) as client:
+    with TestClient(_mint_app(settings, minter, invites)) as client:
         resp = client.post(f"/tokens/mint/{record.code}/cursor-chad")
         assert resp.status_code == 200
         body = resp.json()
         assert body["agent"] == "cursor"
-        assert body["token"].startswith("teamshared_")
+        assert body["token"].startswith("tsk_")
         assert invites.get(record.code) is None
 
 
@@ -221,19 +228,19 @@ def test_get_token_page_redeems_invite_path(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent="cursor-web", uses=1)
-    with TestClient(_get_token_app(settings, store, invites)) as client:
+    with TestClient(_get_token_app(settings, minter, invites)) as client:
         resp = client.get(f"/get-token/{record.code}/cursor-web")
         assert resp.status_code == 200
-        assert "teamshared_" in resp.text
+        assert "tsk_" in resp.text
         assert invites.get(record.code) is None
 
 
-def _root_app(settings: Settings, store: TokenStore, invites: InviteStore) -> Starlette:
+def _root_app(settings: Settings, minter: _StubMinter, invites: InviteStore) -> Starlette:
     async def route(request):  # type: ignore[no-untyped-def]
-        return await handle_root(request, settings, store, invites)
+        return await handle_root(request, settings, minter, invites)
 
     return Starlette(routes=[Route("/", route, methods=["GET"])])
 
@@ -244,9 +251,9 @@ def test_root_landing_page(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
-    with TestClient(_root_app(settings, store, invites)) as client:
+    with TestClient(_root_app(settings, minter, invites)) as client:
         resp = client.get("/")
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/html")
@@ -262,9 +269,9 @@ def test_root_banner_json(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
-    with TestClient(_root_app(settings, store, invites)) as client:
+    with TestClient(_root_app(settings, minter, invites)) as client:
         resp = client.get("/", headers={"Accept": "application/json"})
         assert resp.status_code == 200
         body = resp.json()
@@ -279,13 +286,13 @@ def test_root_redeems_invite_as_plain_text(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent="cursor-chad", uses=1)
-    with TestClient(_root_app(settings, store, invites)) as client:
+    with TestClient(_root_app(settings, minter, invites)) as client:
         resp = client.get("/", params={"invite": record.code, "agent": "cursor-chad"})
         assert resp.status_code == 200
-        assert resp.text.startswith("teamshared_")
+        assert resp.text.startswith("tsk_")
         assert resp.headers["content-type"].startswith("text/plain")
         assert invites.get(record.code) is None
 
@@ -297,10 +304,10 @@ def test_root_redeems_invite_as_json(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent="cursor", uses=1)
-    with TestClient(_root_app(settings, store, invites)) as client:
+    with TestClient(_root_app(settings, minter, invites)) as client:
         resp = client.get(
             "/",
             params={"invite": record.code, "agent": "cursor-chad"},
@@ -309,7 +316,8 @@ def test_root_redeems_invite_as_json(tmp_path: Path) -> None:
         assert resp.status_code == 200
         body = resp.json()
         assert body["agent"] == "cursor"
-        assert body["token"].startswith("teamshared_")
+        assert body["token"].startswith("tsk_")
+        assert body.get("token_type") == "tsk"
 
 
 def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
@@ -319,10 +327,10 @@ def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent="cursor", uses=1)
-    with TestClient(_get_token_app(settings, store, invites)) as client:
+    with TestClient(_get_token_app(settings, minter, invites)) as client:
         resp = client.get(f"/get-token/{record.code}/cursor")
         assert resp.status_code == 200
         assert "Connect teamshared to Cursor" in resp.text
@@ -345,9 +353,9 @@ def test_get_token_form_shows_readme(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
-    with TestClient(_get_token_app(settings, store, invites)) as client:
+    with TestClient(_get_token_app(settings, minter, invites)) as client:
         resp = client.get("/get-token")
         assert resp.status_code == 200
         assert 'id="about-teamshared"' in resp.text
@@ -362,15 +370,15 @@ def test_invite_normalizes_cursor_chad_to_cursor(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent="cursor", uses=1)
-    with TestClient(_mint_app(settings, store, invites)) as client:
+    with TestClient(_mint_app(settings, minter, invites)) as client:
         resp = client.post(f"/tokens/mint/{record.code}/cursor-chad")
         assert resp.status_code == 200
         body = resp.json()
         assert body["agent"] == "cursor"
-        assert store.lookup(body["token"]).agent == "cursor"  # type: ignore[union-attr]
+        assert body["token"].startswith("tsk_")
 
 
 def test_get_token_page_redeems_invite(tmp_path: Path) -> None:
@@ -380,14 +388,14 @@ def test_get_token_page_redeems_invite(tmp_path: Path) -> None:
         tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
-    store = TokenStore(settings.tokens_file)
+    minter = _StubMinter()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent="cursor-web", uses=1)
-    with TestClient(_get_token_app(settings, store, invites)) as client:
+    with TestClient(_get_token_app(settings, minter, invites)) as client:
         resp = client.get(
             "/get-token",
             params={"invite": record.code, "agent": "cursor-web"},
         )
         assert resp.status_code == 200
-        assert "teamshared_" in resp.text
+        assert "tsk_" in resp.text
         assert invites.get(record.code) is None

@@ -152,6 +152,13 @@ class TokenStore:
             for tok, entry in sorted(self._load().items(), key=lambda kv: kv[1]["agent"])
         ]
 
+    def legacy_entries(self) -> list[tuple[str, str]]:
+        """Return ``(raw_token, agent)`` for every legacy file-backed token."""
+        return [
+            (token, str(entry["agent"]))
+            for token, entry in self._load().items()
+        ]
+
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     """Validate ``Authorization: Bearer <token>`` against a :class:`TokenStore`.

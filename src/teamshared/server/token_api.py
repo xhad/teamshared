@@ -10,7 +10,6 @@ from urllib.parse import urlencode
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
-from teamshared.auth import TokenStore
 from teamshared.clients.agent_setup import (
     KNOWN_AGENT_TYPES,
     agent_setup,
@@ -18,6 +17,7 @@ from teamshared.clients.agent_setup import (
 )
 from teamshared.clients.readme_page import render_readme_html
 from teamshared.config import Settings
+from teamshared.identity.agent_tokens import AgentTokenMinter
 from teamshared.invite import InviteStore
 from teamshared.logging import get_logger
 from teamshared.metrics import METRICS
@@ -64,18 +64,18 @@ def _mint_enabled(settings: Settings) -> bool:
     return settings.mint_secret is not None or settings.self_service_tokens
 
 
-def _mint_token(agent: str, store: TokenStore) -> JSONResponse:
-    token = store.mint(agent)
-    log.info("token_minted", agent=agent, token_prefix=token[:8])
-    return JSONResponse({"agent": agent, "token": token})
+async def _mint_token(agent: str, minter: AgentTokenMinter) -> JSONResponse:
+    agent_type, token = await minter.mint(agent)
+    log.info("token_minted", agent=agent_type, token_prefix=token[:12])
+    return JSONResponse({"agent": agent_type, "token": token, "token_type": "tsk"})
 
 
-def _redeem_invite_for_token(
+async def _redeem_invite_for_token(
     invite_code: str,
     agent_hint: str | None,
     *,
     settings: Settings,
-    store: TokenStore,
+    minter: AgentTokenMinter,
     invites: InviteStore,
 ) -> tuple[str, str] | tuple[None, JSONResponse]:
     """Return ``(agent, token)`` or ``(None, error_response)``."""
@@ -97,30 +97,30 @@ def _redeem_invite_for_token(
         )
     if invites.redeem(code) is None:
         return None, JSONResponse({"error": "invalid_invite"}, status_code=401)
-    token = store.mint(agent_type)
-    log.info("token_minted_via_invite", agent=agent_type, token_prefix=token[:8])
+    agent_type, token = await minter.mint(agent_type)
+    log.info("token_minted_via_invite", agent=agent_type, token_prefix=token[:12])
     return agent_type, token
 
 
-def _mint_via_invite(
+async def _mint_via_invite(
     invite_code: str,
     agent_hint: str | None,
     *,
     settings: Settings,
-    store: TokenStore,
+    minter: AgentTokenMinter,
     invites: InviteStore,
 ) -> JSONResponse:
-    result = _redeem_invite_for_token(
+    result = await _redeem_invite_for_token(
         invite_code,
         agent_hint,
         settings=settings,
-        store=store,
+        minter=minter,
         invites=invites,
     )
     if result[0] is None:
         return result[1]
     agent, token = result
-    return JSONResponse({"agent": agent, "token": token})
+    return JSONResponse({"agent": agent, "token": token, "token_type": "tsk"})
 
 
 def invite_mint_path(invite: str, agent: str) -> str:
@@ -517,18 +517,18 @@ def _landing_page_html() -> str:
 async def handle_root(
     request: Request,
     settings: Settings,
-    store: TokenStore,
+    minter: AgentTokenMinter,
     invites: InviteStore,
 ) -> Response:
     """Service banner, or mint a bearer token when ``?invite=&agent=`` are present."""
     invite_code = request.query_params.get("invite", "").strip()
     if invite_code:
         agent_hint = request.query_params.get("agent", "").strip() or None
-        result = _redeem_invite_for_token(
+        result = await _redeem_invite_for_token(
             invite_code,
             agent_hint,
             settings=settings,
-            store=store,
+            minter=minter,
             invites=invites,
         )
         if result[0] is None:
@@ -536,7 +536,7 @@ async def handle_root(
         agent, token = result
         accept = request.headers.get("accept", "")
         if "application/json" in accept:
-            return JSONResponse({"agent": agent, "token": token})
+            return JSONResponse({"agent": agent, "token": token, "token_type": "tsk"})
         return PlainTextResponse(token)
 
     accept = request.headers.get("accept", "")
@@ -549,7 +549,7 @@ async def handle_root(
 async def handle_token_mint(
     request: Request,
     settings: Settings,
-    store: TokenStore,
+    minter: AgentTokenMinter,
     invites: InviteStore,
 ) -> JSONResponse:
     """Mint a bearer token.
@@ -563,11 +563,11 @@ async def handle_token_mint(
 
     path_invite = request.path_params.get("invite")
     if path_invite is not None:
-        return _mint_via_invite(
+        return await _mint_via_invite(
             path_invite,
             request.path_params.get("agent"),
             settings=settings,
-            store=store,
+            minter=minter,
             invites=invites,
         )
 
@@ -580,11 +580,11 @@ async def handle_token_mint(
     if isinstance(invite_code, str) and invite_code.strip():
         agent_hint = body.get("agent")
         agent_str = agent_hint if isinstance(agent_hint, str) else None
-        return _mint_via_invite(
+        return await _mint_via_invite(
             invite_code,
             agent_str,
             settings=settings,
-            store=store,
+            minter=minter,
             invites=invites,
         )
 
@@ -600,7 +600,7 @@ async def handle_token_mint(
     agent = _parse_agent(body.get("agent"))
     if agent is None:
         return JSONResponse({"error": "agent is required"}, status_code=400)
-    return _mint_token(agent, store)
+    return await _mint_token(agent, minter)
 
 
 async def handle_token_invite_create(
@@ -647,7 +647,7 @@ async def handle_token_invite_create(
 async def handle_get_token_page(
     request: Request,
     settings: Settings,
-    store: TokenStore,
+    minter: AgentTokenMinter,
     invites: InviteStore,
 ) -> Response:
     """Simple browser page for redeeming an invite code."""
@@ -681,8 +681,8 @@ async def handle_get_token_page(
             elif invites.redeem(invite_code) is None:
                 error = "Invalid or expired invite code."
             else:
-                token = store.mint(agent_type)
-                log.info("token_minted_via_web", agent=agent_type, token_prefix=token[:8])
+                _, token = await minter.mint(agent_type)
+                log.info("token_minted_via_web", agent=agent_type, token_prefix=token[:12])
                 base = str(request.base_url).rstrip("/")
                 return HTMLResponse(
                     _token_result_html(agent_type, token, base),
