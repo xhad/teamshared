@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
-from teamshared.identity.rbac import Authorizer, Permissions
+from teamshared.identity.rbac import Permissions
 from teamshared.ingestion.approvals import ApprovalQueue
 from teamshared.ingestion.injection import InjectionVerdict, screen_injection
 from teamshared.ingestion.pii import PIIFinding, has_hard_secret, redact_pii, scan_pii
@@ -57,13 +57,11 @@ class IngestionPipeline:
         vector_store: VectorStore,
         approvals: ApprovalQueue,
         audit: AuditLog,
-        authorizer: Authorizer,
         procedural: OrgProceduralStore,
     ) -> None:
         self.vector_store = vector_store
         self.approvals = approvals
         self.audit = audit
-        self.authorizer = authorizer
         self.procedural = procedural
 
     async def ingest(
@@ -84,7 +82,7 @@ class IngestionPipeline:
         importance: float | None = None,
         require_approval: bool = False,
     ) -> IngestionResult:
-        await self.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
+        await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
 
         # Dedup.
         dup = await self.vector_store.find_duplicate(ctx.org_id, content)
@@ -168,7 +166,7 @@ class IngestionPipeline:
         source: MemorySource = "agent",
     ) -> ProcedureIngestionResult:
         """Guarded write path for versioned procedural playbooks."""
-        await self.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
+        await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
 
         parts = [name, description or "", steps_md]
         if tool_recipe is not None:

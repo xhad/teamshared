@@ -67,7 +67,6 @@ class ProductionServices:
             self.vector_store,
             self.approvals,
             self.audit,
-            self.authorizer(),
             self.procedural,
         )
 
@@ -83,8 +82,7 @@ def make_services(settings: Settings) -> ProductionServices:
     embedder = build_embedder(settings)
     vector_store = VectorStore(tenant_db, embedder)
     audit = AuditLog(tenant_db)
-    authorizer = Authorizer(tenant_db)
-    memory_service = MemoryService(vector_store, audit, authorizer)
+    memory_service = MemoryService(vector_store, audit)
     approvals = ApprovalQueue(tenant_db)
     roles = RoleStore(tenant_db)
     services = ProductionServices(
@@ -109,7 +107,6 @@ def make_services(settings: Settings) -> ProductionServices:
                 vector_store,
                 approvals,
                 audit,
-                Authorizer(tenant_db),
                 OrgProceduralStore(tenant_db),
             ),
             audit=audit,

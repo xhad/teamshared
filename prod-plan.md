@@ -992,7 +992,7 @@ keeps `main` deployable; prefer feature flags and tests that pin contracts.
 
 | ID | Work |
 |----|------|
-| 3.1 | Per-request `Authorizer` for `MemoryService` (no stale RBAC cache) |
+| 3.1 | Per-request `Authorizer` for `MemoryService` (no stale RBAC cache) | **Done** |
 | 3.2 | `memory_procedure_set` through ingestion (PII/injection/review) | **Done** |
 | 3.3 | Audit `agent=` attribution overrides |
 

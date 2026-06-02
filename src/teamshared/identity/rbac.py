@@ -3,8 +3,11 @@
 Effective permissions are the union of permissions granted by the principal's
 role bindings, optionally intersected with the presenting API key's declared
 scopes (least privilege). The :class:`Authorizer` caches per-principal results
-for the lifetime of a request context and exposes ``require`` for the
-before/after checks on every read and write.
+for the lifetime of one :class:`Authorizer` instance. Build a fresh instance per
+inbound request (``ProductionServices.authorizer()``) and pass it on
+:class:`~teamshared.memory.request_context.RequestContext`; do not store
+:class:`~teamshared.memory.service.MemoryService` or long-lived pipelines with
+a process-wide authorizer.
 """
 
 from __future__ import annotations

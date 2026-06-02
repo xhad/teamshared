@@ -48,13 +48,10 @@ def _pipeline() -> tuple[IngestionPipeline, AsyncMock, AsyncMock]:
     approvals.enqueue_procedure = AsyncMock(return_value=UUID(int=0))
     audit = MagicMock()
     audit.record = AsyncMock()
-    authorizer = MagicMock()
-    authorizer.require = AsyncMock()
     pipe = IngestionPipeline(
         MagicMock(),
         approvals,
         audit,
-        authorizer,
         procedural,
     )
     return pipe, procedural, approvals
@@ -62,8 +59,9 @@ def _pipeline() -> tuple[IngestionPipeline, AsyncMock, AsyncMock]:
 
 async def test_ingest_procedure_active() -> None:
     pipe, procedural, approvals = _pipeline()
+    ctx = _ctx()
     result = await pipe.ingest_procedure(
-        _ctx(),
+        ctx,
         name="deploy",
         steps_md="Run the deploy script after tests pass.",
         agent="cursor",
@@ -72,6 +70,7 @@ async def test_ingest_procedure_active() -> None:
     assert result.procedure["version"] == 1
     procedural.set_procedure.assert_awaited_once()
     approvals.enqueue_procedure.assert_not_awaited()
+    ctx.authorizer.require.assert_awaited()
 
 
 async def test_ingest_procedure_rejects_hard_secret() -> None:
