@@ -10,6 +10,7 @@ review-required items to the approval queue (stored ``quarantined`` /
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -21,6 +22,7 @@ from teamshared.ingestion.pii import PIIFinding, has_hard_secret, redact_pii, sc
 from teamshared.logging import get_logger
 from teamshared.metrics import METRICS
 from teamshared.memory.audit import AuditLog
+from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.types import MemoryItemScope, MemoryKind, MemorySource, Visibility
 from teamshared.memory.vectorstore import VectorStore
@@ -41,6 +43,14 @@ class IngestionResult:
     injection: InjectionVerdict | None = None
 
 
+@dataclass
+class ProcedureIngestionResult:
+    procedure: dict[str, Any]
+    status: str               # active | pending_approval | quarantined
+    pii: list[PIIFinding] = field(default_factory=list)
+    injection: InjectionVerdict | None = None
+
+
 class IngestionPipeline:
     def __init__(
         self,
@@ -48,11 +58,13 @@ class IngestionPipeline:
         approvals: ApprovalQueue,
         audit: AuditLog,
         authorizer: Authorizer,
+        procedural: OrgProceduralStore,
     ) -> None:
         self.vector_store = vector_store
         self.approvals = approvals
         self.audit = audit
         self.authorizer = authorizer
+        self.procedural = procedural
 
     async def ingest(
         self,
@@ -141,4 +153,90 @@ class IngestionPipeline:
         )
         return IngestionResult(
             memory_id=memory_id, status=status, pii=findings, injection=verdict
+        )
+
+    async def ingest_procedure(
+        self,
+        ctx: RequestContext,
+        *,
+        name: str,
+        steps_md: str,
+        description: str | None = None,
+        tool_recipe: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        agent: str,
+        source: MemorySource = "agent",
+    ) -> ProcedureIngestionResult:
+        """Guarded write path for versioned procedural playbooks."""
+        await self.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
+
+        parts = [name, description or "", steps_md]
+        if tool_recipe is not None:
+            parts.append(json.dumps(tool_recipe, sort_keys=True))
+        screen_text = "\n".join(parts)
+
+        findings = scan_pii(screen_text)
+        if has_hard_secret(findings):
+            await self.audit.record(
+                agent=ctx.principal.attribution,
+                action="procedure.rejected_secret",
+                org_id=ctx.org_id,
+                actor_type=ctx.principal.type,
+                actor_id=ctx.principal.id,
+                resource_type="procedure",
+                request_id=ctx.request_id,
+                payload={"name": name, "findings": [f.kind for f in findings]},
+            )
+            raise IngestionRejected("content contains a hard secret and was not stored")
+
+        if findings:
+            safe_steps = redact_pii(steps_md)
+            safe_description = redact_pii(description) if description else None
+        else:
+            safe_steps = steps_md
+            safe_description = description
+
+        verdict = screen_injection(screen_text)
+        needs_review = source in {"connector", "extraction"}
+        if verdict.quarantine:
+            status = "quarantined"
+        elif needs_review:
+            status = "pending_approval"
+        else:
+            status = "active"
+
+        row = await self.procedural.set_procedure(
+            ctx.org_id,
+            name,
+            safe_steps,
+            agent=agent,
+            tool_recipe=tool_recipe,
+            tags=tags,
+            description=safe_description,
+            status=status,
+        )
+
+        if status != "active":
+            reason = "prompt_injection_suspected" if verdict.quarantine else "review_required"
+            METRICS.ingestion_quarantined.inc(status=status, reason=reason)
+            await self.approvals.enqueue_procedure(
+                ctx.org_id,
+                int(row["id"]),
+                reason=reason,
+                requested_by=ctx.principal.id,
+            )
+
+        await self.audit.record(
+            agent=ctx.principal.attribution,
+            action="procedure.create",
+            org_id=ctx.org_id,
+            actor_type=ctx.principal.type,
+            actor_id=ctx.principal.id,
+            resource_type="procedure",
+            target_id=str(row["id"]),
+            request_id=ctx.request_id,
+            after={"name": name, "version": row["version"], "status": status, "source": source},
+        )
+        return ProcedureIngestionResult(
+            procedure=row, status=status, pii=findings, injection=verdict
         )

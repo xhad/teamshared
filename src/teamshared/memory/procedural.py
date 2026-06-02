@@ -283,6 +283,7 @@ class OrgProceduralStore:
         tool_recipe: dict[str, Any] | None = None,
         tags: list[str] | None = None,
         description: str | None = None,
+        status: str = "active",
     ) -> dict[str, Any]:
         recipe_json = json.dumps(tool_recipe) if tool_recipe is not None else None
         async with self.db.org(org_id) as conn:
@@ -295,17 +296,18 @@ class OrgProceduralStore:
             cur = await conn.execute(
                 f"INSERT INTO procedures "
                 f"(org_id, scope, name, version, description, steps_md, tool_recipe, tags, "
-                f" created_by, created_at) "
-                f"VALUES (%s,'org',%s,%s,%s,%s,%s::jsonb,%s,%s,%s) RETURNING {self._SELECT}",
+                f" created_by, created_at, status) "
+                f"VALUES (%s,'org',%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s) RETURNING {self._SELECT}, status",
                 (
                     str(org_id), name, next_version, description, steps_md, recipe_json,
-                    tags or [], agent, datetime.now(UTC),
+                    tags or [], agent, datetime.now(UTC), status,
                 ),
             )
             inserted = await cur.fetchone()
         if inserted is None:
             raise RuntimeError("INSERT did not return a row")
-        return dict(zip(self._FIELDS, inserted, strict=False))
+        fields = self._FIELDS + ("status",)
+        return dict(zip(fields, inserted, strict=False))
 
     async def get_procedure(
         self, org_id: UUID, name: str, version: int | None = None
@@ -313,17 +315,21 @@ class OrgProceduralStore:
         async with self.db.org(org_id) as conn:
             if version is None:
                 cur = await conn.execute(
-                    f"SELECT {self._SELECT} FROM procedures WHERE name = %s "
-                    f"ORDER BY version DESC LIMIT 1",
+                    f"SELECT {self._SELECT}, status FROM procedures WHERE name = %s "
+                    f"AND status = 'active' ORDER BY version DESC LIMIT 1",
                     (name,),
                 )
             else:
                 cur = await conn.execute(
-                    f"SELECT {self._SELECT} FROM procedures WHERE name = %s AND version = %s",
+                    f"SELECT {self._SELECT}, status FROM procedures "
+                    f"WHERE name = %s AND version = %s AND status = 'active'",
                     (name, version),
                 )
             row = await cur.fetchone()
-        return dict(zip(self._FIELDS, row, strict=False)) if row else None
+        if row is None:
+            return None
+        fields = self._FIELDS + ("status",)
+        return dict(zip(fields, row, strict=False))
 
     async def list_procedures(
         self, org_id: UUID, *, tag: str | None = None, limit: int = 100
@@ -331,18 +337,20 @@ class OrgProceduralStore:
         async with self.db.org(org_id) as conn:
             if tag:
                 cur = await conn.execute(
-                    f"SELECT DISTINCT ON (name) {self._SELECT} FROM procedures "
-                    f"WHERE %s = ANY(tags) ORDER BY name, version DESC LIMIT %s",
+                    f"SELECT DISTINCT ON (name) {self._SELECT}, status FROM procedures "
+                    f"WHERE status = 'active' AND %s = ANY(tags) "
+                    f"ORDER BY name, version DESC LIMIT %s",
                     (tag, limit),
                 )
             else:
                 cur = await conn.execute(
-                    f"SELECT DISTINCT ON (name) {self._SELECT} FROM procedures "
-                    f"ORDER BY name, version DESC LIMIT %s",
+                    f"SELECT DISTINCT ON (name) {self._SELECT}, status FROM procedures "
+                    f"WHERE status = 'active' ORDER BY name, version DESC LIMIT %s",
                     (limit,),
                 )
             rows = await cur.fetchall()
-        return [dict(zip(self._FIELDS, r, strict=False)) for r in rows]
+        fields = self._FIELDS + ("status",)
+        return [dict(zip(fields, r, strict=False)) for r in rows]
 
     async def stats(self, org_id: UUID) -> dict[str, Any]:
         async with self.db.org(org_id) as conn:

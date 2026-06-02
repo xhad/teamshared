@@ -64,7 +64,11 @@ class ProductionServices:
 
     def ingestion(self) -> IngestionPipeline:
         return IngestionPipeline(
-            self.vector_store, self.approvals, self.audit, self.authorizer()
+            self.vector_store,
+            self.approvals,
+            self.audit,
+            self.authorizer(),
+            self.procedural,
         )
 
 
@@ -102,7 +106,11 @@ def make_services(settings: Settings) -> ProductionServices:
             tenant_db,
             TokenVault(settings.connector_encryption_key),
             ingestion_factory=lambda: IngestionPipeline(
-                vector_store, approvals, audit, Authorizer(tenant_db)
+                vector_store,
+                approvals,
+                audit,
+                Authorizer(tenant_db),
+                OrgProceduralStore(tenant_db),
             ),
             audit=audit,
         ),

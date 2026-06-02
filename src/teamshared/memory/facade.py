@@ -193,11 +193,19 @@ class MemoryFacade:
         agent_override: str | None,
     ) -> dict[str, Any]:
         writer = await self._write_principal(principal, agent_override)
-        return await self.procedural.set_procedure(
-            principal.org_id, name, steps_md,
+        ctx = self._ctx(writer)
+        result = await self.services.ingestion().ingest_procedure(
+            ctx,
+            name=name,
+            steps_md=steps_md,
+            description=description,
+            tool_recipe=tool_recipe,
+            tags=tags,
             agent=writer.display or writer.attribution,
-            tool_recipe=tool_recipe, tags=tags, description=description,
         )
+        proc = dict(result.procedure)
+        proc["status"] = result.status
+        return proc
 
     async def procedures_list(
         self, principal: Principal, *, tag: str | None, limit: int

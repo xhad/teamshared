@@ -11,12 +11,19 @@ never silently trusted.
 from teamshared.ingestion.approvals import ApprovalQueue
 from teamshared.ingestion.injection import InjectionVerdict, screen_injection
 from teamshared.ingestion.pii import PIIFinding, redact_pii, scan_pii
-from teamshared.ingestion.pipeline import IngestionPipeline, IngestionResult
+from teamshared.ingestion.pipeline import (
+    IngestionPipeline,
+    IngestionRejected,
+    IngestionResult,
+    ProcedureIngestionResult,
+)
 
 __all__ = [
     "ApprovalQueue",
     "IngestionPipeline",
+    "IngestionRejected",
     "IngestionResult",
+    "ProcedureIngestionResult",
     "InjectionVerdict",
     "PIIFinding",
     "redact_pii",

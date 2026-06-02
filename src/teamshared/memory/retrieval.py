@@ -149,7 +149,8 @@ class SecureRetrieval:
                         plainto_tsquery('english', %s)
                     ) AS rank
                 FROM procedures
-                WHERE to_tsvector('english',
+                WHERE status = 'active'
+                  AND to_tsvector('english',
                         coalesce(name,'') || ' ' || coalesce(description,'') || ' ' || coalesce(steps_md,''))
                       @@ plainto_tsquery('english', %s)
                 ORDER BY name, version DESC, rank DESC

@@ -74,9 +74,18 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
                       "distill_enqueued": False}
     )
     facade.procedure_set = AsyncMock(
-        return_value={"id": 1, "name": "p1", "version": 1, "description": "x",
-                      "steps_md": "do thing", "tool_recipe": None, "tags": [],
-                      "created_by": "anonymous", "created_at": None}
+        return_value={
+            "id": 1,
+            "name": "p1",
+            "version": 1,
+            "description": "x",
+            "steps_md": "do thing",
+            "tool_recipe": None,
+            "tags": [],
+            "created_by": "anonymous",
+            "created_at": None,
+            "status": "active",
+        }
     )
     facade.procedure_get = AsyncMock(return_value=None)
     facade.procedures_list = AsyncMock(return_value={"count": 0, "procedures": []})

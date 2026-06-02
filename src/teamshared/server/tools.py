@@ -294,7 +294,13 @@ def register_tools(mcp: Any) -> None:
         tags: Annotated[list[str] | None, Field(description="Tags for discovery")] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Insert a new version of a procedure. Each call creates a new version."""
+        """Insert a new version of a procedure. Each call creates a new version.
+
+        Routed through the guarded ingestion pipeline (PII redaction, injection
+        screening, approval queue). Returns ``status`` (``active``,
+        ``pending_approval``, or ``quarantined``); only ``active`` playbooks are
+        visible to recall and ``memory_procedure_get``.
+        """
         state = get_state()
         principal = await _principal()
         proc = await state.facade.procedure_set(
