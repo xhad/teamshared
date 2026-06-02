@@ -978,7 +978,7 @@ keeps `main` deployable; prefer feature flags and tests that pin contracts.
 |----|------|--------|
 | 1.1 | `/memory` counts-only by default (`dashboard_public_content=false`) | **Done** |
 | 1.2 | Redis rate limits (mint, OTP, MCP) | **Done** |
-| 1.3 | `route_policy` drives `BearerAuthMiddleware` bypass list | Pending |
+| 1.3 | `route_policy` drives `BearerAuthMiddleware` bypass list | **Done** |
 
 ### Stage 2 — Identity plane consolidation (2–3 weeks)
 

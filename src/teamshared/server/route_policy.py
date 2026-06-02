@@ -23,6 +23,10 @@ class RouteClass(str, Enum):
     API_V1 = "api_v1"
     MCP_BEARER = "mcp_bearer"
 
+    def skips_outer_bearer(self) -> bool:
+        """Whether :class:`~teamshared.auth.BearerAuthMiddleware` should not gate this class."""
+        return self != RouteClass.MCP_BEARER
+
 
 # Exact paths (no trailing slash normalization — Starlette paths are canonical).
 _EXACT: dict[str, RouteClass] = {
@@ -67,11 +71,19 @@ def classify_path(path: str) -> RouteClass | None:
 
 
 def outer_middleware_skips_bearer(path: str) -> bool:
-    """True when the outer bearer middleware should not require a token."""
+    """True when the outer bearer middleware should not require a token.
+
+    Unclassified paths return ``False`` (fail closed: bearer required).
+    """
     route_class = classify_path(path)
     if route_class is None:
         return False
-    return route_class != RouteClass.MCP_BEARER
+    return route_class.skips_outer_bearer()
+
+
+def outer_middleware_requires_bearer(path: str) -> bool:
+    """Inverse of :func:`outer_middleware_skips_bearer` for readability at call sites."""
+    return not outer_middleware_skips_bearer(path)
 
 
 def iter_http_paths(app: ASGIApp) -> list[str]:

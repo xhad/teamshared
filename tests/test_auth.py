@@ -99,6 +99,24 @@ def test_health_is_anonymous() -> None:
         assert resp.status_code == 200
 
 
+def test_public_route_skips_bearer_per_route_policy() -> None:
+    """Paths classified as non-MCP must not hit BearerAuthMiddleware."""
+    resolver = _mock_resolver(on_resolve=None)
+    app = _build_app(resolver)
+    with TestClient(app) as client:
+        # /health is HEALTH_METRICS in route_policy — no bearer, no 401.
+        assert client.get("/health").status_code == 200
+
+
+def test_mcp_route_requires_bearer_per_route_policy() -> None:
+    resolver = _mock_resolver(on_resolve=None)
+    app = _build_app(resolver)
+    with TestClient(app) as client:
+        resp = client.get("/mcp/whoami")
+        assert resp.status_code == 401
+        assert resp.json()["error"] == "missing_bearer_token"
+
+
 def test_auth_disabled_skips_check() -> None:
     resolver = _mock_resolver()
     app = _build_app(resolver, disabled=True)
