@@ -313,7 +313,10 @@ def _make_state(*, semantic_ok: bool = True) -> SimpleNamespace:
     )
     working = SimpleNamespace(stats=AsyncMock(return_value=_working_stats()))
     return SimpleNamespace(
-        settings=SimpleNamespace(default_org_id=ORG),
+        settings=SimpleNamespace(
+            default_org_id=ORG,
+            dashboard_public_content=False,
+        ),
         working=working,
         services=SimpleNamespace(vector_store=vector_store),
         procedural=procedural,
@@ -340,12 +343,26 @@ def test_dashboard_renders_and_escapes(monkeypatch) -> None:
     assert "teamshared memory status" in body
     for heading in ("Working sessions", "Semantic", "Episodic", "Procedural"):
         assert heading in body
-    assert "ship-pr" in body
     assert "cursor" in body
-    # Content + topic are escaped, never injected raw.
-    assert "&lt;b&gt;danger&lt;/b&gt; &amp; co" in body
-    assert "<b>danger</b>" not in body
+    assert "Recent activity" in body
+    assert "TEAMSHARED_DASHBOARD_PUBLIC_CONTENT" in body
+    # Public dashboard must not expose memory snippets by default.
+    assert "ship-pr" not in body
+    assert "&lt;b&gt;danger&lt;/b&gt;" not in body
     assert "<script>alert(1)</script>" not in body
+
+
+def test_dashboard_shows_content_when_flag_enabled(monkeypatch) -> None:
+    monkeypatch.setattr(
+        dashboard,
+        "check_components",
+        AsyncMock(return_value={"status": "ok", "components": {"redis": "ok"}}),
+    )
+    state = _make_state()
+    state.settings.dashboard_public_content = True
+    body = _client(state).get("/memory").text
+    assert "ship-pr" in body
+    assert "&lt;b&gt;danger&lt;/b&gt; &amp; co" in body
 
 
 def test_dashboard_degrades_when_store_errors(monkeypatch) -> None:
@@ -358,6 +375,5 @@ def test_dashboard_degrades_when_store_errors(monkeypatch) -> None:
     assert resp.status_code == 200
     body = resp.text
     assert "unavailable" in body
-    # Working pillar still rendered despite semantic failure.
-    assert "Working sessions" in body
-    assert "ship-pr" in body
+    assert "Recent semantic" not in body
+    assert "Recent activity" in body

@@ -19,6 +19,7 @@ from teamshared.ingestion.approvals import ApprovalQueue
 from teamshared.ingestion.injection import InjectionVerdict, screen_injection
 from teamshared.ingestion.pii import PIIFinding, has_hard_secret, redact_pii, scan_pii
 from teamshared.logging import get_logger
+from teamshared.metrics import METRICS
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.types import MemoryItemScope, MemoryKind, MemorySource, Visibility
@@ -127,6 +128,7 @@ class IngestionPipeline:
 
         if status != "active":
             reason = "prompt_injection_suspected" if verdict.quarantine else "review_required"
+            METRICS.ingestion_quarantined.inc(status=status, reason=reason)
             await self.approvals.enqueue(
                 ctx.org_id, memory_id, reason=reason, requested_by=ctx.principal.id
             )

@@ -20,6 +20,7 @@ from teamshared.clients.readme_page import render_readme_html
 from teamshared.config import Settings
 from teamshared.invite import InviteStore
 from teamshared.logging import get_logger
+from teamshared.metrics import METRICS
 
 log = get_logger(__name__)
 
@@ -592,6 +593,7 @@ async def handle_token_mint(
 
     provided = request.headers.get(MINT_SECRET_HEADER, "").strip()
     if not provided or not secrets.compare_digest(provided, settings.mint_secret):
+        METRICS.auth_rejected.inc(reason="invalid_mint_secret")
         log.warning("token_mint_rejected", reason="invalid_mint_secret")
         return JSONResponse({"error": "invalid_mint_secret"}, status_code=401)
 
@@ -612,6 +614,7 @@ async def handle_token_invite_create(
 
     provided = request.headers.get(MINT_SECRET_HEADER, "").strip()
     if not provided or not secrets.compare_digest(provided, settings.mint_secret):
+        METRICS.auth_rejected.inc(reason="invalid_mint_secret")
         return JSONResponse({"error": "invalid_mint_secret"}, status_code=401)
 
     try:

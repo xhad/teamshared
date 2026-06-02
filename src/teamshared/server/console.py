@@ -33,6 +33,7 @@ from teamshared.identity.rbac import Permissions
 from teamshared.identity.sessions import issue_session, verify_session
 from teamshared.ingestion.consent import BASELINE_PROFILE, LOCKED_RULES, MODES, SCOPES
 from teamshared.logging import get_logger
+from teamshared.metrics import METRICS
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.wiki import slugify
 from teamshared.server import mailer
@@ -273,6 +274,7 @@ def register_console_routes(
         email = str(form.get("email") or "").strip().lower()
         code = str(form.get("code") or "").strip()
         if not await services.working.verify_login_otp(email, code):
+            METRICS.otp_failed.inc()
             return _TEMPLATES.TemplateResponse(
                 request,
                 "login.html",

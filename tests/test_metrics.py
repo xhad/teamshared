@@ -36,3 +36,16 @@ def test_cross_tenant_violation_starts_zero() -> None:
     m = Metrics()
     out = m.render()
     assert "teamshared_cross_tenant_violation_total 0" in out
+
+
+def test_security_counters_render() -> None:
+    m = Metrics()
+    m.auth_rejected.inc(reason="invalid_token")
+    m.otp_failed.inc()
+    m.consent_denied_capture.inc(capability="tool_calls")
+    m.ingestion_quarantined.inc(status="quarantined", reason="prompt_injection_suspected")
+    out = m.render()
+    assert "teamshared_auth_rejected_total" in out
+    assert "teamshared_otp_failed_total" in out
+    assert "teamshared_consent_denied_capture_total" in out
+    assert "teamshared_ingestion_quarantined_total" in out

@@ -24,6 +24,7 @@ from starlette.routing import Mount, Route
 
 from teamshared.auth import BearerAuthMiddleware, TokenStore
 from teamshared.config import Settings, get_settings
+from teamshared.config_validate import validate_settings
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.invite import InviteStore
 from teamshared.logging import configure_logging, get_logger
@@ -173,6 +174,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     - ``ANY  /mcp/*``   -- FastMCP streamable HTTP, gated by bearer auth.
     """
     settings = settings or get_settings()
+    validate_settings(settings)
     configure_logging(settings.log_level)
     setup_tracing()
 
@@ -325,6 +327,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         if not await state.services.consent.capture_allowed(
             org_id, identity.agent, "raw_turns"
         ):
+            METRICS.consent_denied_capture.inc(capability="raw_turns")
             return JSONResponse(
                 {"recorded": 0, "consent_required": True}, status_code=403
             )

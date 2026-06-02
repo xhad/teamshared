@@ -25,6 +25,7 @@ from fastmcp.tools import ToolResult
 from teamshared.auth import current_agent, current_principal
 from teamshared.config import get_settings
 from teamshared.logging import get_logger
+from teamshared.metrics import METRICS
 from teamshared.memory.working import WorkingMemory
 from teamshared.server.state import get_state
 
@@ -145,6 +146,7 @@ class ToolCallCaptureMiddleware(Middleware):
             if not await state.services.consent.capture_allowed(
                 org_id, identity.agent, "tool_calls"
             ):
+                METRICS.consent_denied_capture.inc(capability="tool_calls")
                 return
             content = _build_turn(name, getattr(message, "arguments", None), ok=ok)
             await state.working.record_tool_call(

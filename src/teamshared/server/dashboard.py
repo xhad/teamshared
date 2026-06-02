@@ -263,6 +263,13 @@ def _health_badges(health: Any) -> str:
     return f'<div class="badges">{"".join(badges)}</div>'
 
 
+_CONTENT_NOTE = (
+    '<p class="muted">Recent memory rows are hidden on the public dashboard. '
+    "Sign in at <a href=\"/app\">/app</a> or enable "
+    "<code>TEAMSHARED_DASHBOARD_PUBLIC_CONTENT</code> in development.</p>"
+)
+
+
 def _render_page(
     *,
     health: Any,
@@ -272,6 +279,7 @@ def _render_page(
     recent_semantic: Any,
     recent_episodic: Any,
     recent_procs: Any,
+    show_content: bool,
 ) -> str:
     w_active = working.get("active", 0) if isinstance(working, dict) else 0
     w_total = working.get("total", 0) if isinstance(working, dict) else 0
@@ -305,34 +313,51 @@ def _render_page(
         agents_panel = _bar_chart(by_agent)
         kinds_panel = _bar_chart(by_kind)
 
-    sem_table = (
-        _unavailable(recent_semantic)
-        if _is_err(recent_semantic)
-        else _records_table(
-            ["Content", "Agent", "Kind", "Created"], _semantic_record_rows(recent_semantic)
+    if show_content:
+        sem_table = (
+            _unavailable(recent_semantic)
+            if _is_err(recent_semantic)
+            else _records_table(
+                ["Content", "Agent", "Kind", "Created"], _semantic_record_rows(recent_semantic)
+            )
         )
-    )
-    epi_table = (
-        _unavailable(recent_episodic)
-        if _is_err(recent_episodic)
-        else _records_table(
-            ["Content", "Agent", "Kind", "Created"], _semantic_record_rows(recent_episodic)
+        epi_table = (
+            _unavailable(recent_episodic)
+            if _is_err(recent_episodic)
+            else _records_table(
+                ["Content", "Agent", "Kind", "Created"], _semantic_record_rows(recent_episodic)
+            )
         )
-    )
-    proc_table = (
-        _unavailable(recent_procs)
-        if _is_err(recent_procs)
-        else _records_table(
-            ["Name", "Version", "Author", "Tags", "Created"], _procedure_rows(recent_procs)
+        proc_table = (
+            _unavailable(recent_procs)
+            if _is_err(recent_procs)
+            else _records_table(
+                ["Name", "Version", "Author", "Tags", "Created"], _procedure_rows(recent_procs)
+            )
         )
-    )
-    sess_table = (
-        _unavailable(working)
-        if _is_err(working)
-        else _records_table(
-            ["Agent", "Topic", "Turns", "Status", "Opened"], _session_rows(working)
+        sess_table = (
+            _unavailable(working)
+            if _is_err(working)
+            else _records_table(
+                ["Agent", "Topic", "Turns", "Status", "Opened"], _session_rows(working)
+            )
         )
-    )
+        recent_sections = f"""
+    <h2>Recent semantic</h2>
+    <div class="panel">{sem_table}</div>
+
+    <h2>Recent episodic</h2>
+    <div class="panel">{epi_table}</div>
+
+    <h2>Procedures (playbooks)</h2>
+    <div class="panel">{proc_table}</div>
+
+    <h2>Recent working sessions</h2>
+    <div class="panel">{sess_table}</div>"""
+    else:
+        recent_sections = f"""
+    <h2>Recent activity</h2>
+    <div class="panel">{_CONTENT_NOTE}</div>"""
 
     return f"""<!doctype html>
 <html lang="en">
@@ -359,19 +384,9 @@ def _render_page(
       <div class="panel"><h3>Semantic kinds</h3>{kinds_panel}</div>
     </div>
 
-    <h2>Recent semantic</h2>
-    <div class="panel">{sem_table}</div>
-
-    <h2>Recent episodic</h2>
-    <div class="panel">{epi_table}</div>
-
-    <h2>Procedures (playbooks)</h2>
-    <div class="panel">{proc_table}</div>
-
-    <h2>Recent working sessions</h2>
-    <div class="panel">{sess_table}</div>
+{recent_sections}
   </div>
-  <p class="foot">Counts come from direct SQL on the Mem0 + procedures tables and a Redis scan; recall search may surface more.</p>
+  <p class="foot">Aggregate counts from pgvector, procedures, and Redis; not a full recall index.</p>
 </body>
 </html>"""
 
@@ -391,13 +406,18 @@ async def handle_memory_dashboard(request: Request, state: ServerState) -> HTMLR
         return_exceptions=True,
     )
     health, working, semantic, procedural = core
-    recent: list[Any] = await asyncio.gather(
-        state.services.vector_store.list_recent(org_id, limit=10, pillar="semantic"),
-        state.services.vector_store.list_recent(org_id, limit=10, pillar="episodic"),
-        state.procedural.list_procedures(org_id, limit=10),
-        return_exceptions=True,
-    )
-    recent_semantic, recent_episodic, recent_procs = recent
+    show_content = state.settings.dashboard_public_content
+    recent_semantic: Any = []
+    recent_episodic: Any = []
+    recent_procs: Any = []
+    if show_content:
+        recent = await asyncio.gather(
+            state.services.vector_store.list_recent(org_id, limit=10, pillar="semantic"),
+            state.services.vector_store.list_recent(org_id, limit=10, pillar="episodic"),
+            state.procedural.list_procedures(org_id, limit=10),
+            return_exceptions=True,
+        )
+        recent_semantic, recent_episodic, recent_procs = recent
     page = _render_page(
         health=health,
         working=working,
@@ -406,5 +426,6 @@ async def handle_memory_dashboard(request: Request, state: ServerState) -> HTMLR
         recent_semantic=recent_semantic,
         recent_episodic=recent_episodic,
         recent_procs=recent_procs,
+        show_content=show_content,
     )
     return HTMLResponse(page)

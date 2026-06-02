@@ -120,6 +120,20 @@ class Metrics:
             "Out-of-scope rows dropped post-retrieval (should always be 0)",
         )
         self.memory_writes = _Counter("teamshared_memory_writes_total", "Memory items written")
+        self.auth_rejected = _Counter(
+            "teamshared_auth_rejected_total", "Bearer auth rejections at the HTTP edge"
+        )
+        self.otp_failed = _Counter(
+            "teamshared_otp_failed_total", "Console OTP verification failures"
+        )
+        self.consent_denied_capture = _Counter(
+            "teamshared_consent_denied_capture_total",
+            "Capture attempts blocked by missing or insufficient consent",
+        )
+        self.ingestion_quarantined = _Counter(
+            "teamshared_ingestion_quarantined_total",
+            "Memory writes quarantined or sent to approval by ingestion",
+        )
 
     def render(self) -> str:
         with self._lock:
@@ -127,7 +141,8 @@ class Metrics:
             for metric in (
                 self.retrieval_latency, self.embed_calls, self.embed_texts,
                 self.queue_depth, self.permission_denied, self.cross_tenant_violation,
-                self.memory_writes,
+                self.memory_writes, self.auth_rejected, self.otp_failed,
+                self.consent_denied_capture, self.ingestion_quarantined,
             ):
                 lines.extend(metric.render())
             return "\n".join(lines) + "\n"

@@ -33,6 +33,8 @@ from starlette.types import ASGIApp
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
+from teamshared.metrics import METRICS
+from teamshared.server.route_policy import outer_middleware_skips_bearer
 
 log = get_logger(__name__)
 
@@ -174,35 +176,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
         path = request.url.path
-        if path in {
-            "/health",
-            "/metrics",
-            "/memory",
-            "/",
-            "/favicon.ico",
-            "/tokens/mint",
-            "/tokens/invites",
-            "/get-token",
-            "/install",
-            "/install.sh",
-            "/uninstall.sh",
-            "/plugin/teamshared.tar.gz",
-        }:
-            return await call_next(request)
-        if path.startswith(
-            (
-                "/tokens/mint/",
-                "/get-token/",
-                "/install/assets/",
-                "/install/plugin/",
-                "/v1",
-                "/app",
-                "/login",
-                "/logout",
-            )
-        ):
-            # The /v1 REST app and the /app console authenticate with their own
-            # middleware (Principal bearer / ts_session cookie respectively).
+        if outer_middleware_skips_bearer(path):
             return await call_next(request)
 
         identity: AgentIdentity | None
@@ -212,6 +186,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         else:
             header = request.headers.get("authorization", "")
             if not header.lower().startswith("bearer "):
+                METRICS.auth_rejected.inc(reason="missing_bearer")
                 return JSONResponse(
                     {"error": "missing_bearer_token"},
                     status_code=401,
@@ -222,6 +197,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
 
         principal = await self._resolve_principal(token, identity)
         if not self.auth_disabled and identity is None and principal is None:
+            METRICS.auth_rejected.inc(reason="invalid_token")
             log.warning("auth_rejected", token_prefix=(token or "")[:8])
             return JSONResponse({"error": "invalid_token"}, status_code=401)
 

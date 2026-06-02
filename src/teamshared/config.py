@@ -15,6 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 EmbedProvider = Literal["openai", "ollama"]
 LLMProvider = Literal["openai", "ollama"]
+DeploymentEnv = Literal["development", "production"]
 
 
 class Settings(BaseSettings):
@@ -49,7 +50,21 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("TEAMSHARED_PORT", "PORT"),
     )
     log_level: str = "info"
+    deployment_env: DeploymentEnv = Field(
+        default="development",
+        description=(
+            "When 'production', startup runs config_validate and rejects unsafe "
+            "settings (auth_disabled, missing RLS app role, etc.)."
+        ),
+    )
     auth_disabled: bool = False
+    dashboard_public_content: bool = Field(
+        default=False,
+        description=(
+            "When true, GET /memory includes recent memory rows (content snippets). "
+            "Must stay false in production."
+        ),
+    )
     tokens_file: Path = Field(default=Path("./.teamshared/tokens.json"))
     invites_file: Path = Field(default=Path("./.teamshared/invites.json"))
     self_service_tokens: bool = Field(

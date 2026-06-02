@@ -29,6 +29,7 @@ from rich.table import Table
 from teamshared.auth import TokenStore
 from teamshared.clients.agent_setup import normalize_agent_type
 from teamshared.config import get_settings
+from teamshared.config_validate import validate_settings
 from teamshared.invite import InviteStore
 from teamshared.logging import configure_logging
 from teamshared.server.token_api import get_token_path, invite_redeem_curl, invite_redeem_url
@@ -55,6 +56,7 @@ def serve(
 ) -> None:
     """Run the MCP server."""
     settings = get_settings()
+    validate_settings(settings)
     configure_logging(settings.log_level)
 
     if transport == "stdio":

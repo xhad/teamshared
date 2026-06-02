@@ -945,3 +945,87 @@ Where useful, include:
 Prioritize practical implementation over theoretical discussion.
 
 Assume I want to start building immediately.
+
+---
+
+## Security & production hardening roadmap (staged)
+
+Architectural review (2026-06) distilled into five shippable stages. Each stage
+keeps `main` deployable; prefer feature flags and tests that pin contracts.
+
+### Guiding principles
+
+| Principle | Implication |
+|-----------|-------------|
+| Fail closed in prod | `TEAMSHARED_DEPLOYMENT_ENV=production` rejects unsafe config at startup |
+| One identity migration | Legacy `teamshared_*` tokens shrink every stage; target is org-bound `tsk_*` only |
+| Test the contract | Route registry + security metrics in CI |
+| Feature flags | e.g. `dashboard_public_content`, procedure review (later) |
+
+### Stage 0 — Baseline & guardrails
+
+| ID | Work | Status |
+|----|------|--------|
+| 0.1 | Prod config validator (`config_validate.py`, `TEAMSHARED_DEPLOYMENT_ENV`) | **Done** |
+| 0.2 | Route inventory test (`server/route_policy.py`) | **Done** |
+| 0.3 | Security metrics (`auth_rejected`, `otp_failed`, `consent_denied_capture`, `ingestion_quarantined`) | **Done** |
+
+**Exit:** invalid prod `.env` refuses startup; new routes fail CI without classification.
+
+### Stage 1 — Public surface & abuse resistance (~1 week)
+
+| ID | Work | Status |
+|----|------|--------|
+| 1.1 | `/memory` counts-only by default (`dashboard_public_content=false`) | **Done** |
+| 1.2 | Redis rate limits (mint, OTP, MCP) | Pending |
+| 1.3 | `route_policy` drives `BearerAuthMiddleware` bypass list | Pending |
+
+### Stage 2 — Identity plane consolidation (2–3 weeks)
+
+| Phase | Work |
+|-------|------|
+| 2a | Mint `tsk_*` API keys only; migration CLI; dual-read legacy |
+| 2b | `legacy_token_used` metric + deprecation window |
+| 2c | Remove `TokenStore` from hot path; org-bound keys only |
+
+### Stage 3 — Memory path consistency (1–2 weeks)
+
+| ID | Work |
+|----|------|
+| 3.1 | Per-request `Authorizer` for `MemoryService` (no stale RBAC cache) |
+| 3.2 | `memory_procedure_set` through ingestion (PII/injection/review) |
+| 3.3 | Audit `agent=` attribution overrides |
+
+### Stage 4 — Worker trust & scale (~2 weeks)
+
+| ID | Work |
+|----|------|
+| 4.1 | HMAC-signed distill/curate jobs |
+| 4.2 | Redis-backed rate limit + idempotency for multi-instance |
+| 4.3 | Capture/consent + queue observability alerts |
+
+### Stage 5 — Enterprise layer (ongoing)
+
+Org memory policies, export/erasure, Neo4j hardening, Mem0 removal, console CSRF, threat model / pen test.
+
+### PR slicing (review-friendly)
+
+```
+Stage 0: config validator | route_policy + test | metrics wiring
+Stage 1: dashboard | redis rate limit | auth uses route_policy
+Stage 2: tsk mint | migrate CLI | remove legacy
+Stage 3: authorizer factory | procedure pipeline | override audit
+```
+
+### Critical path
+
+`0 → 1.1 → 1.2 → 2a → 2c → 3.2`
+
+### Rollout notes
+
+| Milestone | User impact |
+|-----------|-------------|
+| Stage 1 | `/memory` no longer shows memory snippets by default |
+| Stage 2a | Re-redeem invite → `tsk_*` token |
+| Stage 2c | Legacy tokens stop working (communicate DATE) |
+| Stage 3 | Procedures may enter approval queue |
