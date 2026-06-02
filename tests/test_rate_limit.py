@@ -96,7 +96,7 @@ def _mcp_app(store: TokenStore, limiter: RedisRateLimiter) -> Starlette:
 
 
 def test_mcp_middleware_per_token(tmp_path: Path, limiter: RedisRateLimiter) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     token = store.mint("cursor")
     client = TestClient(_mcp_app(store, limiter))
     headers = {"Authorization": f"Bearer {token}"}

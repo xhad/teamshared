@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -87,6 +88,7 @@ def _build(
     settings = SimpleNamespace(
         session_secret=SECRET,
         default_org_id=DEFAULT_ORG,
+        tokens_file=Path(".teamshared/tokens.json"),
         auth_disabled=auth_disabled,  # dev mode: OTP code shown in the page
         public_url="http://testserver",
         otp_ttl_seconds=30,
@@ -109,12 +111,18 @@ def _build(
     )
     # Console write handlers enforce RBAC via ctx.authorizer.require; give the
     # fake services an authorizer whose require is awaitable (allow by default).
-    services.authorizer = MagicMock(return_value=SimpleNamespace(require=AsyncMock()))
+    services.authorizer = MagicMock(
+        return_value=SimpleNamespace(
+            require=AsyncMock(),
+            has=AsyncMock(return_value=True),
+        )
+    )
     if consent is not None:
         services.consent = consent
 
     routes = register_console_routes(settings, services)
     app = Starlette(routes=routes)
+    app.state.legacy_token_count = 0
     return TestClient(app, follow_redirects=False), services
 
 
@@ -172,6 +180,16 @@ def _login(client: TestClient) -> None:
     assert "ts_session" in verify.cookies or any(
         "ts_session" in c for c in verify.headers.get_list("set-cookie")
     )
+
+
+def test_legacy_token_banner_for_org_admin() -> None:
+    client, _ = _build()
+    client.app.state.legacy_token_count = 2
+    _login(client)
+    resp = client.get("/app")
+    assert resp.status_code == 200
+    assert "legacy teamshared_*" in resp.text
+    assert "migrate-legacy" in resp.text
 
 
 def test_unauthenticated_app_redirects_to_login() -> None:

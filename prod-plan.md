@@ -985,7 +985,7 @@ keeps `main` deployable; prefer feature flags and tests that pin contracts.
 | Phase | Work | Status |
 |-------|------|--------|
 | 2a | Mint `tsk_*` API keys only; migration CLI; dual-read legacy | **Done** |
-| 2b | `legacy_token_used` metric + deprecation window | Pending |
+| 2b | `legacy_token_used` metric + deprecation window | **Done** |
 | 2c | Remove `TokenStore` from hot path; org-bound keys only | Pending |
 
 ### Stage 3 — Memory path consistency (1–2 weeks)

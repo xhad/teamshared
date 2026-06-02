@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
@@ -11,7 +12,13 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from teamshared.auth import BearerAuthMiddleware, TokenStore, current_agent
+from teamshared.auth import (
+    BearerAuthMiddleware,
+    LegacyTokenMintDisabled,
+    TokenStore,
+    current_agent,
+)
+from teamshared.metrics import METRICS
 
 
 def _build_app(store: TokenStore, *, disabled: bool = False) -> Starlette:
@@ -31,8 +38,14 @@ def _build_app(store: TokenStore, *, disabled: bool = False) -> Starlette:
     )
 
 
-def test_token_store_mint_and_lookup(tmp_path: Path) -> None:
+def test_token_store_mint_disabled_by_default(tmp_path: Path) -> None:
     store = TokenStore(tmp_path / "tokens.json")
+    with pytest.raises(LegacyTokenMintDisabled):
+        store.mint("cursor")
+
+
+def test_token_store_mint_and_lookup(tmp_path: Path) -> None:
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     token = store.mint("cursor")
     assert token.startswith("teamshared_")
 
@@ -47,7 +60,7 @@ def test_token_store_mint_and_lookup(tmp_path: Path) -> None:
 
 
 def test_token_store_mint_assigns_unique_state_ids(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     token_a = store.mint("cursor")
     token_b = store.mint("hermes")
 
@@ -59,7 +72,7 @@ def test_token_store_mint_assigns_unique_state_ids(tmp_path: Path) -> None:
 
 
 def test_token_store_legacy_token_gets_stable_state_id(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     token = "teamshared_legacytoken"
     store._save({token: {"agent": "cursor", "created_at": "now"}})
 
@@ -71,7 +84,7 @@ def test_token_store_legacy_token_gets_stable_state_id(tmp_path: Path) -> None:
 
 
 def test_token_store_legacy_entries(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     t1 = store.mint("cursor")
     t2 = store.mint("hermes")
     entries = store.legacy_entries()
@@ -83,7 +96,7 @@ def test_token_store_legacy_entries(tmp_path: Path) -> None:
 
 
 def test_token_store_revoke(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     token = store.mint("hermes")
     n = store.revoke(token[:12])
     assert n == 1
@@ -91,13 +104,13 @@ def test_token_store_revoke(tmp_path: Path) -> None:
 
 
 def test_token_store_revoke_requires_match(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     store.mint("hermes")
     assert store.revoke("nonexistent_prefix") == 0
 
 
 def test_middleware_rejects_missing_header(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     app = _build_app(store)
     with TestClient(app) as client:
         resp = client.get("/mcp/whoami")
@@ -106,7 +119,7 @@ def test_middleware_rejects_missing_header(tmp_path: Path) -> None:
 
 
 def test_middleware_rejects_unknown_token(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     store.mint("cursor")
     app = _build_app(store)
     with TestClient(app) as client:
@@ -117,7 +130,7 @@ def test_middleware_rejects_unknown_token(tmp_path: Path) -> None:
 
 
 def test_middleware_binds_identity(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     token = store.mint("cursor")
     app = _build_app(store)
     with TestClient(app) as client:
@@ -128,8 +141,22 @@ def test_middleware_binds_identity(tmp_path: Path) -> None:
         assert resp.json() == {"agent": "cursor"}
 
 
+def test_legacy_token_auth_records_metric(tmp_path: Path) -> None:
+    before = sum(METRICS.legacy_token_used.values.values())
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
+    token = store.mint("cursor")
+    app = _build_app(store)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/mcp/whoami", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp.status_code == 200
+    after = sum(METRICS.legacy_token_used.values.values())
+    assert after == before + 1
+
+
 def test_health_is_anonymous(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     app = _build_app(store)
     with TestClient(app) as client:
         resp = client.get("/health")
@@ -137,7 +164,7 @@ def test_health_is_anonymous(tmp_path: Path) -> None:
 
 
 def test_auth_disabled_skips_check(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     app = _build_app(store, disabled=True)
     with TestClient(app) as client:
         resp = client.get("/mcp/whoami")

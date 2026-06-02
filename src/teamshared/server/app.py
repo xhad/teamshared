@@ -89,7 +89,10 @@ async def _init_state(
     resolver: PrincipalResolver,
 ) -> ServerState:
     """Connect every backing store and assemble :class:`ServerState`."""
-    tokens = TokenStore(settings.tokens_file)
+    tokens = TokenStore(
+        settings.tokens_file,
+        legacy_mint_enabled=settings.legacy_token_mint_enabled,
+    )
     invites = InviteStore(settings.invites_file)
     # Single WorkingMemory instance, owned by services and shared with ServerState
     # (the console reaches it via services.working for sign-in OTP storage).
@@ -228,7 +231,10 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
                 status_code=503,
             )
 
-    tokens = TokenStore(settings.tokens_file)
+    tokens = TokenStore(
+        settings.tokens_file,
+        legacy_mint_enabled=settings.legacy_token_mint_enabled,
+    )
     invites = InviteStore(settings.invites_file)
     agent_minter = AgentTokenMinter(
         api_keys=services.api_keys,
@@ -363,6 +369,14 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         await rate_limiter.connect()
         app.state.rate_limiter = rate_limiter
+        legacy_count = tokens.legacy_count()
+        app.state.legacy_token_count = legacy_count
+        if legacy_count:
+            log.warning(
+                "legacy_tokens_on_disk",
+                count=legacy_count,
+                path=str(settings.tokens_file),
+            )
         state = await _init_state(settings, services, resolver)
         log.info("teamshared_server_started", host=settings.host, port=settings.port)
         async with mcp_app.lifespan(app):

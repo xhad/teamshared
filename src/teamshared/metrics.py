@@ -137,6 +137,10 @@ class Metrics:
         self.rate_limited = _Counter(
             "teamshared_rate_limited_total", "HTTP requests rejected by edge rate limits"
         )
+        self.legacy_token_used = _Counter(
+            "teamshared_legacy_token_used_total",
+            "Authenticated requests using a legacy teamshared_* file token",
+        )
 
     def render(self) -> str:
         with self._lock:
@@ -146,7 +150,7 @@ class Metrics:
                 self.queue_depth, self.permission_denied, self.cross_tenant_violation,
                 self.memory_writes, self.auth_rejected, self.otp_failed,
                 self.consent_denied_capture, self.ingestion_quarantined,
-                self.rate_limited,
+                self.rate_limited, self.legacy_token_used,
             ):
                 lines.extend(metric.render())
             return "\n".join(lines) + "\n"

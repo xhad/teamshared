@@ -57,6 +57,12 @@ def validate_settings(settings: Settings) -> None:
             "(public /memory must not expose memory snippets)"
         )
 
+    if settings.legacy_token_mint_enabled:
+        errors.append(
+            "TEAMSHARED_LEGACY_TOKEN_MINT_ENABLED must be false in production "
+            "(mint tsk_ API keys via invite redeem or teamshared token mint)"
+        )
+
     if errors:
         bullet = "\n  - "
         raise ConfigValidationError(

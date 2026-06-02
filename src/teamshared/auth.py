@@ -38,6 +38,12 @@ from teamshared.server.route_policy import outer_middleware_skips_bearer
 
 log = get_logger(__name__)
 
+_LEGACY_TOKEN_PREFIX = "teamshared_"
+
+
+class LegacyTokenMintDisabled(RuntimeError):
+    """Raised when :meth:`TokenStore.mint` is called while legacy mint is off."""
+
 
 @dataclass(frozen=True)
 class AgentIdentity:
@@ -95,10 +101,14 @@ class TokenStore:
 
     Reads are O(n) over tokens; n is expected to be tiny (one token per agent
     per device). All mutations rewrite the file atomically.
+
+    New tokens must be minted via :class:`teamshared.identity.agent_tokens.AgentTokenMinter`
+    (``tsk_`` API keys). :meth:`mint` remains for tests and explicit dev overrides only.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, legacy_mint_enabled: bool = False) -> None:
         self.path = path
+        self._legacy_mint_enabled = legacy_mint_enabled
 
     def _load(self) -> dict[str, dict[str, Any]]:
         if not self.path.exists():
@@ -121,8 +131,17 @@ class TokenStore:
         return AgentIdentity(agent=entry["agent"], state_id=_derive_state_id(token, entry))
 
     def mint(self, agent: str) -> str:
-        """Generate a new token for ``agent`` and persist it. Returns the raw token."""
-        token = "teamshared_" + secrets.token_urlsafe(32)
+        """Generate a new legacy token for ``agent`` (deprecated).
+
+        Raises :class:`LegacyTokenMintDisabled` unless ``legacy_mint_enabled`` was
+        set at construction (dev/tests only).
+        """
+        if not self._legacy_mint_enabled:
+            raise LegacyTokenMintDisabled(
+                "legacy teamshared_* mint is disabled; redeem an invite or run "
+                "'teamshared token mint <agent>' for a tsk_ API key"
+            )
+        token = _LEGACY_TOKEN_PREFIX + secrets.token_urlsafe(32)
         data = self._load()
         data[token] = {
             "agent": agent,
@@ -158,6 +177,10 @@ class TokenStore:
             (token, str(entry["agent"]))
             for token, entry in self._load().items()
         ]
+
+    def legacy_count(self) -> int:
+        """Number of legacy tokens still on disk (for deprecation banners)."""
+        return len(self._load())
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
@@ -201,6 +224,13 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
                 )
             token = header[len("bearer ") :].strip()
             identity = self.store.lookup(token)
+            if identity is not None:
+                METRICS.legacy_token_used.inc()
+                log.warning(
+                    "legacy_token_used",
+                    agent=identity.agent,
+                    token_prefix=token[:16],
+                )
 
         principal = await self._resolve_principal(token, identity)
         if not self.auth_disabled and identity is None and principal is None:

@@ -82,6 +82,13 @@ class Settings(BaseSettings):
         default=120,
         description="MCP and bearer-scoped routes per principal per minute.",
     )
+    legacy_token_mint_enabled: bool = Field(
+        default=False,
+        description=(
+            "Allow TokenStore.mint (legacy teamshared_* file tokens). Disabled in "
+            "production; use AgentTokenMinter / invite redeem for tsk_ keys."
+        ),
+    )
     tokens_file: Path = Field(default=Path("./.teamshared/tokens.json"))
     invites_file: Path = Field(default=Path("./.teamshared/invites.json"))
     self_service_tokens: bool = Field(

@@ -162,6 +162,22 @@ def register_console_routes(
             "org_name": active["name"] if active else _ORG_NAME,
         }
 
+    async def _legacy_token_warning(
+        request: Request, principal: Principal
+    ) -> str | None:
+        """Deprecation banner for org admins when legacy tokens.json entries remain."""
+        count = int(getattr(request.app.state, "legacy_token_count", 0) or 0)
+        if count <= 0:
+            return None
+        if not await services.authorizer().has(principal, Permissions.ORG_ADMIN):
+            return None
+        return (
+            f"{count} legacy teamshared_* bearer token(s) remain in "
+            f"{settings.tokens_file}. New installs use tsk_ API keys — run "
+            "<code>teamshared token migrate-legacy</code>, update MCP configs, then "
+            "<code>teamshared token revoke &lt;prefix&gt;</code> when done."
+        )
+
     async def _shell(
         request: Request, principal: Principal, active: str
     ) -> dict[str, Any]:
@@ -171,6 +187,7 @@ def register_console_routes(
             "active": active,
             "who": principal.display or str(principal.id),
             "org_name": _ORG_NAME,
+            "legacy_token_warning": await _legacy_token_warning(request, principal),
         }
         ctx.update(await _org_context(principal))
         return ctx

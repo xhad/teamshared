@@ -74,6 +74,9 @@
     .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
     .unavailable { color: #fcd34d; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.28); border-radius: 8px;
       padding: .6rem .8rem; font-size: .85rem; }
+    .legacy-banner { color: #fcd34d; background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.35);
+      border-radius: 10px; padding: .75rem 1rem; font-size: .88rem; margin-bottom: 1.25rem; }
+    .legacy-banner code { font-size: .82rem; background: rgba(0,0,0,.35); padding: .1rem .35rem; border-radius: 4px; }
     .tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--border); margin: 0 0 1.25rem; }
     .tabs a { padding: .5rem .85rem; font-size: .9rem; color: var(--muted); border-bottom: 2px solid transparent; }
     .tabs a.on { color: var(--indigo-bright); border-bottom-color: var(--indigo-bright); font-weight: 600; }
@@ -162,6 +165,9 @@
         <span class="who">{{ who }}<a href="/logout">Sign out</a></span>
       </header>
       <main class="content">
+        {% if legacy_token_warning %}
+        <div class="legacy-banner" role="status">{{ legacy_token_warning }}</div>
+        {% endif %}
         {% block content %}{% endblock %}
       </main>
     </div>
