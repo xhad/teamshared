@@ -958,7 +958,7 @@ keeps `main` deployable; prefer feature flags and tests that pin contracts.
 | Principle | Implication |
 |-----------|-------------|
 | Fail closed in prod | `TEAMSHARED_DEPLOYMENT_ENV=production` rejects unsafe config at startup |
-| One identity migration | Legacy `teamshared_*` tokens shrink every stage; target is org-bound `tsk_*` only |
+| Identity | Org-bound `tsk_*` API keys only (legacy file tokens removed) |
 | Test the contract | Route registry + security metrics in CI |
 | Feature flags | e.g. `dashboard_public_content`, procedure review (later) |
 
@@ -986,7 +986,7 @@ keeps `main` deployable; prefer feature flags and tests that pin contracts.
 |-------|------|--------|
 | 2a | Mint `tsk_*` API keys only; migration CLI; dual-read legacy | **Done** |
 | 2b | `legacy_token_used` metric + deprecation window | **Done** |
-| 2c | Remove `TokenStore` from hot path; org-bound keys only | **Done** |
+| 2c | Remove legacy file tokens; `tsk_*` keys only | **Done** |
 
 ### Stage 3 — Memory path consistency (1–2 weeks)
 
@@ -1027,5 +1027,5 @@ Stage 3: authorizer factory | procedure pipeline | override audit
 |-----------|-------------|
 | Stage 1 | `/memory` no longer shows memory snippets by default |
 | Stage 2a | Re-redeem invite → `tsk_*` token |
-| Stage 2c | Legacy tokens stop working (communicate DATE) |
+| Stage 2c | Legacy `teamshared_*` file tokens removed; use `tsk_*` only |
 | Stage 3 | Procedures may enter approval queue |

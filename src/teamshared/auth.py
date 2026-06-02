@@ -1,29 +1,16 @@
-"""Per-agent bearer-token auth.
+"""Bearer-token auth for the HTTP/MCP surface.
 
-Tokens are stored in a JSON file at :attr:`Settings.tokens_file`. Each entry
-maps a token to an agent identity::
-
-    {
-      "<token>": {"agent": "cursor", "created_at": "..."},
-      "<token>": {"agent": "hermes", "created_at": "..."}
-    }
-
-The ``agent`` field flows through to memory writes so we can attribute facts
-and scope reads. The middleware also exposes the resolved identity via the
-``request.state.agent`` attribute and the ``teamshared.current_agent`` contextvar so
-tool implementations don't have to dig through the request.
+:class:`BearerAuthMiddleware` resolves ``Authorization: Bearer`` tokens through
+:class:`~teamshared.identity.legacy_bridge.PrincipalResolver` (``tsk_*`` API keys
+and console session JWTs). Resolved identity is exposed on
+``request.state.agent`` / ``request.state.principal`` and via contextvars for
+tool handlers.
 """
 
 from __future__ import annotations
 
 import contextvars
-import hashlib
-import json
-import secrets
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from pathlib import Path
-from typing import Any
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -38,12 +25,6 @@ from teamshared.server.route_policy import outer_middleware_skips_bearer
 
 log = get_logger(__name__)
 
-_LEGACY_TOKEN_PREFIX = "teamshared_"
-
-
-class LegacyTokenMintDisabled(RuntimeError):
-    """Raised when :meth:`TokenStore.mint` is called while legacy mint is off."""
-
 
 @dataclass(frozen=True)
 class AgentIdentity:
@@ -51,15 +32,6 @@ class AgentIdentity:
 
     agent: str
     state_id: str
-
-
-def _derive_state_id(token: str, entry: dict[str, Any]) -> str:
-    """Return a unique per-token scope id for client state storage."""
-    stored = entry.get("state_id")
-    if stored:
-        return str(stored)
-    # Legacy tokens minted before state_id existed: stable hash of the secret.
-    return hashlib.sha256(token.encode()).hexdigest()[:32]
 
 
 _current_agent: contextvars.ContextVar[AgentIdentity | None] = contextvars.ContextVar(
@@ -96,99 +68,8 @@ def require_current_principal() -> Principal:
     return principal
 
 
-class TokenStore:
-    """Tiny JSON-file-backed token registry.
-
-    Reads are O(n) over tokens; n is expected to be tiny (one token per agent
-    per device). All mutations rewrite the file atomically.
-
-    New tokens must be minted via :class:`teamshared.identity.agent_tokens.AgentTokenMinter`
-    (``tsk_`` API keys). :meth:`mint` remains for tests and explicit dev overrides only.
-    """
-
-    def __init__(self, path: Path, *, legacy_mint_enabled: bool = False) -> None:
-        self.path = path
-        self._legacy_mint_enabled = legacy_mint_enabled
-
-    def _load(self) -> dict[str, dict[str, Any]]:
-        if not self.path.exists():
-            return {}
-        with self.path.open() as fh:
-            data: dict[str, dict[str, Any]] = json.load(fh)
-        return data
-
-    def _save(self, data: dict[str, dict[str, Any]]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        with tmp.open("w") as fh:
-            json.dump(data, fh, indent=2, sort_keys=True)
-        tmp.replace(self.path)
-
-    def lookup(self, token: str) -> AgentIdentity | None:
-        entry = self._load().get(token)
-        if entry is None:
-            return None
-        return AgentIdentity(agent=entry["agent"], state_id=_derive_state_id(token, entry))
-
-    def mint(self, agent: str) -> str:
-        """Generate a new legacy token for ``agent`` (deprecated).
-
-        Raises :class:`LegacyTokenMintDisabled` unless ``legacy_mint_enabled`` was
-        set at construction (dev/tests only).
-        """
-        if not self._legacy_mint_enabled:
-            raise LegacyTokenMintDisabled(
-                "legacy teamshared_* mint is disabled; redeem an invite or run "
-                "'teamshared token mint <agent>' for a tsk_ API key"
-            )
-        token = _LEGACY_TOKEN_PREFIX + secrets.token_urlsafe(32)
-        data = self._load()
-        data[token] = {
-            "agent": agent,
-            "created_at": datetime.now(UTC).isoformat(),
-            "state_id": secrets.token_hex(16),
-        }
-        self._save(data)
-        return token
-
-    def revoke(self, token_prefix: str) -> int:
-        """Remove all tokens starting with ``token_prefix``. Returns count removed."""
-        data = self._load()
-        to_remove = [tok for tok in data if tok.startswith(token_prefix)]
-        for tok in to_remove:
-            del data[tok]
-        self._save(data)
-        return len(to_remove)
-
-    def list_agents(self) -> list[dict[str, str]]:
-        """Return ``[{agent, token_prefix, created_at}, ...]`` without exposing raw tokens."""
-        return [
-            {
-                "agent": entry["agent"],
-                "token_prefix": tok[:12] + "...",
-                "created_at": entry.get("created_at", ""),
-            }
-            for tok, entry in sorted(self._load().items(), key=lambda kv: kv[1]["agent"])
-        ]
-
-    def legacy_entries(self) -> list[tuple[str, str]]:
-        """Return ``(raw_token, agent)`` for every legacy file-backed token."""
-        return [
-            (token, str(entry["agent"]))
-            for token, entry in self._load().items()
-        ]
-
-    def legacy_count(self) -> int:
-        """Number of legacy tokens still on disk (for deprecation banners)."""
-        return len(self._load())
-
-
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     """Validate ``Authorization: Bearer <token>`` via :class:`PrincipalResolver`.
-
-    ``tsk_`` API keys and console session JWTs are resolved in Postgres. Legacy
-    ``teamshared_*`` file tokens are accepted only when ``legacy_store`` is set
-    (``TEAMSHARED_LEGACY_TOKEN_AUTH_ENABLED``).
 
     - Public paths skip bearer validation (see :mod:`route_policy`).
     - If ``auth_disabled`` is True, a synthetic ``anonymous`` identity is bound
@@ -200,11 +81,9 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         app: ASGIApp,
         *,
         resolver: PrincipalResolver,
-        legacy_store: TokenStore | None = None,
         auth_disabled: bool = False,
     ) -> None:
         super().__init__(app)
-        self.legacy_store = legacy_store
         self.auth_disabled = auth_disabled
         self.resolver = resolver
 
@@ -227,25 +106,13 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             token = header[len("bearer ") :].strip()
-            if self.legacy_store is not None:
-                identity = self.legacy_store.lookup(token)
-                if identity is not None:
-                    METRICS.legacy_token_used.inc()
-                    log.warning(
-                        "legacy_token_used",
-                        agent=identity.agent,
-                        token_prefix=token[:16],
-                    )
 
-        principal = await self._resolve_principal(token, identity)
+        principal = await self._resolve_principal(token)
         if not self.auth_disabled and principal is None:
             METRICS.auth_rejected.inc(reason="invalid_token")
             log.warning("auth_rejected", token_prefix=(token or "")[:8])
             return JSONResponse({"error": "invalid_token"}, status_code=401)
 
-        # A tsk_/session principal carries no legacy AgentIdentity; synthesize
-        # one so working-memory capture and bearer-scoped client state still key
-        # off a stable string.
         if identity is None and principal is not None:
             identity = AgentIdentity(
                 agent=principal.display or principal.attribution,
@@ -262,16 +129,13 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             _current_agent.reset(agent_token)
             _current_principal.reset(principal_token)
 
-    async def _resolve_principal(
-        self, token: str | None, identity: AgentIdentity | None
-    ) -> Principal | None:
+    async def _resolve_principal(self, token: str | None) -> Principal | None:
         try:
             if self.auth_disabled:
                 return await self.resolver.anonymous()
             if token is None:
                 return None
-            legacy_agent = identity.agent if identity is not None else None
-            return await self.resolver.resolve(token, legacy_agent=legacy_agent)
+            return await self.resolver.resolve(token)
         except Exception as exc:  # resolution must not 500 the request
             log.warning("principal_resolution_failed", error=str(exc))
             return None

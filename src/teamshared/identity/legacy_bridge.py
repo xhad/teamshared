@@ -1,18 +1,13 @@
-"""Bridge the legacy bearer-token identity onto org-scoped Principals.
+"""Resolve bearer tokens to org-scoped :class:`~teamshared.identity.principal.Principal`.
 
-G2 rebinds the MCP tool surface onto the same org-scoped :class:`Principal`
-model the ``/v1`` REST API uses. This resolver is the single entry point the
-MCP ``BearerAuthMiddleware`` calls to turn any presented token into a
-Principal, in priority order:
+The MCP ``BearerAuthMiddleware`` and related surfaces call :class:`PrincipalResolver`
+to authenticate presented tokens, in priority order:
 
-1. A hashed ``tsk_`` API key -> its real Principal (any org).
-2. A signed dashboard session JWT -> the user Principal it carries.
-3. When ``legacy_agent`` is passed (legacy file auth opt-in via
-   ``TEAMSHARED_LEGACY_TOKEN_AUTH_ENABLED``), a synthetic agent Principal in the
-   *default org* — auto-provisioned on first use.
+1. A hashed ``tsk_`` API key → its bound Principal (any org).
+2. A signed console session JWT → the user Principal it carries.
 
-The agent-name -> id mapping is cached in-process; the upsert is cheap and
-idempotent so a cold cache is harmless.
+:class:`PrincipalResolver.for_agent` / :meth:`anonymous` synthesize agent
+Principals in the default org (used when ``auth_disabled`` is set).
 """
 
 from __future__ import annotations
@@ -50,12 +45,8 @@ class PrincipalResolver:
         self.session_secret = session_secret
         self._agent_cache: dict[str, UUID] = {}
 
-    async def resolve(self, token: str, *, legacy_agent: str | None = None) -> Principal | None:
-        """Return the Principal for ``token`` or ``None`` when unauthenticated.
-
-        ``legacy_agent`` is the agent name a legacy token resolved to (from the
-        JSON ``TokenStore``); pass it so we don't re-parse the token here.
-        """
+    async def resolve(self, token: str) -> Principal | None:
+        """Return the Principal for ``token`` or ``None`` when unauthenticated."""
         principal = await self.api_keys.authenticate(token)
         if principal is not None:
             return principal
@@ -63,8 +54,6 @@ class PrincipalResolver:
             session_principal = verify_session(token, secret=self.session_secret)
             if session_principal is not None:
                 return session_principal
-        if legacy_agent is not None:
-            return await self.for_agent(legacy_agent)
         return None
 
     async def for_agent(self, agent: str) -> Principal:

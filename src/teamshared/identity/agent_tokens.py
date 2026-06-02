@@ -1,9 +1,8 @@
 """Mint org-scoped ``tsk_`` API keys for harness agent types.
 
-Stage 2a replaces legacy ``teamshared_*`` JSON-file tokens on the mint path
-with hashed API keys bound to a provisioned agent principal in the default org
-(or an explicit ``org_id``). Legacy tokens remain valid for authentication
-Legacy ``teamshared_*`` file auth is opt-in via ``TEAMSHARED_LEGACY_TOKEN_AUTH_ENABLED``.
+Hashed API keys are bound to a provisioned agent principal in the default org
+(or an explicit ``org_id``). Invite redeem and ``teamshared token mint`` use
+:class:`AgentTokenMinter`.
 """
 
 from __future__ import annotations

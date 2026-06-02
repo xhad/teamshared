@@ -41,7 +41,6 @@ def temp_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[S
     for key in list(os.environ):
         if key.startswith("TEAMSHARED_"):
             monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("TEAMSHARED_TOKENS_FILE", str(tmp_path / "tokens.json"))
     get_settings.cache_clear()
     yield get_settings()
     get_settings.cache_clear()

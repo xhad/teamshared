@@ -9,7 +9,7 @@ Two run modes:
 - Live HTTP (recommended). Requires a running ``teamshared serve`` and a token::
 
     export TEAMSHARED_EVAL_URL=http://localhost:8077/mcp/
-    export TEAMSHARED_EVAL_TOKEN=teamshared_...
+    export TEAMSHARED_EVAL_TOKEN=tsk_...
     python eval/run.py
 
 - In-memory MCP without backing stores. The fake retriever is a simple

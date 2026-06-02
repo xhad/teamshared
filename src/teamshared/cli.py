@@ -9,8 +9,6 @@ Subcommands:
 - ``teamshared token mint <agent>`` -- issue a bearer token for an agent.
 - ``teamshared token invite-create [--agent] [--uses]`` -- create a one-time invite code.
 - ``teamshared token invite-list`` -- list active invite codes.
-- ``teamshared token list`` -- list issued tokens (prefixes only).
-- ``teamshared token revoke <prefix>`` -- revoke tokens by prefix.
 - ``teamshared config show`` -- print effective settings (secrets redacted).
 """
 
@@ -26,7 +24,6 @@ from psycopg import sql
 from rich.console import Console
 from rich.table import Table
 
-from teamshared.auth import TokenStore
 from teamshared.clients.agent_setup import normalize_agent_type
 from teamshared.config import get_settings
 from teamshared.config_validate import validate_settings
@@ -447,68 +444,7 @@ def token_mint(
             _, token = await minter.mint(agent_type)
             console.print(f"[bold]agent[/bold]: {agent_type}")
             console.print(f"[bold]token[/bold]: [cyan]{token}[/cyan]")
-            console.print("[dim]Org-scoped tsk_ API key (Postgres). Legacy tokens.json is not updated.[/dim]")
-        finally:
-            await services.tenant_db.close()
-
-    asyncio.run(_run())
-
-
-@token_app.command("migrate-legacy")
-def token_migrate_legacy(
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Print what would be minted without writing API keys.",
-    ),
-) -> None:
-    """Mint ``tsk_`` API keys for every legacy ``teamshared_*`` entry in tokens.json.
-
-    Prints agent, legacy token prefix, and the new secret (once per row). Does
-    not remove legacy tokens — revoke them after you update MCP configs.
-    """
-    settings = get_settings()
-    store = TokenStore(settings.tokens_file)
-    entries = store.legacy_entries()
-    if not entries:
-        console.print("[dim]No legacy tokens in[/dim]", settings.tokens_file)
-        return
-
-    async def _run() -> None:
-        services = make_services(settings)
-        await services.tenant_db.connect()
-        try:
-            resolver = PrincipalResolver(
-                api_keys=services.api_keys,
-                roles=services.roles,
-                tenant_db=services.tenant_db,
-                default_org_id=settings.default_org_id,
-                session_secret=settings.session_secret,
-            )
-            minter = AgentTokenMinter(
-                api_keys=services.api_keys,
-                resolver=resolver,
-                org_id=settings.default_org_id,
-            )
-            table = Table(title="legacy → tsk_ migration")
-            table.add_column("agent")
-            table.add_column("legacy_prefix")
-            table.add_column("new_token")
-            for legacy_token, agent_name in entries:
-                agent_type = normalize_agent_type(agent_name) or agent_name
-                if dry_run:
-                    table.add_row(agent_type, legacy_token[:16] + "...", "(dry-run)")
-                    continue
-                _, new_token = await minter.mint(agent_type)
-                table.add_row(agent_type, legacy_token[:16] + "...", new_token)
-            console.print(table)
-            if dry_run:
-                console.print("[dim]Re-run without --dry-run to mint keys.[/dim]")
-            else:
-                console.print(
-                    "[yellow]Update MCP configs with the new tokens, then revoke legacy "
-                    "entries when ready.[/yellow]"
-                )
+            console.print("[dim]Org-scoped tsk_ API key (Postgres).[/dim]")
         finally:
             await services.tenant_db.close()
 
@@ -580,32 +516,6 @@ def token_invite_list() -> None:
             row.created_at,
         )
     console.print(table)
-
-
-@token_app.command("list")
-def token_list() -> None:
-    """List issued tokens (agent + prefix + created_at)."""
-    settings = get_settings()
-    store = TokenStore(settings.tokens_file)
-    entries = store.list_agents()
-    table = Table(title="teamshared tokens")
-    table.add_column("agent")
-    table.add_column("token (prefix)")
-    table.add_column("created_at")
-    for entry in entries:
-        table.add_row(entry["agent"], entry["token_prefix"], entry["created_at"])
-    console.print(table)
-
-
-@token_app.command("revoke")
-def token_revoke(prefix: str) -> None:
-    """Revoke all tokens starting with ``prefix`` (min 8 chars)."""
-    if len(prefix) < 8:
-        raise typer.BadParameter("prefix must be at least 8 characters")
-    settings = get_settings()
-    store = TokenStore(settings.tokens_file)
-    n = store.revoke(prefix)
-    console.print(f"[bold]revoked[/bold]: {n}")
 
 
 @config_app.command("show")

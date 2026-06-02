@@ -36,11 +36,6 @@ See [`src/teamshared/clients/`](../src/teamshared/clients) for the exact snippet
 
 ## Renewing tokens
 
-Tokens are static. To rotate, run on the host:
-
-```bash
-teamshared token revoke <prefix>
-teamshared token mint <agent>
-```
-
-…then update the new value in that agent's config.
+API keys are org-scoped `tsk_*` secrets in Postgres. To rotate, mint a new key
+(`teamshared token mint <agent>` or the console **Keys** page), update MCP
+configs, then revoke the old key in the console.

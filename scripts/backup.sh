@@ -51,11 +51,6 @@ else
   echo "  warn: $REDIS_DIR/dump.rdb not readable (rdb skipped)"
 fi
 
-# Tokens file (small, but worth saving so we don't have to remint everyone).
-if [[ -f .teamshared/tokens.json ]]; then
-  cp .teamshared/tokens.json "$WORK/tokens.json"
-fi
-
 OUT="$BACKUP_DIR/teamshared-$STAMP.tar.gz"
 tar -czf "$OUT" -C "$WORK" .
 echo "[$(date -Iseconds)] wrote $OUT"

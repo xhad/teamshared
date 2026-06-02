@@ -38,9 +38,8 @@ is what protects the public endpoint, so don't disable it.
    `/infra/railway.server.toml`. That single file pins the Dockerfile path,
    healthcheck, and pre-deploy `teamshared migrate` so this guide doesn't drift
    from reality.
-3. **Settings → Volumes**: attach a 1 GB volume mounted at `/data`. This is
-   where `tokens.json` lives — without it your bearer tokens evaporate on
-   every redeploy.
+3. **Settings → Volumes**: attach a 1 GB volume mounted at `/data` for
+   `invites.json` and other small on-disk state.
 4. **Settings → Networking**: generate a public domain. Note it down; this
    is what your agents will point at.
 5. **Variables**: set the following. Use Railway's `${{Service.VAR}}`
@@ -50,7 +49,7 @@ is what protects the public endpoint, so don't disable it.
    |---|---|
    | `TEAMSHARED_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
    | `TEAMSHARED_REDIS_URL` | `${{Redis.REDIS_URL}}` |
-   | `TEAMSHARED_TOKENS_FILE` | `/data/tokens.json` |
+   | `TEAMSHARED_INVITES_FILE` | `/data/invites.json` |
    | `TEAMSHARED_MINT_SECRET` | *(long random string; enables `POST /tokens/mint` for teammates)* |
    | `OPENAI_API_KEY` | *(your key)* |
    | `TEAMSHARED_EMBED_MODEL` | `text-embedding-3-small` *(default; only override if you want a different embedding model)* |
@@ -68,8 +67,7 @@ is what protects the public endpoint, so don't disable it.
 2. **Settings → Source**: custom config file path
    `/infra/railway.distiller.toml`. (Different toml because the start
    command is `teamshared worker`, no public port, no healthcheck.)
-3. **Variables**: same as the server *minus* `TEAMSHARED_TOKENS_FILE` (the
-   distiller doesn't read tokens):
+3. **Variables**: same as the server (the distiller does not mint tokens):
 
    | Var | Value |
    |---|---|
@@ -97,7 +95,7 @@ curl -fsS -X POST 'https://<your-railway-domain>/tokens/mint' \
   -d '{"agent":"cursor"}'
 ```
 
-The response includes `"token": "teamshared_..."` once — copy it into `TEAMSHARED_TOKEN`.
+The response includes `"token": "tsk_..."` once — copy it into MCP `Authorization`.
 
 Admin fallback (Railway CLI, no HTTP mint secret needed):
 
@@ -130,17 +128,16 @@ A subsequent `memory_remember` settles it.
 ## Operational notes
 
 - **Backups**: Railway's pgvector template snapshots are configurable in
-  the service settings; for tokens, `tokens.json` lives on the attached
-  Volume which Railway also snapshots. If you need stronger guarantees,
-  point `scripts/backup.sh` at the public domain via `railway run` on a
-  GitHub Actions cron.
+  the service settings; API keys live in Postgres. The `/data` volume holds
+  invites and other small files. Point `scripts/backup.sh` at the public
+  domain via `railway run` on a GitHub Actions cron if needed.
 - **Scaling the server**: horizontal replicas are safe — the server is
   stateless, all state lives in Postgres/Redis. Just don't run multiple
   distiller replicas; the queue is `BLPOP`-based and one consumer is the
   intended topology.
-- **Rotating tokens**: same as anywhere — `teamshared token revoke <prefix>`
-  then `teamshared token mint <agent>` over `railway run`, push the new token
-  to the agent.
+- **Rotating tokens**: mint a new key via console `/app/keys` or
+  `teamshared token mint <agent>` over `railway run`, update MCP configs, then
+  revoke the old API key in the console.
 - **Costs**: a single-replica server + distiller + pgvector + Redis on
   Railway's Hobby plan runs around $5–15/mo depending on Mem0 churn.
   Embedding API calls dominate once you have a few teammates writing

@@ -63,7 +63,6 @@ def test_token_mint_disabled_when_both_paths_off(tmp_path: Path) -> None:
         _env_file=None,
         mint_secret=None,
         self_service_tokens=False,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -79,7 +78,6 @@ def test_token_mint_requires_secret(tmp_path: Path) -> None:
         _env_file=None,
         mint_secret="super-secret",
         self_service_tokens=False,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -94,7 +92,6 @@ def test_token_mint_admin_success(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         mint_secret="super-secret",
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -116,7 +113,6 @@ def test_token_mint_rejects_invalid_agent(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         mint_secret="super-secret",
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -135,7 +131,6 @@ def test_token_mint_with_invite(tmp_path: Path) -> None:
         _env_file=None,
         mint_secret=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -157,7 +152,6 @@ def test_token_mint_invite_requires_agent_when_unbound(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -206,7 +200,6 @@ def test_token_mint_with_invite_path(tmp_path: Path) -> None:
         _env_file=None,
         mint_secret=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -225,7 +218,6 @@ def test_get_token_page_redeems_invite_path(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -248,7 +240,6 @@ def _root_app(settings: Settings, minter: _StubMinter, invites: InviteStore) -> 
 def test_root_landing_page(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -266,7 +257,6 @@ def test_root_landing_page(tmp_path: Path) -> None:
 def test_root_banner_json(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -283,7 +273,6 @@ def test_root_redeems_invite_as_plain_text(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -301,7 +290,6 @@ def test_root_redeems_invite_as_json(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -324,7 +312,6 @@ def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -350,7 +337,6 @@ def test_get_token_form_shows_readme(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -367,7 +353,6 @@ def test_invite_normalizes_cursor_chad_to_cursor(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()
@@ -385,7 +370,6 @@ def test_get_token_page_redeems_invite(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         self_service_tokens=True,
-        tokens_file=tmp_path / "tokens.json",
         invites_file=tmp_path / "invites.json",
     )
     minter = _StubMinter()

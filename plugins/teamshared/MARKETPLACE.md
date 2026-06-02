@@ -30,7 +30,7 @@ Once this repo is public (or teammates have access):
      "mcpServers": {
        "teamshared": {
          "url": "https://teamshared.com/mcp",
-         "headers": { "Authorization": "Bearer teamshared_..." }
+         "headers": { "Authorization": "Bearer tsk_..." }
        }
      }
    }

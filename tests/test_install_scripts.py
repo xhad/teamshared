@@ -34,8 +34,8 @@ def test_unified_install_script() -> None:
     assert "_ts_prompt_token" in body
     assert "/get-token" in body
     # Accept both legacy /get-token tokens and console API keys.
-    assert "teamshared_*|tsk_*" in body
-    assert "token should start with teamshared_ or tsk_" in body
+    assert "tsk_*)" in body
+    assert "token should start with tsk_" in body
     assert "https://teamshared.com/mcp/" in body
     assert "_ts_install_hermes_soul" not in body
     assert "/install/assets" in body

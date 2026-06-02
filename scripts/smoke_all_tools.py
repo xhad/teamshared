@@ -7,7 +7,7 @@ client state, and optional forget cleanup.
 Live HTTP (recommended — hits real Postgres, Redis, Mem0):
 
     export TEAMSHARED_SMOKE_URL=https://teamshared.com/mcp/
-    export TEAMSHARED_SMOKE_TOKEN=teamshared_...
+    export TEAMSHARED_SMOKE_TOKEN=tsk_...
     python scripts/smoke_all_tools.py
 
 Local stack:
@@ -18,7 +18,7 @@ Local stack:
 
 Cross-agent shared-brain check (optional second token):
 
-    export TEAMSHARED_SMOKE_TOKEN_HERMES=teamshared_...
+    export TEAMSHARED_SMOKE_TOKEN_HERMES=tsk_...
     python scripts/smoke_all_tools.py
 
 In-memory mode registers tools with mocked stores — structure only, not recall quality:

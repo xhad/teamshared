@@ -48,7 +48,7 @@ ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
   "mcpServers": {
     "teamshared": {
       "url": "https://teamshared.com/mcp",
-      "headers": { "Authorization": "Bearer teamshared_..." }
+      "headers": { "Authorization": "Bearer tsk_..." }
     }
   }
 }

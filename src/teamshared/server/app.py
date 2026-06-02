@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
-from teamshared.auth import BearerAuthMiddleware, TokenStore
+from teamshared.auth import BearerAuthMiddleware
 from teamshared.config import Settings, get_settings
 from teamshared.config_validate import validate_settings
 from teamshared.identity.agent_tokens import AgentTokenMinter
@@ -226,15 +226,6 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
                 status_code=503,
             )
 
-    legacy_registry = TokenStore(settings.tokens_file)
-    legacy_store = (
-        TokenStore(
-            settings.tokens_file,
-            legacy_mint_enabled=settings.legacy_token_mint_enabled,
-        )
-        if settings.legacy_token_auth_enabled
-        else None
-    )
     invites = InviteStore(settings.invites_file)
     agent_minter = AgentTokenMinter(
         api_keys=services.api_keys,
@@ -369,14 +360,6 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         await rate_limiter.connect()
         app.state.rate_limiter = rate_limiter
-        legacy_count = legacy_registry.legacy_count()
-        app.state.legacy_token_count = legacy_count
-        if legacy_count:
-            log.warning(
-                "legacy_tokens_on_disk",
-                count=legacy_count,
-                path=str(settings.tokens_file),
-            )
         state = await _init_state(settings, services, resolver)
         log.info("teamshared_server_started", host=settings.host, port=settings.port)
         async with mcp_app.lifespan(app):
@@ -392,7 +375,6 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         Middleware(
             BearerAuthMiddleware,
             resolver=resolver,
-            legacy_store=legacy_store,
             auth_disabled=settings.auth_disabled,
         ),
         Middleware(HttpRateLimitMiddleware),

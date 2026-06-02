@@ -86,11 +86,9 @@ _ts_prompt_token() {
   _ts_read_secret TEAMSHARED_TOKEN
   export TEAMSHARED_TOKEN
   [[ -n "${TEAMSHARED_TOKEN}" ]] || _ts_die "empty token"
-  # Two valid bearer formats: legacy /get-token tokens (teamshared_…) and
-  # console API keys (tsk_…). Accept either; reject anything else.
   case "${TEAMSHARED_TOKEN}" in
-    teamshared_*|tsk_*) ;;
-    *) _ts_die "token should start with teamshared_ or tsk_" ;;
+    tsk_*) ;;
+    *) _ts_die "token should start with tsk_" ;;
   esac
 }
 

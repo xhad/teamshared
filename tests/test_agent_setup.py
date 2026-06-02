@@ -23,12 +23,12 @@ def test_cursor_setup_includes_mcp_json() -> None:
     setup = agent_setup(
         "cursor",
         mcp_url="https://teamshared.com/mcp",
-        token="teamshared_testtoken",
+        token="tsk_testtoken_secret",
     )
     assert setup is not None
     assert setup.snippet.startswith("{")
     assert "mcpServers" in setup.snippet
-    assert "teamshared_testtoken" in setup.snippet
+    assert "tsk_testtoken_secret" in setup.snippet
     assert "plugins/local" not in setup.snippet
     assert "symlink" not in setup.snippet.lower()
     assert setup.config_path == "~/.cursor/rules/teamshared.mdc and ~/.cursor/mcp.json"
@@ -50,12 +50,12 @@ def test_codex_setup_uses_inline_token_toml() -> None:
     setup = agent_setup(
         "codex",
         mcp_url="https://teamshared.com/mcp",
-        token="teamshared_testtoken",
+        token="tsk_testtoken_secret",
     )
     assert setup is not None
     assert "[mcp_servers.teamshared]" in setup.snippet
     assert "http_headers" in setup.snippet
-    assert "Bearer teamshared_testtoken" in setup.snippet
+    assert "Bearer tsk_testtoken_secret" in setup.snippet
     # No env-var indirection for codex anymore.
     assert "bearer_token_env_var" not in setup.snippet
     assert "export TEAMSHARED_TOKEN" not in setup.snippet
@@ -65,7 +65,7 @@ def test_hermes_setup_uses_trailing_slash_mcp_url() -> None:
     setup = agent_setup(
         "hermes",
         mcp_url="https://teamshared.com/mcp",
-        token="teamshared_testtoken",
+        token="tsk_testtoken_secret",
     )
     assert setup is not None
     assert "url: https://teamshared.com/mcp/" in setup.snippet

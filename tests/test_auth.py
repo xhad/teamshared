@@ -1,12 +1,10 @@
-"""Token store + bearer middleware behaviour."""
+"""Bearer middleware behaviour."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
-import pytest
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
@@ -14,15 +12,9 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from teamshared.auth import (
-    BearerAuthMiddleware,
-    LegacyTokenMintDisabled,
-    TokenStore,
-    current_agent,
-)
+from teamshared.auth import BearerAuthMiddleware, current_agent
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.identity.principal import Principal
-from teamshared.metrics import METRICS
 
 DEFAULT_ORG = UUID("00000000-0000-0000-0000-000000000001")
 AGENT_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -38,30 +30,14 @@ def _agent_principal(agent: str = "cursor") -> Principal:
     )
 
 
-def _mock_resolver(
-    *,
-    on_resolve: Principal | None = None,
-    on_legacy: Principal | None = None,
-) -> MagicMock:
+def _mock_resolver(*, on_resolve: Principal | None = None) -> MagicMock:
     resolver = MagicMock(spec=PrincipalResolver)
-
-    async def resolve(token: str, *, legacy_agent: str | None = None) -> Principal | None:
-        del token
-        if legacy_agent is not None:
-            return on_legacy if on_legacy is not None else _agent_principal(legacy_agent)
-        return on_resolve
-
-    resolver.resolve = AsyncMock(side_effect=resolve)
+    resolver.resolve = AsyncMock(return_value=on_resolve)
     resolver.anonymous = AsyncMock(return_value=_agent_principal("anonymous"))
     return resolver
 
 
-def _build_app(
-    resolver: MagicMock,
-    *,
-    legacy_store: TokenStore | None = None,
-    disabled: bool = False,
-) -> Starlette:
+def _build_app(resolver: MagicMock, *, disabled: bool = False) -> Starlette:
     async def whoami(request: Request) -> JSONResponse:
         ident = current_agent()
         return JSONResponse({"agent": ident.agent if ident else None})
@@ -78,85 +54,13 @@ def _build_app(
             Middleware(
                 BearerAuthMiddleware,
                 resolver=resolver,
-                legacy_store=legacy_store,
                 auth_disabled=disabled,
             )
         ],
     )
 
 
-def test_token_store_mint_disabled_by_default(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json")
-    with pytest.raises(LegacyTokenMintDisabled):
-        store.mint("cursor")
-
-
-def test_token_store_mint_and_lookup(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    token = store.mint("cursor")
-    assert token.startswith("teamshared_")
-
-    ident = store.lookup(token)
-    assert ident is not None
-    assert ident.agent == "cursor"
-
-    listing = store.list_agents()
-    assert len(listing) == 1
-    assert listing[0]["agent"] == "cursor"
-    assert "..." in listing[0]["token_prefix"]
-
-
-def test_token_store_mint_assigns_unique_state_ids(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    token_a = store.mint("cursor")
-    token_b = store.mint("hermes")
-
-    id_a = store.lookup(token_a)
-    id_b = store.lookup(token_b)
-    assert id_a is not None and id_b is not None
-    assert id_a.state_id != id_b.state_id
-    assert len(id_a.state_id) >= 16
-
-
-def test_token_store_legacy_token_gets_stable_state_id(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    token = "teamshared_legacytoken"
-    store._save({token: {"agent": "cursor", "created_at": "now"}})
-
-    first = store.lookup(token)
-    second = store.lookup(token)
-    assert first is not None and second is not None
-    assert first.state_id == second.state_id
-    assert first.state_id != "teamshar"
-
-
-def test_token_store_legacy_entries(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    t1 = store.mint("cursor")
-    t2 = store.mint("hermes")
-    entries = store.legacy_entries()
-    assert len(entries) == 2
-    agents = {agent for _, agent in entries}
-    assert agents == {"cursor", "hermes"}
-    tokens = {tok for tok, _ in entries}
-    assert t1 in tokens and t2 in tokens
-
-
-def test_token_store_revoke(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    token = store.mint("hermes")
-    n = store.revoke(token[:12])
-    assert n == 1
-    assert store.lookup(token) is None
-
-
-def test_token_store_revoke_requires_match(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    store.mint("hermes")
-    assert store.revoke("nonexistent_prefix") == 0
-
-
-def test_middleware_rejects_missing_header(tmp_path: Path) -> None:
+def test_middleware_rejects_missing_header() -> None:
     resolver = _mock_resolver()
     app = _build_app(resolver)
     with TestClient(app) as client:
@@ -165,9 +69,7 @@ def test_middleware_rejects_missing_header(tmp_path: Path) -> None:
         assert resp.json() == {"error": "missing_bearer_token"}
 
 
-def test_middleware_rejects_unknown_token(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    store.mint("cursor")
+def test_middleware_rejects_unknown_token() -> None:
     resolver = _mock_resolver(on_resolve=None)
     app = _build_app(resolver)
     with TestClient(app) as client:
@@ -177,19 +79,7 @@ def test_middleware_rejects_unknown_token(tmp_path: Path) -> None:
         assert resp.status_code == 401
 
 
-def test_legacy_file_token_rejected_without_legacy_store(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    token = store.mint("cursor")
-    resolver = _mock_resolver(on_resolve=None)
-    app = _build_app(resolver, legacy_store=None)
-    with TestClient(app) as client:
-        resp = client.get(
-            "/mcp/whoami", headers={"Authorization": f"Bearer {token}"}
-        )
-        assert resp.status_code == 401
-
-
-def test_middleware_binds_tsk_principal(tmp_path: Path) -> None:
+def test_middleware_binds_tsk_principal() -> None:
     resolver = _mock_resolver(on_resolve=_agent_principal("cursor"))
     app = _build_app(resolver)
     with TestClient(app) as client:
@@ -201,35 +91,7 @@ def test_middleware_binds_tsk_principal(tmp_path: Path) -> None:
         assert resp.json() == {"agent": "cursor"}
 
 
-def test_middleware_binds_legacy_identity_when_opted_in(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    token = store.mint("cursor")
-    resolver = _mock_resolver(on_legacy=_agent_principal("cursor"))
-    app = _build_app(resolver, legacy_store=store)
-    with TestClient(app) as client:
-        resp = client.get(
-            "/mcp/whoami", headers={"Authorization": f"Bearer {token}"}
-        )
-        assert resp.status_code == 200
-        assert resp.json() == {"agent": "cursor"}
-
-
-def test_legacy_token_auth_records_metric(tmp_path: Path) -> None:
-    before = sum(METRICS.legacy_token_used.values.values())
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    token = store.mint("cursor")
-    resolver = _mock_resolver(on_legacy=_agent_principal("cursor"))
-    app = _build_app(resolver, legacy_store=store)
-    with TestClient(app) as client:
-        resp = client.get(
-            "/mcp/whoami", headers={"Authorization": f"Bearer {token}"}
-        )
-        assert resp.status_code == 200
-    after = sum(METRICS.legacy_token_used.values.values())
-    assert after == before + 1
-
-
-def test_health_is_anonymous(tmp_path: Path) -> None:
+def test_health_is_anonymous() -> None:
     resolver = _mock_resolver()
     app = _build_app(resolver)
     with TestClient(app) as client:
@@ -237,7 +99,7 @@ def test_health_is_anonymous(tmp_path: Path) -> None:
         assert resp.status_code == 200
 
 
-def test_auth_disabled_skips_check(tmp_path: Path) -> None:
+def test_auth_disabled_skips_check() -> None:
     resolver = _mock_resolver()
     app = _build_app(resolver, disabled=True)
     with TestClient(app) as client:
