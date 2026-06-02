@@ -86,12 +86,18 @@ async def check_components(state: ServerState) -> dict[str, Any]:
 
 async def _probe_ollama(settings: Any) -> str:
     """Confirm Ollama is reachable and report the model(s) teamshared runs on it."""
+    base_url = settings.ollama_base_url.rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{settings.ollama_base_url.rstrip('/')}/api/tags")
+            resp = await client.get(f"{base_url}/api/tags")
             resp.raise_for_status()
     except Exception as exc:
-        return f"error: {exc}"
+        # Some httpx/transport errors (e.g. a dropped connect) stringify to an
+        # empty message, which used to surface as a useless bare "error: ".
+        # Fall back to the exception type and target URL so the failure is
+        # actionable (firewall drop vs. refused vs. timeout all look distinct).
+        detail = str(exc) or type(exc).__name__
+        return f"error: {detail} (GET {base_url}/api/tags)"
     roles: list[str] = []
     if settings.llm_provider == "ollama":
         roles.append(f"llm={settings.llm_model}")
