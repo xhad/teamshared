@@ -13,7 +13,9 @@ preferences stored in teamshared.
 1. `memory_recall(query=...)` early for non-trivial tasks.
 2. Answer using hits; say when recall is empty.
 3. `memory_remember(...)` for preferences, facts, events, and notes that should
-   still be true next week.
+   still be true next week. For code/repo-specific memories, pass
+   `repo=<workspace-slug>` to scope them to the current repo; pass the same
+   `repo` to `memory_recall` to boost that repo's memories.
 4. For work spanning ~3+ turns: `memory_session_open` → append turns →
    `memory_session_close(distill=true)`.
 5. For repeatable playbooks: `memory_procedure_set` / `memory_procedure_get`.

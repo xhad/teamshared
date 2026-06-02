@@ -18,7 +18,7 @@ from uuid import UUID
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
-from teamshared.memory.agent_state import AgentStateStore
+from teamshared.memory.agent_state import AgentStateStore, repo_tag
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
@@ -34,6 +34,11 @@ _PILLAR_WEIGHTS: dict[str, float] = {
     "procedural": 0.85,
     "working": 0.7,
 }
+
+# Soft boost applied to durable records tagged with the caller's current repo.
+# Records from other repos (or with no repo) stay visible; same-repo hits just
+# rank higher. Kept modest so a strong cross-repo match can still surface.
+_REPO_BOOST = 1.3
 
 
 class MemoryFacade:
@@ -86,13 +91,15 @@ class MemoryFacade:
         subject: str | None,
         tags: list[str] | None,
         agent_override: str | None,
+        repo: str | None = None,
     ) -> dict[str, Any]:
         writer = await self._write_principal(principal, agent_override)
         ctx = self._ctx(writer)
         pillar = "episodic" if kind == "event" else "semantic"
+        tag_list = _with_repo_tag(tags, repo)
         result = await self.services.ingestion().ingest(
             ctx, content, kind=kind, pillar=pillar, scope="org",
-            visibility="private", subject=subject, tags=tags, source="agent",
+            visibility="private", subject=subject, tags=tag_list, source="agent",
         )
         return {
             "agent": writer.display or writer.attribution,
@@ -111,6 +118,7 @@ class MemoryFacade:
         time_range: TimeRange | None,
         agent_filter: str | None,
         caller_agent: str | None,
+        repo: str | None = None,
     ) -> RecallResult:
         ctx = self._ctx(principal)
         durable = [s for s in scopes if s in {"semantic", "episodic", "procedural", "all"}]
@@ -136,7 +144,7 @@ class MemoryFacade:
                 records.extend(working)
             except Exception as exc:
                 errors["working"] = str(exc)
-        ranked = _rerank(records, k=k)
+        ranked = _rerank(records, k=k, repo=repo)
         return RecallResult(
             query=query, records=ranked, counts_by_pillar=counts, errors_by_pillar=errors
         )
@@ -198,10 +206,18 @@ class MemoryFacade:
         return {"count": len(rows), "procedures": rows}
 
     async def session_open(
-        self, principal: Principal, *, topic: str | None, ttl: int | None, agent_override: str | None
+        self,
+        principal: Principal,
+        *,
+        topic: str | None,
+        ttl: int | None,
+        agent_override: str | None,
+        repo: str | None = None,
     ) -> dict[str, str]:
         agent = agent_override or principal.display or principal.attribution
-        session_id = await self.working.open_session(principal.org_id, agent, topic=topic, ttl=ttl)
+        session_id = await self.working.open_session(
+            principal.org_id, agent, topic=topic, ttl=ttl, repo=repo
+        )
         return {"session_id": session_id, "agent": agent}
 
     async def session_append(
@@ -265,9 +281,39 @@ class MemoryFacade:
             raise PermissionError(f"session {session_id} belongs to {owner!r}, not {caller!r}")
 
 
-def _rerank(records: list[MemoryRecord], *, k: int) -> list[MemoryRecord]:
+def _with_repo_tag(tags: list[str] | None, repo: str | None) -> list[str] | None:
+    """Append the canonical ``repo:<slug>`` tag (deduped) when ``repo`` is set.
+
+    An unparseable slug is ignored rather than failing the write — the memory
+    is still worth storing even if it can't be repo-scoped.
+    """
+    tag_list = list(tags or [])
+    if repo:
+        try:
+            rt = repo_tag(repo)
+        except ValueError:
+            log.warning("repo_tag_invalid", repo=repo)
+        else:
+            if rt not in tag_list:
+                tag_list.append(rt)
+    return tag_list or None
+
+
+def _rerank(
+    records: list[MemoryRecord], *, k: int, repo: str | None = None
+) -> list[MemoryRecord]:
+    target_tag: str | None = None
+    if repo:
+        try:
+            target_tag = repo_tag(repo)
+        except ValueError:
+            target_tag = None
+
     def score_of(r: MemoryRecord) -> float:
         base = r.score if r.score is not None else 0.5
-        return base * _PILLAR_WEIGHTS.get(r.pillar, 0.5)
+        score = base * _PILLAR_WEIGHTS.get(r.pillar, 0.5)
+        if target_tag and target_tag in (r.tags or []):
+            score *= _REPO_BOOST
+        return score
 
     return sorted(records, key=score_of, reverse=True)[:k]

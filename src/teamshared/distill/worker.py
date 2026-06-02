@@ -21,6 +21,7 @@ from teamshared.config import Settings, get_settings
 from teamshared.distill.summarizer import SummarizerError, summarize
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.logging import configure_logging, get_logger
+from teamshared.memory.agent_state import repo_tag
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.working import WorkingMemory
 from teamshared.server.services import ProductionServices, make_services
@@ -101,6 +102,15 @@ class DistillWorker:
         topic = job.get("topic")
         org_id = UUID(str(job.get("org_id") or self.settings.default_org_id))
 
+        # Distilled memories inherit the session's repo scope (if any) so they
+        # stay tied to the workspace the conversation was about.
+        repo_tags: list[str] = []
+        if job.get("repo"):
+            try:
+                repo_tags = [repo_tag(str(job["repo"]))]
+            except ValueError:
+                log.warning("distill_repo_invalid", repo=job.get("repo"))
+
         transcript = await self.working.get_turns(org_id, session_id)
         if not transcript:
             log.info("distill_skipping_empty", session_id=session_id)
@@ -126,7 +136,8 @@ class DistillWorker:
         if episode.get("summary"):
             await ingestion.ingest(
                 ctx, episode["summary"], kind="event", pillar="episodic",
-                scope="org", subject=topic, tags=list(episode.get("tags") or []),
+                scope="org", subject=topic,
+                tags=list(episode.get("tags") or []) + repo_tags,
                 source="agent",
                 source_ref={"session_id": session_id, "outcome": episode.get("outcome")},
             )
@@ -137,7 +148,8 @@ class DistillWorker:
                 continue
             await ingestion.ingest(
                 ctx, content, kind=fact.get("kind") or "fact", pillar="semantic",
-                scope="org", subject=fact.get("subject"), source="agent",
+                scope="org", subject=fact.get("subject"),
+                tags=repo_tags or None, source="agent",
                 confidence=fact.get("confidence"),
                 source_ref={"session_id": session_id},
             )
@@ -148,7 +160,7 @@ class DistillWorker:
                 continue
             await ingestion.ingest(
                 ctx, content, kind="fact", pillar="semantic", scope="org",
-                subject=topic, tags=["decision"], source="agent",
+                subject=topic, tags=["decision"] + repo_tags, source="agent",
                 source_ref={"session_id": session_id, "rationale": decision.get("rationale")},
             )
 

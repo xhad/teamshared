@@ -91,20 +91,34 @@ def register_tools(mcp: Any) -> None:
             str | None,
             Field(description="Override agent identity (defaults to bearer-token identity)"),
         ] = None,
+        repo: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Workspace slug of the repo this memory belongs to (e.g. the "
+                    "slug used for memory_state). For code/repo-specific work, pass "
+                    "your current workspace slug so the memory is scoped to this "
+                    "repo (stored as a 'repo:<slug>' tag) and ranks higher when "
+                    "recalled from the same repo. Omit for cross-cutting memories."
+                ),
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Write a durable memory into the caller's org.
 
         ``fact`` / ``preference`` / ``note`` -> semantic pillar. ``event`` ->
         episodic. ``procedure`` -> rejected; use ``memory_procedure_set``.
         Routed through the guarded ingestion pipeline (dedup, PII, injection
-        screening, approval routing) under RLS.
+        screening, approval routing) under RLS. When ``repo`` is given the
+        memory is tagged ``repo:<slug>`` so it can be scoped to that workspace.
         """
         if kind == "procedure":
             raise ValueError("Use memory_procedure_set for procedures, not memory_remember.")
         state = get_state()
         principal = await _principal()
         return await state.facade.remember(
-            principal, content=content, kind=kind, subject=subject, tags=tags, agent_override=agent
+            principal, content=content, kind=kind, subject=subject, tags=tags,
+            agent_override=agent, repo=repo,
         )
 
     @mcp.tool()
@@ -130,12 +144,25 @@ def register_tools(mcp: Any) -> None:
                 ),
             ),
         ] = None,
+        repo: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Workspace slug of your current repo. When set, durable "
+                    "memories tagged for this repo are boosted (ranked higher); "
+                    "nothing is hidden \u2014 cross-repo and un-scoped memories "
+                    "still appear. Pass your workspace slug when recalling for "
+                    "code/repo-specific work."
+                ),
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Hybrid recall across the four memory pillars, within the caller's org.
 
         Default behaviour is the shared brain on durable pillars (semantic,
         episodic, procedural): callers see every agent's writes in their org.
-        Pass ``agent="cursor"`` to narrow to one agent's history. Working
+        Pass ``agent="cursor"`` to narrow to one agent's history. Pass ``repo``
+        to softly boost memories scoped to your current workspace. Working
         memory is always caller-scoped.
         """
         state = get_state()
@@ -149,6 +176,7 @@ def register_tools(mcp: Any) -> None:
             time_range=time_range,
             agent_filter=agent,
             caller_agent=_caller_agent(),
+            repo=repo,
         )
         return result.model_dump(mode="json")
 
@@ -163,12 +191,22 @@ def register_tools(mcp: Any) -> None:
             Field(description="Session TTL in seconds (default from server config)"),
         ] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+        repo: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Workspace slug of the repo this session is about. Memories "
+                    "distilled from the session inherit a 'repo:<slug>' tag so "
+                    "they stay scoped to this workspace."
+                ),
+            ),
+        ] = None,
     ) -> dict[str, str]:
         """Open a working-memory session and return a ``session_id``."""
         state = get_state()
         principal = await _principal()
         return await state.facade.session_open(
-            principal, topic=topic, ttl=ttl, agent_override=agent
+            principal, topic=topic, ttl=ttl, agent_override=agent, repo=repo
         )
 
     @mcp.tool()

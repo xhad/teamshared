@@ -176,6 +176,7 @@ class WorkingMemory:
         agent: str,
         topic: str | None = None,
         ttl: int | None = None,
+        repo: str | None = None,
     ) -> str:
         """Create a new session and return its id."""
         session_id = "sess_" + secrets.token_urlsafe(12)
@@ -185,6 +186,7 @@ class WorkingMemory:
             "org_id": _org(org_id),
             "agent": agent,
             "topic": topic or "",
+            "repo": repo or "",
             "opened_at": now,
             "closed_at": "",
             "ttl": str(ttl),
@@ -239,6 +241,7 @@ class WorkingMemory:
                     "session_id": session_id,
                     "agent": meta.get("agent"),
                     "topic": meta.get("topic") or None,
+                    "repo": meta.get("repo") or None,
                     "opened_at": meta.get("opened_at"),
                     "closed_at": now,
                     "turn_count": len(turns),

@@ -21,6 +21,8 @@ call `memory_recall` with the user's query. Ground answers in hits; cite them.
 - `scope=["episodic"]` for "what did we do on X?".
 - `scope=["semantic"]` for stable facts and preferences.
 - `scope=["working"]` only when you need the caller's open session turns.
+- For code/repo-specific work, pass `repo=<workspace-slug>` to softly boost
+  memories scoped to the repo you're in (nothing is hidden).
 
 If recall is empty, say so before answering from priors.
 
@@ -35,7 +37,9 @@ Call `memory_remember(content, kind=...)` for things still true next week:
 | One-off event worth logging | `event` |
 | Misc working note | `note` |
 
-Optional: `subject`, `tags`. Do **not** use `memory_remember` for playbooks —
+Optional: `subject`, `tags`. For code/repo-specific memories, pass
+`repo=<workspace-slug>` to scope them to the current repo; omit it for
+cross-cutting preferences. Do **not** use `memory_remember` for playbooks —
 use `memory_procedure_set`.
 
 ### Sessions for multi-turn work
@@ -100,8 +104,11 @@ Hybrid search across semantic, episodic, procedural, and working pillars.
 | `k` | Max records (1–50, default 8) |
 | `time_range` | Optional bounds for episodic/working hits |
 | `agent` | Optional filter to one agent's durable writes |
+| `repo` | Optional workspace slug; soft-boosts this repo's memories (nothing hidden) |
 
 Returns `records` with pillar, agent, timestamps, and content for citation.
+For code/repo-specific work, pass `repo=<workspace-slug>` (the same slug as
+`memory_state`) so memories scoped to this repo rank higher.
 
 ### `memory_remember`
 
@@ -114,8 +121,12 @@ Write semantic or episodic memory.
 | `subject` | Optional entity the memory is about |
 | `tags` | Optional string list |
 | `agent` | Optional attribution override |
+| `repo` | Optional workspace slug; tags the memory `repo:<slug>` to scope it to that repo |
 
 Routing: `event` → episodic; others → semantic. Rejects `kind=procedure`.
+For code/repo-specific memories, pass `repo=<workspace-slug>` so the memory is
+scoped to the repo you're working in (and boosted on recall from it). Omit
+`repo` for cross-cutting preferences/facts that apply everywhere.
 
 ### `memory_session_open` / `memory_session_append` / `memory_session_close`
 
@@ -123,7 +134,7 @@ Working-memory buffer in Redis for the current task.
 
 | Tool | Key params |
 |---|---|
-| `memory_session_open` | `topic`, optional `ttl`, optional `agent` → `{session_id, agent}` |
+| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo` (scopes distilled memories) → `{session_id, agent}` |
 | `memory_session_append` | `session_id`, `role`, `content` → `{turn_count}` |
 | `memory_session_close` | `session_id`, `distill=true` (default) queues distillation to durable memory |
 

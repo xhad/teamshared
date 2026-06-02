@@ -42,6 +42,7 @@ from teamshared.server.install_api import (
     handle_install_index,
     handle_install_sh,
     handle_plugin_bundle,
+    handle_uninstall_sh,
 )
 from teamshared.server.services import ProductionServices, make_services
 from teamshared.server.state import ServerState, clear_state, set_state
@@ -165,6 +166,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     - ``GET  /app`` -- signed-in web console (home overview); ``/app/*`` sections.
     - ``GET  /install`` -- install instructions (HTML).
     - ``GET  /install.sh`` -- unified installer (prompts for harness).
+    - ``GET  /uninstall.sh`` -- unified uninstaller (prompts for harness).
     - ``GET  /install/assets/{path}`` -- harness config snippets (remote pull).
     - ``GET  /install/plugin/teamshared.tar.gz`` -- Cursor plugin bundle.
     - ``GET  /plugin/teamshared.tar.gz`` -- alias of the plugin bundle.
@@ -242,6 +244,9 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
 
     async def install_sh_route(request: Request) -> Response:
         return await handle_install_sh(request)
+
+    async def uninstall_sh_route(request: Request) -> Response:
+        return await handle_uninstall_sh(request)
 
     async def install_asset_route(request: Request) -> Response:
         return await handle_install_asset(request)
@@ -365,6 +370,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/get-token", get_token_route, methods=["GET"]),
             Route("/install", install_index_route, methods=["GET"]),
             Route("/install.sh", install_sh_route, methods=["GET"]),
+            Route("/uninstall.sh", uninstall_sh_route, methods=["GET"]),
             Route(
                 "/install/assets/{asset_path:path}",
                 install_asset_route,

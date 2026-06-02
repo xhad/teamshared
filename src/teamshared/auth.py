@@ -185,6 +185,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             "/get-token",
             "/install",
             "/install.sh",
+            "/uninstall.sh",
             "/plugin/teamshared.tar.gz",
         }:
             return await call_next(request)

@@ -86,7 +86,12 @@ _ts_prompt_token() {
   _ts_read_secret TEAMSHARED_TOKEN
   export TEAMSHARED_TOKEN
   [[ -n "${TEAMSHARED_TOKEN}" ]] || _ts_die "empty token"
-  [[ "${TEAMSHARED_TOKEN}" == teamshared_* ]] || _ts_die "token should start with teamshared_"
+  # Two valid bearer formats: legacy /get-token tokens (teamshared_…) and
+  # console API keys (tsk_…). Accept either; reject anything else.
+  case "${TEAMSHARED_TOKEN}" in
+    teamshared_*|tsk_*) ;;
+    *) _ts_die "token should start with teamshared_ or tsk_" ;;
+  esac
 }
 
 _ts_apply_token() {
@@ -149,10 +154,29 @@ _ts_finish() {
   echo "MCP URL: ${TEAMSHARED_MCP_URL}"
 }
 
+# Cursor can load the plugin globally (~/.cursor, every project) or from a
+# single repo's ./.cursor (that project only). Sets CURSOR_ROOT + CURSOR_SCOPE.
+_ts_choose_cursor_scope() {
+  _ts_tty $'\nInstall the Cursor plugin where?\n  1) global — ~/.cursor (all projects)\n  2) local  — ./.cursor (this repo only)\n\n'
+  local choice
+  while true; do
+    _ts_tty 'Enter choice [1-2]: '
+    _ts_read choice
+    case "$choice" in
+      1|global) CURSOR_ROOT="${HOME}"; CURSOR_SCOPE=global; break ;;
+      2|local) CURSOR_ROOT="$(pwd)"; CURSOR_SCOPE=local; break ;;
+      *) _ts_tty 'Invalid choice. Enter 1 or 2.\n' ;;
+    esac
+  done
+  _ts_tty "Cursor plugin scope: ${CURSOR_SCOPE} (${CURSOR_ROOT}/.cursor)\n"
+}
+
 _ts_install_cursor() {
   _ts_need_cmd curl
-  local plugin_dir="${HOME}/.cursor/plugins/local/teamshared"
-  local rule_path="${HOME}/.cursor/rules/teamshared.mdc"
+  _ts_choose_cursor_scope
+  local cursor_dir="${CURSOR_ROOT}/.cursor"
+  local plugin_dir="${cursor_dir}/plugins/local/teamshared"
+  local rule_path="${cursor_dir}/rules/teamshared.mdc"
   local bundle_url="${TEAMSHARED_BASE_URL}/install/plugin/teamshared.tar.gz"
 
   echo "Installing Cursor plugin → ${plugin_dir}"
@@ -175,12 +199,17 @@ _ts_install_cursor() {
   echo "  plugin → ${plugin_dir}"
 
   local mcp_snippet="${HOME}/.config/teamshared/cursor-mcp.json"
-  local mcp_config="${HOME}/.cursor/mcp.json"
+  local mcp_config="${cursor_dir}/mcp.json"
   mkdir -p "$(dirname "${mcp_snippet}")"
   _ts_fetch "${mcp_snippet}" "${ASSETS}/cursor/mcp.json"
   _ts_apply_token "${mcp_snippet}"
   _ts_merge_json_mcp "${mcp_snippet}" "${mcp_config}"
   echo "  MCP config → ${mcp_config}"
+  if [[ "${CURSOR_SCOPE}" == "local" ]]; then
+    echo ""
+    echo "NOTE: ${mcp_config} now contains your bearer token."
+    echo "      Add '.cursor/mcp.json' to this repo's .gitignore so it isn't committed."
+  fi
   echo ""
   echo "Optional: install Bun (https://bun.sh) for continual-learning hooks."
 }
@@ -372,6 +401,246 @@ def unified_install_script(*, base_url: str) -> str:
     return _INSTALL_SH.replace("__BASE__", base).replace("__MCP_URL__", mcp_url)
 
 
+# Mirror of _INSTALL_SH: removes every file/config the installer writes. JSON
+# MCP configs are edited to drop only the ``teamshared`` server (the rest of
+# the user's config is preserved); TOML/YAML blocks the installer appended are
+# stripped out the same way.
+_UNINSTALL_SH = r"""#!/usr/bin/env bash
+# teamshared unified uninstaller
+#   curl -fsSL __BASE__/uninstall.sh | bash
+set -euo pipefail
+
+_ts_die() { echo "teamshared uninstall: $*" >&2; exit 1; }
+
+_ts_need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || _ts_die "missing required command: $1"
+}
+
+# curl | bash has no stdin TTY; read prompts from the controlling terminal.
+_ts_tty() {
+  if [[ -t 0 ]]; then
+    printf '%s' "$1"
+  elif [[ -r /dev/tty ]]; then
+    printf '%s' "$1" >/dev/tty
+  else
+    _ts_die "no terminal available for prompts (try: bash uninstall-teamshared.sh)"
+  fi
+}
+
+_ts_read() {
+  if [[ -t 0 ]]; then
+    read -r "$@"
+  else
+    read -r "$@" </dev/tty
+  fi
+}
+
+_ts_choose_harness() {
+  _ts_tty $'\nSelect agent harness to remove teamshared from:\n  1) cursor   — Cursor IDE (plugin, rules, MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n  6) all      — every harness above\n\n'
+  local choice
+  while true; do
+    _ts_tty 'Enter choice [1-6]: '
+    _ts_read choice
+    case "$choice" in
+      1|cursor) HARNESS=cursor; break ;;
+      2|codex) HARNESS=codex; break ;;
+      3|hermes) HARNESS=hermes; break ;;
+      4|claude) HARNESS=claude; break ;;
+      5|openclaw) HARNESS=openclaw; break ;;
+      6|all) HARNESS=all; break ;;
+      *)
+        _ts_tty 'Invalid choice. Enter 1, 2, 3, 4, 5, or 6.\n'
+        ;;
+    esac
+  done
+  _ts_tty "Selected: ${HARNESS}\n"
+}
+
+_ts_rm() {
+  local path="$1"
+  if [[ -e "${path}" || -L "${path}" ]]; then
+    rm -rf "${path}"
+    echo "  removed ${path}"
+  fi
+}
+
+# Drop the "teamshared" entry from an mcpServers JSON config without disturbing
+# the rest of the file.
+_ts_remove_json_mcp() {
+  local config_path="$1"
+  [[ -f "${config_path}" ]] || return 0
+  _ts_need_cmd python3
+  python3 - "${config_path}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    raise SystemExit(0)
+servers = data.get("mcpServers")
+if isinstance(servers, dict) and "teamshared" in servers:
+    del servers["teamshared"]
+    if not servers:
+        data.pop("mcpServers", None)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    print(f"  removed teamshared MCP entry from {path}")
+PY
+}
+
+# Strip the [mcp_servers.teamshared] table the installer appended to Codex.
+_ts_remove_codex_block() {
+  local config_path="$1"
+  [[ -f "${config_path}" ]] || return 0
+  _ts_need_cmd python3
+  python3 - "${config_path}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+# Remove the teamshared table header through the next table header / EOF.
+new = re.sub(r"(?ms)^\[mcp_servers\.teamshared\].*?(?=^\[|\Z)", "", text)
+if new != text:
+    path.write_text(new.strip("\n") + "\n" if new.strip() else "", encoding="utf-8")
+    print(f"  removed teamshared block from {path}")
+PY
+}
+
+# Remove the teamshared mcp_servers entry and capture hook from Hermes YAML.
+_ts_remove_hermes_block() {
+  local config_path="$1"
+  [[ -f "${config_path}" ]] || return 0
+  _ts_need_cmd python3
+  python3 - "${config_path}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+orig = text
+# Drop the "  teamshared:" block under mcp_servers: (2-space indented key and
+# its more-indented children, up to the next sibling key or dedent). No DOTALL
+# flag: each ".*" must stay within a single line so sibling blocks survive.
+text = re.sub(
+    r"(?m)^[ \t]{2}teamshared:[ \t]*\n(?:^[ \t]{4,}.*\n?)*",
+    "",
+    text,
+)
+# Drop the post_llm_call hook entry that invokes teamshared-capture.py and
+# its continuation lines (more-indented, not a new "- " list item).
+text = re.sub(
+    r"(?m)^[ \t]*-[ \t]*command:.*teamshared-capture\.py.*\n(?:^[ \t]+(?![ \t]*-).*\n?)*",
+    "",
+    text,
+)
+if text != orig:
+    path.write_text(text, encoding="utf-8")
+    print(f"  removed teamshared entries from {path}")
+PY
+}
+
+_ts_uninstall_cursor() {
+  echo "Removing Cursor integration"
+  # Clean both the global (~/.cursor) and current-repo (./.cursor) installs;
+  # the helpers no-op when a path or the teamshared MCP entry is absent.
+  local root seen=""
+  for root in "${HOME}" "$(pwd)"; do
+    case " ${seen} " in *" ${root} "*) continue ;; esac
+    seen="${seen} ${root}"
+    _ts_rm "${root}/.cursor/plugins/local/teamshared"
+    _ts_rm "${root}/.cursor/rules/teamshared.mdc"
+    _ts_remove_json_mcp "${root}/.cursor/mcp.json"
+  done
+  _ts_rm "${HOME}/.config/teamshared/cursor-mcp.json"
+}
+
+_ts_uninstall_codex() {
+  echo "Removing Codex integration"
+  _ts_rm "${HOME}/.codex/teamshared-mcp.toml"
+  _ts_remove_codex_block "${HOME}/.codex/config.toml"
+}
+
+_ts_uninstall_hermes() {
+  echo "Removing Hermes integration"
+  _ts_rm "${HOME}/.hermes/teamshared-mcp.yaml"
+  _ts_rm "${HOME}/.hermes/teamshared-protocol.md"
+  _ts_rm "${HOME}/.hermes/agent-hooks/teamshared-capture.py"
+  _ts_rm "${HOME}/.hermes/agent-hooks/teamshared-capture.json"
+  _ts_remove_hermes_block "${HOME}/.hermes/config.yaml"
+}
+
+_ts_uninstall_claude() {
+  echo "Removing Claude Desktop integration"
+  _ts_rm "${HOME}/.config/teamshared/claude-mcp.json"
+  case "$(uname -s)" in
+    Darwin)
+      _ts_remove_json_mcp "${HOME}/Library/Application Support/Claude/claude_desktop_config.json"
+      ;;
+    *)
+      _ts_remove_json_mcp "${HOME}/.config/Claude/claude_desktop_config.json"
+      ;;
+  esac
+}
+
+_ts_uninstall_openclaw() {
+  echo "Removing OpenClaw integration"
+  _ts_rm "${HOME}/.config/teamshared/openclaw-teamshared.sh"
+  if command -v openclaw >/dev/null 2>&1; then
+    openclaw config unset 'mcp_servers.teamshared' 2>/dev/null \
+      || openclaw config unset 'mcp_servers.teamshared.url' 2>/dev/null \
+      || true
+    openclaw daemon restart 2>/dev/null || true
+    echo "  cleared teamshared from openclaw config"
+  else
+    echo "  openclaw not on PATH — remove mcp_servers.teamshared from its config manually"
+  fi
+}
+
+# Drop the shared ~/.config/teamshared dir if nothing else lives there.
+_ts_cleanup_config_dir() {
+  local dir="${HOME}/.config/teamshared"
+  if [[ -d "${dir}" ]] && [[ -z "$(ls -A "${dir}" 2>/dev/null)" ]]; then
+    rmdir "${dir}" 2>/dev/null && echo "  removed empty ${dir}" || true
+  fi
+}
+
+_ts_need_cmd python3
+_ts_choose_harness
+
+case "${HARNESS}" in
+  cursor) _ts_uninstall_cursor ;;
+  codex) _ts_uninstall_codex ;;
+  hermes) _ts_uninstall_hermes ;;
+  claude) _ts_uninstall_claude ;;
+  openclaw) _ts_uninstall_openclaw ;;
+  all)
+    _ts_uninstall_cursor
+    _ts_uninstall_codex
+    _ts_uninstall_hermes
+    _ts_uninstall_claude
+    _ts_uninstall_openclaw
+    ;;
+  *) _ts_die "unknown harness: ${HARNESS}" ;;
+esac
+
+_ts_cleanup_config_dir
+
+echo ""
+echo "Done. teamshared files removed for: ${HARNESS}."
+echo "Restart your agent to drop the teamshared MCP server."
+"""
+
+
+def unified_uninstall_script(*, base_url: str) -> str:
+    base = base_url.rstrip("/")
+    return _UNINSTALL_SH.replace("__BASE__", base)
+
+
 def install_index_html(*, base_url: str) -> str:
     base = base_url.rstrip("/")
     harnesses = ", ".join(sorted(KNOWN_AGENT_TYPES))
@@ -393,5 +662,9 @@ def install_index_html(*, base_url: str) -> str:
   <pre>curl -fsSL {base}/install.sh | bash</pre>
   <p>The script prompts for your bearer token from <a href="/get-token">/get-token</a>
   and writes it into the harness MCP config.</p>
+  <h2>Uninstall</h2>
+  <p>Remove every file the installer wrote (and strip teamshared from your MCP
+  config) with the matching uninstaller:</p>
+  <pre>curl -fsSL {base}/uninstall.sh | bash</pre>
 </body>
 </html>"""

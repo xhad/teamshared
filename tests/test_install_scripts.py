@@ -9,12 +9,16 @@ from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from teamshared.clients.install_scripts import unified_install_script
+from teamshared.clients.install_scripts import (
+    unified_install_script,
+    unified_uninstall_script,
+)
 from teamshared.server.install_api import (
     handle_install_asset,
     handle_install_index,
     handle_install_sh,
     handle_plugin_bundle,
+    handle_uninstall_sh,
 )
 
 
@@ -29,16 +33,48 @@ def test_unified_install_script() -> None:
     assert "/dev/tty" in body
     assert "_ts_prompt_token" in body
     assert "/get-token" in body
+    # Accept both legacy /get-token tokens and console API keys.
+    assert "teamshared_*|tsk_*" in body
+    assert "token should start with teamshared_ or tsk_" in body
     assert "https://teamshared.com/mcp" in body
     assert "/install/assets" in body
     # Hermes ships a conversation-capture shell hook wired by the installer.
     assert "_ts_install_hermes_hook" in body
     assert "teamshared-capture.py" in body
     assert "post_llm_call" in body
+    # Cursor plugin can be installed globally (~/.cursor) or per-repo (./.cursor).
+    assert "_ts_choose_cursor_scope" in body
+    assert "global — ~/.cursor" in body
+    assert "local  — ./.cursor" in body
+    assert 'CURSOR_ROOT="$(pwd)"' in body
     # Restart guidance is per-harness, not hardcoded to Cursor.
     assert "Restart Hermes" in body
     assert "Quit and reopen Claude Desktop" in body
     assert "Done. Restart your agent (Cursor: Developer → Reload Window)." not in body
+
+
+def test_unified_uninstall_script() -> None:
+    body = unified_uninstall_script(base_url="https://teamshared.com")
+    assert "#!/usr/bin/env bash" in body
+    assert "teamshared uninstall:" in body
+    assert "_ts_choose_harness" in body
+    # Offers an "all" option that covers every harness.
+    assert "6) all" in body
+    assert "Enter choice [1-6]" in body
+    # Never prompts for or touches a bearer token (pure removal).
+    assert "TEAMSHARED_TOKEN" not in body
+    assert "_ts_prompt_token" not in body
+    # Removes each harness's files (Cursor cleaned across global + repo roots).
+    assert "${root}/.cursor/plugins/local/teamshared" in body
+    assert "${root}/.cursor/rules/teamshared.mdc" in body
+    assert "${HOME}/.codex/teamshared-mcp.toml" in body
+    assert "${HOME}/.hermes/agent-hooks/teamshared-capture.py" in body
+    assert "claude_desktop_config.json" in body
+    assert "openclaw-teamshared.sh" in body
+    # Surgically edits shared config rather than deleting it wholesale.
+    assert "_ts_remove_json_mcp" in body
+    assert "_ts_remove_codex_block" in body
+    assert "_ts_remove_hermes_block" in body
 
 
 def test_install_routes() -> None:
@@ -46,6 +82,7 @@ def test_install_routes() -> None:
         routes=[
             Route("/install", handle_install_index, methods=["GET"]),
             Route("/install.sh", handle_install_sh, methods=["GET"]),
+            Route("/uninstall.sh", handle_uninstall_sh, methods=["GET"]),
             Route("/install/assets/{asset_path:path}", handle_install_asset, methods=["GET"]),
             Route("/install/plugin/teamshared.tar.gz", handle_plugin_bundle, methods=["GET"]),
         ]
@@ -54,6 +91,12 @@ def test_install_routes() -> None:
         index = client.get("/install")
         assert index.status_code == 200
         assert "install.sh" in index.text
+        assert "uninstall.sh" in index.text
+
+        uninstall = client.get("/uninstall.sh")
+        assert uninstall.status_code == 200
+        assert uninstall.headers["content-type"].startswith("text/x-shellscript")
+        assert "Enter choice [1-6]" in uninstall.text
 
         script = client.get("/install.sh")
         assert script.status_code == 200

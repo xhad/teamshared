@@ -82,7 +82,20 @@ curl -fsSL https://teamshared.com/install.sh | bash
 The script prompts for your bearer token ([`/get-token`](https://teamshared.com/get-token))
 and writes it into the harness MCP config. Details: [`/install`](https://teamshared.com/install).
 
-**Cursor (recommended):** install the **teamshared** plugin.
+To undo everything the installer wrote (plugin, rule, hook, and the `teamshared`
+entry in each harness's MCP config) run the matching uninstaller — it prompts
+for the harness (or `all`) and only strips the `teamshared` server, leaving the
+rest of your config intact:
+
+```bash
+curl -fsSL https://teamshared.com/uninstall.sh | bash
+```
+
+**Cursor (recommended):** install the **teamshared** plugin. The installer asks
+whether to install **globally** (`~/.cursor`, available in every project) or
+**locally** (`./.cursor` in the current repo, that project only). For a local
+install, add `.cursor/mcp.json` to the repo's `.gitignore` so the bearer token
+isn't committed.
 
 **Marketplace:** Settings → Plugins → Add marketplace → `https://github.com/xhad/teamshared`, then `/add-plugin teamshared`.
 
@@ -105,8 +118,8 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | Tool                        | Purpose                                                      |
 | --------------------------- | ------------------------------------------------------------ |
 | `health`                    | Liveness + dependency check                                  |
-| `memory_recall`             | Hybrid search across all pillars                             |
-| `memory_remember`           | Write a fact / preference / event / note                     |
+| `memory_recall`             | Hybrid search across all pillars (`repo=` softly boosts a workspace) |
+| `memory_remember`           | Write a fact / preference / event / note (`repo=` scopes to a workspace) |
 | `memory_session_open`       | Start a working-memory session                               |
 | `memory_session_append`     | Append a turn                                                |
 | `memory_session_close`      | Close + enqueue for distillation                             |

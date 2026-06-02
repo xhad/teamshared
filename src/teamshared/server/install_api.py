@@ -14,6 +14,7 @@ from teamshared.clients.install_scripts import (
     PLUGIN_BUNDLE_PATH,
     install_index_html,
     unified_install_script,
+    unified_uninstall_script,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -77,6 +78,16 @@ async def handle_install_sh(request: Request) -> PlainTextResponse:
         body,
         media_type="text/x-shellscript; charset=utf-8",
         headers={"Content-Disposition": 'inline; filename="install.sh"'},
+    )
+
+
+async def handle_uninstall_sh(request: Request) -> PlainTextResponse:
+    base = str(request.base_url).rstrip("/")
+    body = unified_uninstall_script(base_url=base)
+    return PlainTextResponse(
+        body,
+        media_type="text/x-shellscript; charset=utf-8",
+        headers={"Content-Disposition": 'inline; filename="uninstall.sh"'},
     )
 
 

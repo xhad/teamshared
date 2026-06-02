@@ -19,6 +19,11 @@ log = get_logger(__name__)
 _REPO_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*(?:/[a-z][a-z0-9_-]*)*$")
 
+# Durable memories are scoped to a workspace/repo by carrying a normalized tag
+# of the form ``repo:<slug>``. This rides the existing free-form ``tags``
+# plumbing (no schema change) and lets recall boost the caller's current repo.
+REPO_TAG_PREFIX = "repo:"
+
 
 def validate_repo(repo: str) -> str:
     repo = repo.strip()
@@ -27,6 +32,11 @@ def validate_repo(repo: str) -> str:
             "repo must be a non-empty workspace slug (alphanumeric, '.', '_', '-')"
         )
     return repo
+
+
+def repo_tag(repo: str) -> str:
+    """Return the canonical ``repo:<slug>`` tag for a workspace slug."""
+    return f"{REPO_TAG_PREFIX}{validate_repo(repo)}"
 
 
 def validate_key(key: str) -> str:
