@@ -38,6 +38,7 @@ from teamshared.memory.request_context import RequestContext
 from teamshared.memory.wiki import slugify
 from teamshared.server import mailer
 from teamshared.server.health import check_components
+from teamshared.server.rate_limit import enforce_otp_send, enforce_otp_verify
 from teamshared.server.markdown_safe import render_markdown_safe
 from teamshared.server.services import ProductionServices
 from teamshared.server.state import get_state
@@ -223,6 +224,11 @@ def register_console_routes(
             return _TEMPLATES.TemplateResponse(
                 request, "login.html", {"message": "Email is required.", "error": True}
             )
+        limiter = getattr(request.app.state, "rate_limiter", None)
+        if limiter is not None:
+            blocked = await enforce_otp_send(limiter, email)
+            if blocked is not None:
+                return blocked
         # Self-service: any email can sign in. We send a code to whatever was
         # entered; the email is only provisioned into an org after it verifies.
         ttl = getattr(settings, "otp_ttl_seconds", 30)
@@ -273,6 +279,11 @@ def register_console_routes(
         form = await request.form()
         email = str(form.get("email") or "").strip().lower()
         code = str(form.get("code") or "").strip()
+        limiter = getattr(request.app.state, "rate_limiter", None)
+        if limiter is not None:
+            blocked = await enforce_otp_verify(limiter, email)
+            if blocked is not None:
+                return blocked
         if not await services.working.verify_login_otp(email, code):
             METRICS.otp_failed.inc()
             return _TEMPLATES.TemplateResponse(

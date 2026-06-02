@@ -49,3 +49,5 @@ def test_security_counters_render() -> None:
     assert "teamshared_otp_failed_total" in out
     assert "teamshared_consent_denied_capture_total" in out
     assert "teamshared_ingestion_quarantined_total" in out
+    m.rate_limited.inc()
+    assert "teamshared_rate_limited_total" in m.render()

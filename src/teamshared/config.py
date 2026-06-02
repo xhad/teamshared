@@ -65,6 +65,23 @@ class Settings(BaseSettings):
             "Must stay false in production."
         ),
     )
+    rate_limit_enabled: bool = Field(
+        default=True,
+        description="Enable Redis-backed edge rate limits (mint, OTP, MCP).",
+    )
+    rate_limit_mint_per_minute: int = Field(
+        default=10, description="POST /tokens/mint* and /tokens/invites per client IP per minute."
+    )
+    rate_limit_otp_send_per_minute: int = Field(
+        default=3, description="Console POST /login OTP send attempts per email per minute."
+    )
+    rate_limit_otp_verify_per_minute: int = Field(
+        default=5, description="Console POST /login/verify attempts per email per minute."
+    )
+    rate_limit_mcp_per_minute: int = Field(
+        default=120,
+        description="MCP and bearer-scoped routes per principal per minute.",
+    )
     tokens_file: Path = Field(default=Path("./.teamshared/tokens.json"))
     invites_file: Path = Field(default=Path("./.teamshared/invites.json"))
     self_service_tokens: bool = Field(

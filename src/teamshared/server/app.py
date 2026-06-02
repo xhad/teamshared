@@ -45,6 +45,7 @@ from teamshared.server.install_api import (
     handle_plugin_bundle,
     handle_uninstall_sh,
 )
+from teamshared.server.rate_limit import HttpRateLimitMiddleware, RateLimitLimits, RedisRateLimiter
 from teamshared.server.services import ProductionServices, make_services
 from teamshared.server.state import ServerState, clear_state, set_state
 from teamshared.server.token_api import (
@@ -341,8 +342,21 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         )
         return JSONResponse({"recorded": recorded})
 
+    rate_limiter = RedisRateLimiter(
+        settings.redis_url,
+        enabled=settings.rate_limit_enabled,
+        limits=RateLimitLimits(
+            mint_per_minute=settings.rate_limit_mint_per_minute,
+            otp_send_per_minute=settings.rate_limit_otp_send_per_minute,
+            otp_verify_per_minute=settings.rate_limit_otp_verify_per_minute,
+            mcp_per_minute=settings.rate_limit_mcp_per_minute,
+        ),
+    )
+
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
+        await rate_limiter.connect()
+        app.state.rate_limiter = rate_limiter
         state = await _init_state(settings, services, resolver)
         log.info("teamshared_server_started", host=settings.host, port=settings.port)
         async with mcp_app.lifespan(app):
@@ -351,6 +365,8 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             finally:
                 log.info("teamshared_server_stopping")
                 await _teardown_state(state)
+                await rate_limiter.close()
+                app.state.rate_limiter = None
 
     middleware = [
         Middleware(
@@ -359,6 +375,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             auth_disabled=settings.auth_disabled,
             resolver=resolver,
         ),
+        Middleware(HttpRateLimitMiddleware),
     ]
 
     app = Starlette(
