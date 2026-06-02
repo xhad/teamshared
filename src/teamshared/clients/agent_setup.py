@@ -115,11 +115,13 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
         )
 
     if agent_type == "hermes":
+        mcp_endpoint = mcp_url if mcp_url.endswith("/") else f"{mcp_url}/"
         snippet = (
             "# Paste under mcp_servers: in ~/.hermes/config.yaml\n"
+            "# Also paste clients/protocol.md into ~/.hermes/SOUL.md.\n"
             "mcp_servers:\n"
             "  teamshared:\n"
-            f"    url: {mcp_url}\n"
+            f"    url: {mcp_endpoint}\n"
             "    headers:\n"
             f'      Authorization: "Bearer {token}"\n'
             "    timeout: 30\n"

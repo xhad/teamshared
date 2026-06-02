@@ -59,3 +59,14 @@ def test_codex_setup_uses_inline_token_toml() -> None:
     # No env-var indirection for codex anymore.
     assert "bearer_token_env_var" not in setup.snippet
     assert "export TEAMSHARED_TOKEN" not in setup.snippet
+
+
+def test_hermes_setup_uses_trailing_slash_mcp_url() -> None:
+    setup = agent_setup(
+        "hermes",
+        mcp_url="https://teamshared.com/mcp",
+        token="teamshared_testtoken",
+    )
+    assert setup is not None
+    assert "url: https://teamshared.com/mcp/" in setup.snippet
+    assert "SOUL.md" in setup.snippet

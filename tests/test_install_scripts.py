@@ -36,7 +36,8 @@ def test_unified_install_script() -> None:
     # Accept both legacy /get-token tokens and console API keys.
     assert "teamshared_*|tsk_*" in body
     assert "token should start with teamshared_ or tsk_" in body
-    assert "https://teamshared.com/mcp" in body
+    assert "https://teamshared.com/mcp/" in body
+    assert "_ts_install_hermes_soul" not in body
     assert "/install/assets" in body
     # Hermes ships a conversation-capture shell hook wired by the installer.
     assert "_ts_install_hermes_hook" in body
@@ -120,6 +121,12 @@ def test_install_routes() -> None:
         hermes_hooks_yaml = client.get("/install/assets/hermes/hooks.yaml")
         assert hermes_hooks_yaml.status_code == 200
         assert "post_llm_call" in hermes_hooks_yaml.text
+
+        hermes_protocol = client.get("/install/assets/hermes/protocol.md")
+        assert hermes_protocol.status_code == 200
+        assert "sessions_list" in hermes_protocol.text
+        assert "memory_remember" in hermes_protocol.text
+        assert "save to teamshared" in hermes_protocol.text.lower()
 
         bundle = client.get("/install/plugin/teamshared.tar.gz")
         assert bundle.status_code == 200

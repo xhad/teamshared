@@ -397,7 +397,8 @@ _ts_finish
 
 def unified_install_script(*, base_url: str) -> str:
     base = base_url.rstrip("/")
-    mcp_url = f"{base}/mcp"
+    # Trailing slash avoids a 307 that downgrades https→http behind Cloudflare.
+    mcp_url = f"{base}/mcp/"
     return _INSTALL_SH.replace("__BASE__", base).replace("__MCP_URL__", mcp_url)
 
 
