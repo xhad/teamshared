@@ -10,7 +10,8 @@ org-scoped stack as the ``/v1`` REST API).
 Identity comes from the per-request bearer token (see ``teamshared.auth``),
 which the ``BearerAuthMiddleware`` resolves into a Principal via the
 :class:`PrincipalResolver`. Callers may still pass ``agent=`` on write paths to
-override attribution; read paths default to the shared brain (no agent filter).
+override attribution (each override is audited as ``memory.agent_override``);
+read paths default to the shared brain (no agent filter).
 """
 
 from __future__ import annotations

@@ -66,15 +66,51 @@ class MemoryFacade:
             authorizer=self.services.authorizer(),
         )
 
-    async def _write_principal(self, principal: Principal, agent_override: str | None) -> Principal:
-        """Resolve the attribution principal, honouring an ``agent=`` override."""
-        if not agent_override or agent_override == (principal.display or ""):
-            return principal
+    async def _write_principal(
+        self,
+        caller: Principal,
+        agent_override: str | None,
+        *,
+        operation: str,
+        request_id: str | None = None,
+    ) -> Principal:
+        """Resolve write attribution, honouring an ``agent=`` override when allowed.
+
+        When the caller passes ``agent=`` distinct from their identity, record
+        ``memory.agent_override`` on the audit trail (applied or rejected).
+        """
+        caller_label = caller.display or caller.attribution
+        if not agent_override or agent_override == caller_label:
+            return caller
+
         override = await self.resolver.for_agent(agent_override)
-        # Keep the override inside the caller's org so RLS still holds.
-        if override.org_id != principal.org_id:
-            return principal
-        return override
+        applied = override.org_id == caller.org_id
+        writer = override if applied else caller
+        attributed = writer.display or writer.attribution
+
+        await self.services.audit.record(
+            agent=caller.attribution,
+            action="memory.agent_override",
+            org_id=caller.org_id,
+            actor_type=caller.type,
+            actor_id=caller.id,
+            resource_type="attribution",
+            request_id=request_id,
+            payload={
+                "operation": operation,
+                "requested_agent": agent_override,
+                "attributed_agent": attributed,
+                "applied": applied,
+            },
+        )
+        if not applied:
+            log.warning(
+                "agent_override_rejected",
+                operation=operation,
+                caller=caller_label,
+                requested_agent=agent_override,
+            )
+        return writer
 
     async def _lookup_agent_id(self, org_id: UUID, name: str) -> UUID | None:
         async with self.services.tenant_db.org(org_id) as conn:
@@ -93,8 +129,15 @@ class MemoryFacade:
         agent_override: str | None,
         repo: str | None = None,
     ) -> dict[str, Any]:
-        writer = await self._write_principal(principal, agent_override)
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal,
+            agent_override,
+            operation="remember",
+            request_id=caller_ctx.request_id,
+        )
         ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
         pillar = "episodic" if kind == "event" else "semantic"
         tag_list = _with_repo_tag(tags, repo)
         result = await self.services.ingestion().ingest(
@@ -192,8 +235,15 @@ class MemoryFacade:
         tags: list[str] | None,
         agent_override: str | None,
     ) -> dict[str, Any]:
-        writer = await self._write_principal(principal, agent_override)
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal,
+            agent_override,
+            operation="procedure_set",
+            request_id=caller_ctx.request_id,
+        )
         ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
         result = await self.services.ingestion().ingest_procedure(
             ctx,
             name=name,
@@ -222,7 +272,14 @@ class MemoryFacade:
         agent_override: str | None,
         repo: str | None = None,
     ) -> dict[str, str]:
-        agent = agent_override or principal.display or principal.attribution
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal,
+            agent_override,
+            operation="session_open",
+            request_id=caller_ctx.request_id,
+        )
+        agent = writer.display or writer.attribution
         session_id = await self.working.open_session(
             principal.org_id, agent, topic=topic, ttl=ttl, repo=repo
         )
@@ -253,7 +310,14 @@ class MemoryFacade:
     ) -> dict[str, Any]:
         if self.graph is None:
             return {"ok": False, "reason": "graph_disabled"}
-        agent = agent_override or principal.display or principal.attribution
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal,
+            agent_override,
+            operation="graph_relate",
+            request_id=caller_ctx.request_id,
+        )
+        agent = writer.display or writer.attribution
         await self.graph.add_relation(
             subject, predicate, object_, org_id=str(principal.org_id), agent=agent, weight=weight
         )
