@@ -3,6 +3,9 @@
 COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml
 
 build :; $(COMPOSE) up -d --build
+# Optional in-compose Ollama (CPU-only on macOS); default stack uses host GPU via host.docker.internal.
+build-bundled-ollama :; COMPOSE_PROFILES=bundled-ollama $(COMPOSE) up -d --build
+ollama-host :; ./scripts/ollama-host.sh
 down :; $(COMPOSE) down
 down-all :; $(COMPOSE) down --remove-orphans
 migrate :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared migrate
@@ -20,4 +23,4 @@ health :; curl -fsS http://localhost:8077/health | jq
 smoke-all :; python scripts/smoke_all_tools.py
 smoke-cross-agent :; python scripts/smoke_cross_agent.py
 
-.PHONY: build down down-all migrate provision-app-role verify-rls seed token-mint invite-create health smoke-all smoke-cross-agent
+.PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed token-mint invite-create health smoke-all smoke-cross-agent

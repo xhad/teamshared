@@ -4,13 +4,11 @@
 # Migrate:    make migrate
 # Mint token: make token-mint
 #
-# server/distiller run on the compose bridge network and reach a HOST Ollama
-# via host.docker.internal (wired through extra_hosts: host-gateway below), so
-# there is no separate host-networking compose file. On Linux, host Ollama must
-# be reachable from the docker bridge:
-#   - run Ollama with OLLAMA_HOST=0.0.0.0:11434 (bind all interfaces), and
-#   - allow the docker bridge subnet to port 11434
-#     (e.g. `sudo ufw allow from 172.16.0.0/12 to any port 11434 proto tcp`).
+# Default: HOST Ollama at ``http://host.docker.internal:11434`` (GPU on macOS/Linux).
+# Start it with ``make ollama-host`` (``OLLAMA_HOST=0.0.0.0:11434``). Optional bundled
+# service: ``make build-bundled-ollama`` (compose profile ``bundled-ollama``).
+# Linux: allow the docker bridge to port 11434 if needed
+# (e.g. ``sudo ufw allow from 172.16.0.0/12 to any port 11434 proto tcp``).
 #
 # Production deployment is the same image, fronted by Tailscale Serve or
 # Caddy/Traefik for TLS. See infra/tailscale.example.md.
@@ -46,6 +44,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # CPU-only fallback; enable with: COMPOSE_PROFILES=bundled-ollama make build
+  ollama:
+    profiles: ["bundled-ollama"]
+    image: ollama/ollama:latest
+    ports:
+      - "${TEAMSHARED_OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollamadata:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   server:
     build:
@@ -189,5 +202,6 @@ services:
 volumes:
   pgdata:
   redisdata:
+  ollamadata:
   teamshareddata:
   neo4jdata:

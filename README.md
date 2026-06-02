@@ -56,16 +56,22 @@ docker compose -f infra/docker-compose.yml run --rm server teamshared token mint
 curl -fsS http://localhost:8077/health | jq
 ```
 
-**Ollama on the host:** set `TEAMSHARED_EMBED_PROVIDER` / `TEAMSHARED_LLM_PROVIDER` to `ollama` in `.env`
-and run Ollama on the host. The image installs the `ollama` Python client Mem0 needs at startup.
-There is one compose file (`make build`); `server`/`distiller` reach the host via
-`host.docker.internal` (wired through `extra_hosts: host-gateway`).
+**Ollama on the host (default, uses GPU):** with `TEAMSHARED_EMBED_PROVIDER` /
+`TEAMSHARED_LLM_PROVIDER` set to `ollama` in `.env`:
 
-- **macOS / Docker Desktop:** works out of the box — `host.docker.internal` already routes to the host.
+```bash
+make ollama-host   # OLLAMA_HOST=0.0.0.0:11434 — bind for containers
+make build         # TEAMSHARED_OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+- **macOS / Docker Desktop:** `host.docker.internal` routes to host Ollama (Metal).
 - **Linux:** make the host Ollama reachable from the docker bridge:
   - start Ollama with `OLLAMA_HOST=0.0.0.0:11434` (bind all interfaces), and
   - allow the docker bridge subnet to port `11434`, e.g.
     `sudo ufw allow from 172.16.0.0/12 to any port 11434 proto tcp`.
+
+**Bundled Ollama (optional, CPU-only on macOS):** `make build-bundled-ollama` and
+`TEAMSHARED_OLLAMA_BASE_URL=http://ollama:11434`.
 
 ## Connect your agents
 
