@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
 
 import fakeredis.aioredis
 import pytest
@@ -13,7 +14,9 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from teamshared.auth import BearerAuthMiddleware, TokenStore
+from teamshared.auth import BearerAuthMiddleware
+from teamshared.identity.legacy_bridge import PrincipalResolver
+from teamshared.identity.principal import Principal
 from teamshared.server.rate_limit import (
     HttpRateLimitMiddleware,
     RateLimitLimits,
@@ -79,15 +82,26 @@ def test_mint_middleware_returns_429(limiter: RedisRateLimiter) -> None:
     assert "Retry-After" in resp.headers
 
 
-def _mcp_app(store: TokenStore, limiter: RedisRateLimiter) -> Starlette:
+def _mcp_app(limiter: RedisRateLimiter) -> Starlette:
     async def ping(request: Request) -> JSONResponse:
         principal = getattr(request.state, "principal", None)
         return JSONResponse({"agent": principal.display if principal else None})
 
+    principal = Principal(
+        org_id=UUID("00000000-0000-0000-0000-000000000001"),
+        type="agent",
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        display="cursor",
+        roles=("agent",),
+    )
+    resolver = MagicMock(spec=PrincipalResolver)
+    resolver.resolve = AsyncMock(return_value=principal)
+    resolver.anonymous = AsyncMock(return_value=principal)
+
     app = Starlette(
         routes=[Route("/mcp/ping", ping, methods=["GET"])],
         middleware=[
-            Middleware(BearerAuthMiddleware, store=store, auth_disabled=False),
+            Middleware(BearerAuthMiddleware, resolver=resolver, auth_disabled=False),
             Middleware(HttpRateLimitMiddleware),
         ],
     )
@@ -95,11 +109,9 @@ def _mcp_app(store: TokenStore, limiter: RedisRateLimiter) -> Starlette:
     return app
 
 
-def test_mcp_middleware_per_token(tmp_path: Path, limiter: RedisRateLimiter) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    token = store.mint("cursor")
-    client = TestClient(_mcp_app(store, limiter))
-    headers = {"Authorization": f"Bearer {token}"}
+def test_mcp_middleware_per_token(limiter: RedisRateLimiter) -> None:
+    client = TestClient(_mcp_app(limiter))
+    headers = {"Authorization": "Bearer tsk_test_secret"}
     assert client.get("/mcp/ping", headers=headers).status_code == 200
     assert client.get("/mcp/ping", headers=headers).status_code == 200
     assert client.get("/mcp/ping", headers=headers).status_code == 429

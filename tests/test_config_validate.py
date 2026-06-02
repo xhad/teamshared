@@ -21,6 +21,7 @@ def test_validate_production_requires_secrets() -> None:
         self_service_tokens=True,
         dashboard_public_content=True,
         legacy_token_mint_enabled=True,
+        legacy_token_auth_enabled=True,
     )
     with pytest.raises(ConfigValidationError) as exc:
         validate_settings(s)
@@ -32,6 +33,7 @@ def test_validate_production_requires_secrets() -> None:
     assert "CONNECTOR_ENCRYPTION_KEY" in msg
     assert "DASHBOARD_PUBLIC_CONTENT" in msg
     assert "LEGACY_TOKEN_MINT_ENABLED" in msg
+    assert "LEGACY_TOKEN_AUTH_ENABLED" in msg
 
 
 def test_validate_production_passes_minimal_safe_config() -> None:

@@ -3,7 +3,7 @@
 Stage 2a replaces legacy ``teamshared_*`` JSON-file tokens on the mint path
 with hashed API keys bound to a provisioned agent principal in the default org
 (or an explicit ``org_id``). Legacy tokens remain valid for authentication
-until Stage 2c removes them.
+Legacy ``teamshared_*`` file auth is opt-in via ``TEAMSHARED_LEGACY_TOKEN_AUTH_ENABLED``.
 """
 
 from __future__ import annotations

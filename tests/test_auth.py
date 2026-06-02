@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
 
 import pytest
 from starlette.applications import Starlette
@@ -18,10 +20,48 @@ from teamshared.auth import (
     TokenStore,
     current_agent,
 )
+from teamshared.identity.legacy_bridge import PrincipalResolver
+from teamshared.identity.principal import Principal
 from teamshared.metrics import METRICS
 
+DEFAULT_ORG = UUID("00000000-0000-0000-0000-000000000001")
+AGENT_ID = UUID("11111111-1111-1111-1111-111111111111")
 
-def _build_app(store: TokenStore, *, disabled: bool = False) -> Starlette:
+
+def _agent_principal(agent: str = "cursor") -> Principal:
+    return Principal(
+        org_id=DEFAULT_ORG,
+        type="agent",
+        id=AGENT_ID,
+        display=agent,
+        roles=("agent",),
+    )
+
+
+def _mock_resolver(
+    *,
+    on_resolve: Principal | None = None,
+    on_legacy: Principal | None = None,
+) -> MagicMock:
+    resolver = MagicMock(spec=PrincipalResolver)
+
+    async def resolve(token: str, *, legacy_agent: str | None = None) -> Principal | None:
+        del token
+        if legacy_agent is not None:
+            return on_legacy if on_legacy is not None else _agent_principal(legacy_agent)
+        return on_resolve
+
+    resolver.resolve = AsyncMock(side_effect=resolve)
+    resolver.anonymous = AsyncMock(return_value=_agent_principal("anonymous"))
+    return resolver
+
+
+def _build_app(
+    resolver: MagicMock,
+    *,
+    legacy_store: TokenStore | None = None,
+    disabled: bool = False,
+) -> Starlette:
     async def whoami(request: Request) -> JSONResponse:
         ident = current_agent()
         return JSONResponse({"agent": ident.agent if ident else None})
@@ -34,7 +74,14 @@ def _build_app(store: TokenStore, *, disabled: bool = False) -> Starlette:
             Route("/health", health, methods=["GET"]),
             Route("/mcp/whoami", whoami, methods=["GET"]),
         ],
-        middleware=[Middleware(BearerAuthMiddleware, store=store, auth_disabled=disabled)],
+        middleware=[
+            Middleware(
+                BearerAuthMiddleware,
+                resolver=resolver,
+                legacy_store=legacy_store,
+                auth_disabled=disabled,
+            )
+        ],
     )
 
 
@@ -110,8 +157,8 @@ def test_token_store_revoke_requires_match(tmp_path: Path) -> None:
 
 
 def test_middleware_rejects_missing_header(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    app = _build_app(store)
+    resolver = _mock_resolver()
+    app = _build_app(resolver)
     with TestClient(app) as client:
         resp = client.get("/mcp/whoami")
         assert resp.status_code == 401
@@ -121,7 +168,8 @@ def test_middleware_rejects_missing_header(tmp_path: Path) -> None:
 def test_middleware_rejects_unknown_token(tmp_path: Path) -> None:
     store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     store.mint("cursor")
-    app = _build_app(store)
+    resolver = _mock_resolver(on_resolve=None)
+    app = _build_app(resolver)
     with TestClient(app) as client:
         resp = client.get(
             "/mcp/whoami", headers={"Authorization": "Bearer bogus"}
@@ -129,10 +177,35 @@ def test_middleware_rejects_unknown_token(tmp_path: Path) -> None:
         assert resp.status_code == 401
 
 
-def test_middleware_binds_identity(tmp_path: Path) -> None:
+def test_legacy_file_token_rejected_without_legacy_store(tmp_path: Path) -> None:
     store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     token = store.mint("cursor")
-    app = _build_app(store)
+    resolver = _mock_resolver(on_resolve=None)
+    app = _build_app(resolver, legacy_store=None)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/mcp/whoami", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp.status_code == 401
+
+
+def test_middleware_binds_tsk_principal(tmp_path: Path) -> None:
+    resolver = _mock_resolver(on_resolve=_agent_principal("cursor"))
+    app = _build_app(resolver)
+    with TestClient(app) as client:
+        resp = client.get(
+            "/mcp/whoami",
+            headers={"Authorization": "Bearer tsk_abcd0123secret"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"agent": "cursor"}
+
+
+def test_middleware_binds_legacy_identity_when_opted_in(tmp_path: Path) -> None:
+    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
+    token = store.mint("cursor")
+    resolver = _mock_resolver(on_legacy=_agent_principal("cursor"))
+    app = _build_app(resolver, legacy_store=store)
     with TestClient(app) as client:
         resp = client.get(
             "/mcp/whoami", headers={"Authorization": f"Bearer {token}"}
@@ -145,7 +218,8 @@ def test_legacy_token_auth_records_metric(tmp_path: Path) -> None:
     before = sum(METRICS.legacy_token_used.values.values())
     store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
     token = store.mint("cursor")
-    app = _build_app(store)
+    resolver = _mock_resolver(on_legacy=_agent_principal("cursor"))
+    app = _build_app(resolver, legacy_store=store)
     with TestClient(app) as client:
         resp = client.get(
             "/mcp/whoami", headers={"Authorization": f"Bearer {token}"}
@@ -156,16 +230,16 @@ def test_legacy_token_auth_records_metric(tmp_path: Path) -> None:
 
 
 def test_health_is_anonymous(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    app = _build_app(store)
+    resolver = _mock_resolver()
+    app = _build_app(resolver)
     with TestClient(app) as client:
         resp = client.get("/health")
         assert resp.status_code == 200
 
 
 def test_auth_disabled_skips_check(tmp_path: Path) -> None:
-    store = TokenStore(tmp_path / "tokens.json", legacy_mint_enabled=True)
-    app = _build_app(store, disabled=True)
+    resolver = _mock_resolver()
+    app = _build_app(resolver, disabled=True)
     with TestClient(app) as client:
         resp = client.get("/mcp/whoami")
         assert resp.status_code == 200

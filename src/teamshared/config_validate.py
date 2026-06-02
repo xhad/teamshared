@@ -63,6 +63,12 @@ def validate_settings(settings: Settings) -> None:
             "(mint tsk_ API keys via invite redeem or teamshared token mint)"
         )
 
+    if settings.legacy_token_auth_enabled:
+        errors.append(
+            "TEAMSHARED_LEGACY_TOKEN_AUTH_ENABLED must be false in production "
+            "(authenticate with tsk_ API keys only)"
+        )
+
     if errors:
         bullet = "\n  - "
         raise ConfigValidationError(

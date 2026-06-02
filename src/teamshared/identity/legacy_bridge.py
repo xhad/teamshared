@@ -7,10 +7,9 @@ Principal, in priority order:
 
 1. A hashed ``tsk_`` API key -> its real Principal (any org).
 2. A signed dashboard session JWT -> the user Principal it carries.
-3. A legacy ``teamshared_`` token -> a synthetic agent Principal inside the
-   configured *default org*. The agent row is auto-provisioned (idempotent
-   upsert keyed by ``(org_id, name)``) and bound the baseline ``agent`` role on
-   first use, so existing clients keep working with zero re-onboarding.
+3. When ``legacy_agent`` is passed (legacy file auth opt-in via
+   ``TEAMSHARED_LEGACY_TOKEN_AUTH_ENABLED``), a synthetic agent Principal in the
+   *default org* — auto-provisioned on first use.
 
 The agent-name -> id mapping is cached in-process; the upsert is cheap and
 idempotent so a cold cache is harmless.

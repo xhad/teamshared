@@ -95,7 +95,6 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
 
     state = ServerState(
         settings=settings,
-        tokens=MagicMock(),
         invites=MagicMock(),
         working=working,
         agent_state=MagicMock(),

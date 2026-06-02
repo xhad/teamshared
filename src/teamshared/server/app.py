@@ -89,10 +89,6 @@ async def _init_state(
     resolver: PrincipalResolver,
 ) -> ServerState:
     """Connect every backing store and assemble :class:`ServerState`."""
-    tokens = TokenStore(
-        settings.tokens_file,
-        legacy_mint_enabled=settings.legacy_token_mint_enabled,
-    )
     invites = InviteStore(settings.invites_file)
     # Single WorkingMemory instance, owned by services and shared with ServerState
     # (the console reaches it via services.working for sign-in OTP storage).
@@ -128,7 +124,6 @@ async def _init_state(
 
     state = ServerState(
         settings=settings,
-        tokens=tokens,
         invites=invites,
         working=working,
         agent_state=agent_state,
@@ -231,9 +226,14 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
                 status_code=503,
             )
 
-    tokens = TokenStore(
-        settings.tokens_file,
-        legacy_mint_enabled=settings.legacy_token_mint_enabled,
+    legacy_registry = TokenStore(settings.tokens_file)
+    legacy_store = (
+        TokenStore(
+            settings.tokens_file,
+            legacy_mint_enabled=settings.legacy_token_mint_enabled,
+        )
+        if settings.legacy_token_auth_enabled
+        else None
     )
     invites = InviteStore(settings.invites_file)
     agent_minter = AgentTokenMinter(
@@ -369,7 +369,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         await rate_limiter.connect()
         app.state.rate_limiter = rate_limiter
-        legacy_count = tokens.legacy_count()
+        legacy_count = legacy_registry.legacy_count()
         app.state.legacy_token_count = legacy_count
         if legacy_count:
             log.warning(
@@ -391,9 +391,9 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     middleware = [
         Middleware(
             BearerAuthMiddleware,
-            store=tokens,
-            auth_disabled=settings.auth_disabled,
             resolver=resolver,
+            legacy_store=legacy_store,
+            auth_disabled=settings.auth_disabled,
         ),
         Middleware(HttpRateLimitMiddleware),
     ]

@@ -89,6 +89,13 @@ class Settings(BaseSettings):
             "production; use AgentTokenMinter / invite redeem for tsk_ keys."
         ),
     )
+    legacy_token_auth_enabled: bool = Field(
+        default=False,
+        description=(
+            "Accept teamshared_* tokens from tokens_file in BearerAuthMiddleware. "
+            "Off by default; enable only during migration. tsk_ API keys always work."
+        ),
+    )
     tokens_file: Path = Field(default=Path("./.teamshared/tokens.json"))
     invites_file: Path = Field(default=Path("./.teamshared/invites.json"))
     self_service_tokens: bool = Field(

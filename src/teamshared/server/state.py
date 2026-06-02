@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from teamshared.auth import TokenStore
 from teamshared.config import Settings
 from teamshared.invite import InviteStore
 from teamshared.memory.agent_state import AgentStateStore
@@ -33,7 +32,6 @@ class ServerState:
     """
 
     settings: Settings
-    tokens: TokenStore
     invites: InviteStore
     working: WorkingMemory
     agent_state: AgentStateStore

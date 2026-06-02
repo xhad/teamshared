@@ -488,7 +488,6 @@ async def _run_in_memory() -> SmokeReport:
     set_state(
         ServerState(
             settings=Settings(_env_file=None),
-            tokens=MagicMock(),
             invites=MagicMock(),
             working=working,
             agent_state=agent_state,

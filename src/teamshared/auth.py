@@ -184,9 +184,13 @@ class TokenStore:
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
-    """Validate ``Authorization: Bearer <token>`` against a :class:`TokenStore`.
+    """Validate ``Authorization: Bearer <token>`` via :class:`PrincipalResolver`.
 
-    - ``/health``, ``/``, ``/favicon.ico``, and token self-service paths are anonymous.
+    ``tsk_`` API keys and console session JWTs are resolved in Postgres. Legacy
+    ``teamshared_*`` file tokens are accepted only when ``legacy_store`` is set
+    (``TEAMSHARED_LEGACY_TOKEN_AUTH_ENABLED``).
+
+    - Public paths skip bearer validation (see :mod:`route_policy`).
     - If ``auth_disabled`` is True, a synthetic ``anonymous`` identity is bound
       (useful for local development / tests).
     """
@@ -194,13 +198,13 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app: ASGIApp,
-        store: TokenStore,
         *,
+        resolver: PrincipalResolver,
+        legacy_store: TokenStore | None = None,
         auth_disabled: bool = False,
-        resolver: PrincipalResolver | None = None,
     ) -> None:
         super().__init__(app)
-        self.store = store
+        self.legacy_store = legacy_store
         self.auth_disabled = auth_disabled
         self.resolver = resolver
 
@@ -209,7 +213,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if outer_middleware_skips_bearer(path):
             return await call_next(request)
 
-        identity: AgentIdentity | None
+        identity: AgentIdentity | None = None
         token: str | None = None
         if self.auth_disabled:
             identity = AgentIdentity(agent="anonymous", state_id="disabled")
@@ -223,17 +227,18 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             token = header[len("bearer ") :].strip()
-            identity = self.store.lookup(token)
-            if identity is not None:
-                METRICS.legacy_token_used.inc()
-                log.warning(
-                    "legacy_token_used",
-                    agent=identity.agent,
-                    token_prefix=token[:16],
-                )
+            if self.legacy_store is not None:
+                identity = self.legacy_store.lookup(token)
+                if identity is not None:
+                    METRICS.legacy_token_used.inc()
+                    log.warning(
+                        "legacy_token_used",
+                        agent=identity.agent,
+                        token_prefix=token[:16],
+                    )
 
         principal = await self._resolve_principal(token, identity)
-        if not self.auth_disabled and identity is None and principal is None:
+        if not self.auth_disabled and principal is None:
             METRICS.auth_rejected.inc(reason="invalid_token")
             log.warning("auth_rejected", token_prefix=(token or "")[:8])
             return JSONResponse({"error": "invalid_token"}, status_code=401)
@@ -260,16 +265,13 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
     async def _resolve_principal(
         self, token: str | None, identity: AgentIdentity | None
     ) -> Principal | None:
-        if self.resolver is None:
-            return None
         try:
             if self.auth_disabled:
                 return await self.resolver.anonymous()
             if token is None:
                 return None
-            return await self.resolver.resolve(
-                token, legacy_agent=identity.agent if identity else None
-            )
+            legacy_agent = identity.agent if identity is not None else None
+            return await self.resolver.resolve(token, legacy_agent=legacy_agent)
         except Exception as exc:  # resolution must not 500 the request
             log.warning("principal_resolution_failed", error=str(exc))
             return None

@@ -169,7 +169,6 @@ async def _main_in_memory(scenarios_path: Path) -> int:
     set_state(
         ServerState(
             settings=Settings(_env_file=None),
-            tokens=MagicMock(),
             invites=MagicMock(),
             working=working,
             agent_state=MagicMock(),
