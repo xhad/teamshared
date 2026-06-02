@@ -35,9 +35,9 @@ _ts_fetch() {
 # curl | bash has no stdin TTY; read prompts from the controlling terminal.
 _ts_tty() {
   if [[ -t 0 ]]; then
-    printf '%s' "$1"
+    printf '%b' "$1"
   elif [[ -r /dev/tty ]]; then
-    printf '%s' "$1" >/dev/tty
+    printf '%b' "$1" >/dev/tty
   else
     _ts_die "no terminal available for prompts (try: bash install-teamshared.sh)"
   fi
@@ -419,9 +419,9 @@ _ts_need_cmd() {
 # curl | bash has no stdin TTY; read prompts from the controlling terminal.
 _ts_tty() {
   if [[ -t 0 ]]; then
-    printf '%s' "$1"
+    printf '%b' "$1"
   elif [[ -r /dev/tty ]]; then
-    printf '%s' "$1" >/dev/tty
+    printf '%b' "$1" >/dev/tty
   else
     _ts_die "no terminal available for prompts (try: bash uninstall-teamshared.sh)"
   fi
