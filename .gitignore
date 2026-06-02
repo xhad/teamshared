@@ -33,6 +33,8 @@ infra/data/
 .DS_Store
 .idea/
 .vscode/
+# Local Cursor MCP config (contains org bearer token)
+.cursor/mcp.json
 .cursor/
 
 agent-tools/
