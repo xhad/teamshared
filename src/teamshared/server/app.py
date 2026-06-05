@@ -431,7 +431,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             ConsoleCsrfCookieMiddleware,
             session_secret=settings.session_secret,
             auth_disabled=settings.auth_disabled,
-            session_ttl=min(settings.session_ttl, 3600),
+            session_ttl=settings.console_session_ttl,
         ),
         Middleware(HttpRateLimitMiddleware),
     ]

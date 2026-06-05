@@ -89,6 +89,7 @@ def _build(
         session_secret=SECRET,
         default_org_id=DEFAULT_ORG,
         auth_disabled=auth_disabled,  # dev mode: OTP code shown in the page
+        console_session_ttl=2_592_000,
         public_url="http://testserver",
         otp_ttl_seconds=30,
         otp_max_attempts=5,

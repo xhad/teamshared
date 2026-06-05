@@ -59,7 +59,6 @@ from teamshared.server.state import get_state
 log = get_logger(__name__)
 
 _COOKIE = "ts_session"
-_SESSION_TTL = 3600
 _OTP_DIGITS = 6
 _ORG_NAME = "TeamShared"
 
@@ -274,17 +273,18 @@ def register_console_routes(
         # Only reached behind a verified session / OTP, both of which require a
         # configured secret; assert narrows the Optional for the type checker.
         assert settings.session_secret
+        ttl = settings.console_session_ttl
         token = issue_session(
             secret=settings.session_secret,
             org_id=org_id,
             user_id=user_id,
             email=email,
-            ttl_seconds=_SESSION_TTL,
+            ttl_seconds=ttl,
         )
         resp.set_cookie(
             _COOKIE,
             token,
-            max_age=_SESSION_TTL,
+            max_age=ttl,
             httponly=True,
             samesite="lax",
             secure=cookie_secure(request, auth_disabled=settings.auth_disabled),
@@ -295,7 +295,7 @@ def register_console_routes(
             resp.set_cookie(
                 "ts_csrf",
                 csrf,
-                max_age=_SESSION_TTL,
+                max_age=ttl,
                 httponly=False,
                 samesite="lax",
                 secure=cookie_secure(request, auth_disabled=settings.auth_disabled),

@@ -7,10 +7,17 @@ import uuid
 
 from unittest.mock import AsyncMock
 
+import jwt
 import pytest
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
+from starlette.routing import Route
 from starlette.testclient import TestClient
 
+from teamshared.identity.sessions import issue_session
 from teamshared.server.console_csrf import (
+    ConsoleCsrfCookieMiddleware,
     csrf_token_for_principal,
     csrf_token_for_session,
     verify_console_csrf,
@@ -91,6 +98,50 @@ def test_people_add_accepts_csrf_cookie_without_form_field() -> None:
     )
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/people"
+
+
+def _rolling_app(ttl: int = 2_592_000) -> TestClient:
+    async def app_home(_: Request) -> PlainTextResponse:
+        return PlainTextResponse("ok")
+
+    app = Starlette(routes=[Route("/app", app_home, methods=["GET"])])
+    app.add_middleware(
+        ConsoleCsrfCookieMiddleware,
+        session_secret=SECRET,
+        auth_disabled=True,
+        session_ttl=ttl,
+    )
+    return TestClient(app, follow_redirects=False)
+
+
+def test_rolling_session_reissues_cookie_with_long_ttl() -> None:
+    client = _rolling_app(ttl=2_592_000)
+    token = issue_session(secret=SECRET, org_id=ORG, user_id=USER, email="a@b.c", ttl_seconds=60)
+    resp = client.get("/app", cookies={"ts_session": token})
+    assert resp.status_code == 200
+    set_cookies = "\n".join(resp.headers.get_list("set-cookie"))
+    assert "ts_session=" in set_cookies
+    assert "ts_csrf=" in set_cookies
+    assert "Max-Age=2592000" in set_cookies
+    # The refreshed JWT carries a later expiry than the short-lived input token.
+    new_token = client.cookies.get("ts_session")
+    old = jwt.decode(token, SECRET, algorithms=["HS256"])
+    new = jwt.decode(new_token, SECRET, algorithms=["HS256"])
+    assert new["exp"] > old["exp"]
+
+
+def test_rolling_session_skips_when_unauthenticated() -> None:
+    client = _rolling_app()
+    resp = client.get("/app")  # no session cookie
+    assert resp.status_code == 200
+    assert "ts_session=" not in "\n".join(resp.headers.get_list("set-cookie"))
+
+
+def test_rolling_session_ignores_invalid_cookie() -> None:
+    client = _rolling_app()
+    resp = client.get("/app", cookies={"ts_session": "not-a-jwt"})
+    assert resp.status_code == 200
+    assert "ts_session=" not in "\n".join(resp.headers.get_list("set-cookie"))
 
 
 def test_login_sets_ts_csrf_cookie() -> None:

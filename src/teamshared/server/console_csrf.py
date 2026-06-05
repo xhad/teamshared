@@ -20,7 +20,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
-from teamshared.identity.sessions import verify_session
+from teamshared.identity.sessions import issue_session, verify_session
 
 _CSRF_COOKIE = "ts_csrf"
 _SESSION_COOKIE = "ts_session"
@@ -147,7 +147,13 @@ def verify_console_csrf(
 
 
 class ConsoleCsrfCookieMiddleware(BaseHTTPMiddleware):
-    """Refresh ``ts_csrf`` on authenticated console GET responses."""
+    """Roll the ``ts_session`` + ``ts_csrf`` cookies on authenticated console GETs.
+
+    Console sessions are *rolling*: every authenticated ``GET /app/*`` re-issues
+    a fresh session JWT (and matching CSRF cookie) with a full ``session_ttl``
+    expiry. Active users therefore stay signed in indefinitely without
+    re-entering an OTP, while idle sessions still lapse after ``session_ttl``.
+    """
 
     def __init__(
         self,
@@ -168,16 +174,37 @@ class ConsoleCsrfCookieMiddleware(BaseHTTPMiddleware):
             return response
         if not self._secret:
             return response
-        token = csrf_token_for_request(request, self._secret)
-        if not token:
+        session = request.cookies.get(_SESSION_COOKIE)
+        if not session:
             return response
+        principal = verify_session(session, secret=self._secret)
+        if principal is None:
+            return response
+        secure = cookie_secure(request, auth_disabled=self._auth_disabled)
+        # Rolling session: extend the JWT expiry on every authenticated visit.
+        refreshed = issue_session(
+            secret=self._secret,
+            org_id=principal.org_id,
+            user_id=principal.id,
+            email=principal.display,
+            ttl_seconds=self._session_ttl,
+        )
+        response.set_cookie(
+            _SESSION_COOKIE,
+            refreshed,
+            max_age=self._session_ttl,
+            httponly=True,
+            samesite="lax",
+            secure=secure,
+            path="/",
+        )
         response.set_cookie(
             _CSRF_COOKIE,
-            token,
+            csrf_token_for_principal(principal.org_id, principal.id, self._secret),
             max_age=self._session_ttl,
             httponly=False,
             samesite="lax",
-            secure=cookie_secure(request, auth_disabled=self._auth_disabled),
+            secure=secure,
             path="/",
         )
         return response

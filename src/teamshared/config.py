@@ -233,6 +233,15 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
     session_ttl: int = 86400
+    console_session_ttl: int = Field(
+        default=2_592_000,  # 30 days
+        description=(
+            "Lifetime (seconds) of a human console JWT session cookie. Sessions "
+            "are rolling: each authenticated console request re-issues the cookie "
+            "with a fresh expiry, so active users stay signed in without "
+            "re-entering an OTP. Distinct from session_ttl (working-memory TTL)."
+        ),
+    )
 
     embed_provider: EmbedProvider = "openai"
     embed_model: str = "text-embedding-3-small"
