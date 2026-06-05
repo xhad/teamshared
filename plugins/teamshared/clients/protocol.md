@@ -43,8 +43,22 @@ user's query. Use the returned hits to ground your answer and cite them.
 - Default `scope`: omit (searches all pillars).
 - Narrow to `["procedural"]` when the user asks "how do we usually…".
 - Narrow to `["episodic"]` when the user asks "what did we do on X?".
+- For code work, pass `repo=<workspace-slug>` and/or `github=<owner>/<repo>` on
+  recall to softly boost scoped memories (nothing is hidden).
 
 If recall returns nothing relevant, say so before answering from priors.
+
+## Code work: workspace + GitHub scope
+
+When working on code in a git checkout:
+
+1. **Workspace slug (`repo=`)** — `git rev-parse --show-toplevel`, strip leading
+   `/`, replace `/` with `-`. Use on `memory_recall`, `memory_remember`, and
+   `memory_session_open`.
+2. **GitHub repo (`github=`)** — when `gh` is available,
+   `gh repo view --json nameWithOwner` → pass `github=<nameWithOwner>` (e.g.
+   `xhad/teamshared`). Portable across machines; stored as `github:<owner>/<repo>`.
+3. Never use `owner/repo` as `repo=` (invalid). Use both when you have both.
 
 ## Remember durable things
 
@@ -60,11 +74,13 @@ will still be true next week:
 
 Use `memory_procedure_set` for versioned playbooks (not `memory_remember`).
 
+For code-specific facts, pass `repo=` and/or `github=` on `memory_remember`.
+
 ## Sessions for multi-turn work
 
 For tasks spanning more than ~3 turns:
 
-1. `memory_session_open(topic=<short label>)`
+1. `memory_session_open(topic=<short label>, repo=..., github=...)` when in a repo
 2. `memory_session_append(session_id, role, content)` after each turn
 3. `memory_session_close(session_id, distill=true)` when done or pivoting
 

@@ -13,6 +13,7 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, R
 from teamshared.clients.agent_setup import (
     KNOWN_AGENT_TYPES,
     agent_setup,
+    load_teamshared_memory_rule_mdc,
     normalize_agent_type,
 )
 from teamshared.clients.readme_page import render_readme_html
@@ -135,29 +136,6 @@ def get_token_path(invite: str, agent: str | None = None) -> str:
     return f"/get-token/{invite}"
 
 
-_ONBOARDING_PAGE_CSS = """
-    body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
-    p, li { color: #3f3f46; }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: #f4f4f5; padding: 0.125rem 0.375rem; border-radius: 0.25rem; }
-    h2 { margin-top: 2rem; font-size: 1.15rem; }
-    ul { padding-left: 1.25rem; }
-    a { color: #2563eb; }
-    .cta { margin-top: 1.5rem; }
-    .cta a.button {
-      display: inline-block;
-      margin-top: 0.5rem;
-      padding: 0.6rem 1rem;
-      background: #18181b;
-      color: #fff;
-      text-decoration: none;
-      border-radius: 0.375rem;
-      font-weight: 600;
-    }
-    .cta a.button:hover { background: #27272a; }
-    .muted { color: #71717a; font-size: 0.95rem; }
-"""
-
-
 _LANDING_CSS = """
     :root {
       --bg: #07080d;
@@ -242,6 +220,7 @@ _LANDING_CSS = """
     .section-head p { color: var(--muted); margin-top: .9rem; font-size: 1.05rem; }
 
     .grid { display: grid; gap: 1.1rem; }
+    .grid-5 { grid-template-columns: repeat(5, 1fr); }
     .grid-4 { grid-template-columns: repeat(4, 1fr); }
     .grid-3 { grid-template-columns: repeat(3, 1fr); }
 
@@ -302,12 +281,14 @@ _LANDING_CSS = """
     .footer-links a:hover { color: #fff; }
 
     @media (max-width: 900px) {
+      .grid-5 { grid-template-columns: repeat(2, 1fr); }
       .grid-4 { grid-template-columns: repeat(2, 1fr); }
       .grid-3 { grid-template-columns: 1fr; }
       .split { grid-template-columns: 1fr; gap: 2rem; }
     }
     @media (max-width: 640px) {
       .nav-links { display: none; }
+      .grid-5 { grid-template-columns: 1fr; }
       .grid-4 { grid-template-columns: 1fr; }
       .hero { padding-top: 4.5rem; }
       .hero-install { max-width: 100%; overflow-x: auto; }
@@ -342,7 +323,7 @@ def _landing_page_html() -> str:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TeamShared — One shared brain for every AI agent on your team</title>
+  <title>TeamShared — Shared Context for every AI agent on your team</title>
   <meta name="description" content="Multi-pillar agent memory, exposed as an MCP server. Give Cursor, Codex, Claude, and every agent on your team one durable, shared memory." />
   <style>{_LANDING_CSS}</style>
 </head>
@@ -370,7 +351,7 @@ def _landing_page_html() -> str:
       <div class="hero-glow" aria-hidden="true"></div>
       <div class="hero-inner">
         <a class="eyebrow" href="#pillars">Multi-pillar agent memory · MCP-native</a>
-        <h1>One shared brain for<br />every AI agent on your team.</h1>
+        <h1>Shared Context for<br />every AI agent on your team.</h1>
         <p class="lede">
           TeamShared gives Cursor, Codex, Claude, and every other agent that speaks MCP
           a single durable memory — the facts, decisions, and playbooks your team builds
@@ -395,11 +376,11 @@ def _landing_page_html() -> str:
 
     <section id="pillars" class="section">
       <div class="section-head">
-        <h2>Memory with structure, not a chat log.</h2>
-        <p>Four pillars keep context organized so recall stays sharp as your team's
+        <h2>Memory with structure, not logs.</h2>
+        <p>Five pillars keep context organized so recall stays sharp as your team's
         knowledge grows.</p>
       </div>
-      <div class="grid grid-4">
+      <div class="grid grid-5">
         <article class="card">
           <div class="card-icon">◷</div>
           <h3>Working</h3>
@@ -423,6 +404,12 @@ def _landing_page_html() -> str:
           <h3>Procedural</h3>
           <p>Versioned, how-to playbooks agents can read and follow — your team's best
           workflows, encoded.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon">◎</div>
+          <h3>Strategic</h3>
+          <p>Vision, mission, and OKRs that keep agents aligned to where the team is
+          headed — long-horizon goals, not just facts.</p>
         </article>
       </div>
     </section>
@@ -694,6 +681,50 @@ async def handle_get_token_page(
     )
 
 
+_CONNECT_PAGE_CSS = """
+    .flow { max-width: 760px; margin: 0 auto; display: grid; gap: 1rem; }
+    .flow .step { display: grid; grid-template-columns: auto 1fr; gap: 1.1rem; align-items: start;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.3rem 1.4rem; }
+    .flow .step .step-n { margin-bottom: 0; }
+    .flow .step h3 { font-size: 1.1rem; margin-bottom: .35rem; }
+    .flow .step p { color: var(--muted); font-size: .95rem; }
+    .flow .step p + p { margin-top: .5rem; }
+    .flow .step a { color: var(--indigo-bright); }
+    .flow .step a:hover { color: #fff; }
+    .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; align-items: start; }
+    .install-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 1.6rem 1.5rem; }
+    .install-card h3 { font-size: 1.15rem; margin-bottom: .35rem; }
+    .install-card > p { color: var(--muted); font-size: .94rem; margin-bottom: 1rem; }
+    .install-card h4 { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); margin: 1.2rem 0 .5rem; }
+    pre.snippet { background: #05060a; border: 1px solid var(--border); border-radius: 12px;
+      padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; color: #d7dae6;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; line-height: 1.5; }
+    pre.snippet.wrap { white-space: pre-wrap; max-height: 22rem; overflow-y: auto; }
+    .path-note { color: var(--muted); font-size: .85rem; margin: .4rem 0 0; }
+    .path-note code { background: rgba(255,255,255,.06); border-radius: 5px; padding: .05rem .35rem;
+      color: var(--indigo-bright); }
+    details.rule { margin-top: .8rem; border: 1px solid var(--border); border-radius: 10px;
+      background: rgba(255,255,255,.02); padding: .3rem .9rem; }
+    details.rule summary { cursor: pointer; color: var(--indigo-bright); font-size: .9rem;
+      font-weight: 600; padding: .55rem 0; }
+    details.rule[open] summary { margin-bottom: .6rem; }
+    .form-card { max-width: 460px; margin: 0 auto; background: var(--panel);
+      border: 1px solid var(--border); border-radius: 16px; padding: 1.6rem 1.6rem 1.8rem; }
+    .form-card label { display: block; margin-top: 1rem; font-weight: 600; font-size: .8rem;
+      text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .form-card input { width: 100%; padding: .6rem .7rem; margin-top: .35rem; box-sizing: border-box;
+      border-radius: 8px; border: 1px solid var(--border); background: #05060a; color: var(--text);
+      font-size: .95rem; }
+    .form-card input:focus { outline: none; border-color: var(--indigo-bright);
+      box-shadow: 0 0 0 2px rgba(99,102,241,.25); }
+    .form-card .btn { width: 100%; margin-top: 1.3rem; }
+    .err { color: #fca5a5; background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3);
+      border-radius: 10px; padding: .7rem .9rem; font-size: .92rem; margin: 0 auto 1.2rem; max-width: 460px; }
+    @media (max-width: 900px) { .cols2 { grid-template-columns: 1fr; } }
+"""
+
+
 def _token_form_html(
     *,
     error: str,
@@ -701,35 +732,187 @@ def _token_form_html(
     agent: str,
     preset_type: str | None = None,
 ) -> str:
-    err = f"<p style='color:#b00020'>{escape(error)}</p>" if error else ""
-    allowed = ", ".join(sorted(KNOWN_AGENT_TYPES))
+    err = f"<p class='err'>{escape(error)}</p>" if error else ""
     agent_value = preset_type or agent
     readonly = " readonly" if preset_type else ""
+    install_cmd = "curl -fsSL https://teamshared.com/install.sh | bash"
+    mcp_url = "https://teamshared.com/mcp"
+    claude_config_path = "~/Library/Application Support/Claude/claude_desktop_config.json"
+    claude_mcp = (
+        "{\n"
+        '  "mcpServers": {\n'
+        '    "teamshared": {\n'
+        f'      "url": "{mcp_url}",\n'
+        '      "headers": { "Authorization": "Bearer tsk_YOUR_API_KEY" }\n'
+        "    }\n"
+        "  }\n"
+        "}"
+    )
+    rule_md = load_teamshared_memory_rule_mdc()
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>teamshared token</title>
-  <style>
-    {_ONBOARDING_PAGE_CSS}
-    label {{ display: block; margin-top: 1rem; font-weight: 600; }}
-    input {{ width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }}
-    button {{ margin-top: 1rem; padding: 0.6rem 1rem; }}
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Connect an agent — TeamShared</title>
+  <meta name="description" content="Connect Cursor, Claude, Codex, and any MCP agent to TeamShared: sign in, create an org, add an agent, mint an API key, and install over MCP." />
+  <style>{_LANDING_CSS}{_CONNECT_PAGE_CSS}</style>
 </head>
 <body>
-  <h1>Get your teamshared token</h1>
-  <p>Paste the invite code from your admin and pick your agent type ({allowed}).</p>
-  <p><a href="#about-teamshared">Learn what teamshared does</a> before you connect.</p>
-  {err}
-  <form method="get" action="/get-token">
-    <label for="invite">Invite code</label>
-    <input id="invite" name="invite" required value="{escape(invite)}" />
-    <label for="agent">Agent type</label>
-    <input id="agent" name="agent" required placeholder="cursor" value="{escape(agent_value)}"{readonly} />
-    <button type="submit">Create token</button>
-  </form>
-  {render_readme_html()}
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        TeamShared
+      </a>
+      <nav class="nav-links">
+        <a href="#steps">Steps</a>
+        <a href="#install">Install</a>
+        <a href="#invite">Invite code</a>
+        <a href="/">What is it?</a>
+      </nav>
+      <div class="nav-cta">
+        <a class="link" href="/login">Sign in</a>
+        <a class="btn btn-primary" href="/login">Open console</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="hero-inner">
+        <a class="eyebrow" href="/">Connect over MCP · works with every agent</a>
+        <h1>Connect an agent<br />to your shared memory.</h1>
+        <p class="lede">
+          Five steps: sign in, create or join an org, add an agent, mint an API key, then
+          connect your client over MCP — with one install script or a quick manual setup.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-primary btn-lg" href="/login">Sign in to get started</a>
+          <a class="btn btn-ghost btn-lg" href="#install">See install options</a>
+        </div>
+        <div class="hero-install">
+          <span class="prompt">$</span>
+          <code>{install_cmd}</code>
+        </div>
+        <p class="hero-foot"><a href="/">Learn what teamshared does</a> before you connect.</p>
+      </div>
+    </section>
+
+    <section id="steps" class="section">
+      <div class="section-head">
+        <h2>From zero to connected in five steps.</h2>
+        <p>Humans set things up in the console; your agent does the rest over MCP.</p>
+      </div>
+      <div class="flow">
+        <article class="step">
+          <span class="step-n">1</span>
+          <div>
+            <h3>Sign in</h3>
+            <p>Open the <a href="/login">console</a> and sign in with your email — we send a
+            one-time code, no password. Your first sign-in creates your own private org.</p>
+          </div>
+        </article>
+        <article class="step">
+          <span class="step-n">2</span>
+          <div>
+            <h3>Create or join an org</h3>
+            <p>An org is a shared brain. Use the org switcher in the header to spin up a new one,
+            or have an admin add you to your team's org (People → add member by email).</p>
+            <p>A fresh org starts empty and isolated; joining the team is what makes memory shared.</p>
+          </div>
+        </article>
+        <article class="step">
+          <span class="step-n">3</span>
+          <div>
+            <h3>Create an agent</h3>
+            <p>In <strong>Agents</strong>, add the identity you'll connect — e.g.
+            <code>cursor</code>, <code>claude</code>, or <code>codex</code>. The agent is who
+            memory writes get attributed to in the shared brain.</p>
+          </div>
+        </article>
+        <article class="step">
+          <span class="step-n">4</span>
+          <div>
+            <h3>Create an API key</h3>
+            <p>Under <strong>API Keys</strong>, mint a <code>tsk_…</code> key for that agent.
+            It's shown once — copy it now. This key is the bearer token your client sends on
+            every MCP request.</p>
+          </div>
+        </article>
+        <article class="step">
+          <span class="step-n">5</span>
+          <div>
+            <h3>Connect your agent</h3>
+            <p>Run the one-line installer, or paste the MCP config and memory rule into your
+            client by hand. Both options are below — including a manual walkthrough for Claude.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="install" class="section section-alt">
+      <div class="section-head">
+        <h2>Install: scripted or by hand.</h2>
+        <p>Use the installer for the common clients, or wire up MCP manually with your API key.</p>
+      </div>
+      <div class="cols2">
+        <article class="install-card">
+          <h3>Option A — install.sh</h3>
+          <p>The fastest path. The script detects your client, writes the MCP config, and
+          installs the memory rule. It prompts for the <code>tsk_…</code> API key from step 4.</p>
+          <h4>Run</h4>
+          <pre class="snippet">{escape(install_cmd)}</pre>
+          <p class="path-note">Covers {", ".join(a.capitalize() for a in sorted(KNOWN_AGENT_TYPES))}. Re-run any time to update.</p>
+        </article>
+        <article class="install-card">
+          <h3>Option B — manual setup (Claude)</h3>
+          <p>For Claude Desktop, add the MCP server and the memory rule yourself.</p>
+          <h4>1. MCP server</h4>
+          <p class="path-note">Merge into <code>{escape(claude_config_path)}</code>
+          (Claude Code: <code>claude mcp add</code> or a project <code>.mcp.json</code>),
+          then restart Claude.</p>
+          <pre class="snippet">{escape(claude_mcp)}</pre>
+          <p class="path-note">Replace <code>tsk_YOUR_API_KEY</code> with the key from step 4.</p>
+          <h4>2. Memory rule</h4>
+          <p class="path-note">Paste the protocol into Claude's instructions
+          (<code>CLAUDE.md</code> or custom instructions) so the agent recalls team memory first.</p>
+          <details class="rule">
+            <summary>Show teamshared memory rule</summary>
+            <pre class="snippet wrap">{escape(rule_md)}</pre>
+          </details>
+        </article>
+      </div>
+    </section>
+
+    <section id="invite" class="section">
+      <div class="section-head">
+        <h2>Have an invite code?</h2>
+        <p>Redeem an admin invite to mint a bearer token directly, without signing in.</p>
+      </div>
+      {err}
+      <form class="form-card" method="get" action="/get-token">
+        <label for="invite">Invite code</label>
+        <input id="invite" name="invite" required value="{escape(invite)}" />
+        <label for="agent">Agent type</label>
+        <input id="agent" name="agent" required placeholder="cursor" value="{escape(agent_value)}"{readonly} />
+        <button class="btn btn-primary" type="submit">Create token</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span class="brand"><span class="brand-mark" aria-hidden="true"></span> TeamShared</span>
+      <span class="footer-tag">Multi-pillar agent memory, exposed as an MCP server.</span>
+      <nav class="footer-links">
+        <a href="/login">Sign in</a>
+        <a href="/install">Install</a>
+        <a href="/health">Health</a>
+      </nav>
+    </div>
+  </footer>
 </body>
 </html>"""
 

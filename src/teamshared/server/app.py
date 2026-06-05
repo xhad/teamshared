@@ -12,8 +12,9 @@ caller invoke ``mcp.run(transport="stdio")``.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastmcp import FastMCP
 from starlette.applications import Starlette
@@ -33,10 +34,13 @@ from teamshared.memory.agent_state import AgentStateStore
 from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import OrgProceduralStore
+from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.metrics import METRICS
 from teamshared.server.api import build_api_app
 from teamshared.server.capture import ToolCallCaptureMiddleware, ingest_turns
 from teamshared.server.console import register_console_routes
+from teamshared.server.console_csrf import ConsoleCsrfCookieMiddleware
+from teamshared.server.mcp_path import McpSlashMiddleware
 from teamshared.server.dashboard import handle_memory_dashboard
 from teamshared.server.health import check_components
 from teamshared.server.install_api import (
@@ -46,6 +50,7 @@ from teamshared.server.install_api import (
     handle_plugin_bundle,
     handle_uninstall_sh,
 )
+from teamshared.server.idempotency import RedisIdempotencyGuard
 from teamshared.server.rate_limit import HttpRateLimitMiddleware, RateLimitLimits, RedisRateLimiter
 from teamshared.server.services import ProductionServices, make_services
 from teamshared.server.state import ServerState, clear_state, set_state
@@ -101,6 +106,7 @@ async def _init_state(
         log.warning("tenant_db_connect_failed", error=str(exc))
 
     procedural = OrgProceduralStore(services.tenant_db)
+    strategic = OrgStrategicStore(services.tenant_db)
     agent_state = AgentStateStore(working.client)
     audit = services.audit
 
@@ -119,6 +125,7 @@ async def _init_state(
         working=working,
         agent_state=agent_state,
         procedural=procedural,
+        strategic=strategic,
         graph=graph,
     )
 
@@ -213,6 +220,11 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         return Response(status_code=204)
 
     async def metrics_route(_: Request) -> Response:
+        with suppress(RuntimeError):
+            from teamshared.observability.queues import refresh_queue_metrics
+            from teamshared.server.state import get_state
+
+            await refresh_queue_metrics(get_state().working)
         return Response(METRICS.render(), media_type="text/plain; version=0.0.4")
 
     async def memory_dashboard_route(request: Request) -> Response:
@@ -353,29 +365,73 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             otp_send_per_minute=settings.rate_limit_otp_send_per_minute,
             otp_verify_per_minute=settings.rate_limit_otp_verify_per_minute,
             mcp_per_minute=settings.rate_limit_mcp_per_minute,
+            v1_per_minute=settings.rate_limit_v1_per_minute,
+            admin_export_per_hour=settings.rate_limit_admin_export_per_hour,
+            admin_purge_per_hour=settings.rate_limit_admin_purge_per_hour,
         ),
+    )
+    idempotency_guard = RedisIdempotencyGuard(
+        settings.redis_url,
+        enabled=settings.rate_limit_enabled,
+        ttl_seconds=settings.idempotency_ttl_seconds,
     )
 
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         await rate_limiter.connect()
         app.state.rate_limiter = rate_limiter
+        if api_app is not None:
+            api_app.state.rate_limiter = rate_limiter
+            await idempotency_guard.connect(client=rate_limiter.share_client())
+            api_app.state.idempotency_guard = idempotency_guard
         state = await _init_state(settings, services, resolver)
+        stop_poll = asyncio.Event()
+
+        async def _queue_metrics_poll() -> None:
+            from teamshared.observability.queues import refresh_queue_metrics
+
+            interval = max(5, settings.observability_poll_seconds)
+            while not stop_poll.is_set():
+                try:
+                    await refresh_queue_metrics(state.working)
+                except Exception as exc:
+                    log.warning("observability_poll_failed", error=str(exc))
+                try:
+                    await asyncio.wait_for(stop_poll.wait(), timeout=interval)
+                except TimeoutError:
+                    pass
+
+        poll_task = asyncio.create_task(_queue_metrics_poll())
         log.info("teamshared_server_started", host=settings.host, port=settings.port)
         async with mcp_app.lifespan(app):
             try:
                 yield
             finally:
+                stop_poll.set()
+                poll_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await poll_task
                 log.info("teamshared_server_stopping")
                 await _teardown_state(state)
                 await rate_limiter.close()
                 app.state.rate_limiter = None
+                if api_app is not None:
+                    api_app.state.rate_limiter = None
+                    await idempotency_guard.close()
+                    api_app.state.idempotency_guard = None
 
     middleware = [
+        Middleware(McpSlashMiddleware),
         Middleware(
             BearerAuthMiddleware,
             resolver=resolver,
             auth_disabled=settings.auth_disabled,
+        ),
+        Middleware(
+            ConsoleCsrfCookieMiddleware,
+            session_secret=settings.session_secret,
+            auth_disabled=settings.auth_disabled,
+            session_ttl=min(settings.session_ttl, 3600),
         ),
         Middleware(HttpRateLimitMiddleware),
     ]

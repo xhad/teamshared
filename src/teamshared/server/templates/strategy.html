@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}Strategy{% endblock %}
+{% block head %}
+  <style>
+    .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+    .page-head .sub { margin-bottom: 0; }
+    dialog.modal { width: min(560px, calc(100vw - 2rem)); border: 1px solid var(--border-strong);
+      border-radius: 14px; background: var(--panel); color: var(--text); padding: 0; }
+    dialog.modal::backdrop { background: rgba(0,0,0,.6); backdrop-filter: blur(2px); }
+    dialog.modal .modal-head { display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
+    dialog.modal .modal-head h3 { margin: 0; font-size: 1rem; color: #fff; }
+    dialog.modal .modal-body { padding: 1.25rem; }
+    dialog.modal .modal-x { background: none; color: var(--muted); font-size: 1.2rem; line-height: 1;
+      padding: .15rem .45rem; }
+    dialog.modal .modal-x:hover { background: rgba(255,255,255,.08); color: #fff; }
+  </style>
+{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Strategy</h1>
+      <p class="sub">Team-wide vision, mission, purpose, and OKR cycles.</p>
+    </div>
+    <button type="button" class="ghost" onclick="document.getElementById('propose-modal').showModal()">Edit</button>
+  </div>
+  {% if note %}
+    {% if note == 'pending' %}
+      <div class="panel" style="margin-bottom:1rem;color:#fcd34d;">Proposal submitted — awaiting approval.</div>
+    {% elif note == 'invalid' or note == 'error' %}
+      <div class="unavailable">{{ note }}</div>
+    {% else %}
+      <div class="unavailable">{{ note }}</div>
+    {% endif %}
+  {% endif %}
+
+  <div class="grid2">
+    {% for label, stmt in [('Vision', vision), ('Mission', mission), ('Purpose', purpose)] %}
+    <div class="panel">
+      <h3>{{ label }}</h3>
+      {% if stmt %}
+        <p>{{ stmt.content_md | truncate(500) }}</p>
+        <p class="muted">v{{ stmt.version }} · {{ stmt.created_by }}</p>
+      {% else %}
+        <p class="muted">Not set yet.</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <dialog id="propose-modal" class="modal">
+    <div class="modal-head">
+      <h3>Propose a statement</h3>
+      <button type="button" class="modal-x" aria-label="Close"
+        onclick="document.getElementById('propose-modal').close()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form method="post" action="/app/strategy/statement" class="stack-form">
+        {{ cm.csrf_field() }}
+        <div class="field">
+          <label for="stmt-kind">Kind</label>
+          <select id="stmt-kind" name="kind">
+            <option value="vision">Vision</option>
+            <option value="mission">Mission</option>
+            <option value="purpose">Purpose</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="stmt-md">Markdown</label>
+          <textarea id="stmt-md" name="content_md" rows="6" class="mono" required
+            placeholder="Write the statement in Markdown…"></textarea>
+        </div>
+        <div>
+          <button type="submit">Submit for approval</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <h2>Active OKR cycle</h2>
+  {% if active_tree %}
+  <div class="panel">
+    <h3>{{ active_tree.name }} ({{ active_tree.period_start }} – {{ active_tree.period_end }})</h3>
+    <p><a href="/app/strategy/plans/{{ active_tree.id }}">View full plan</a></p>
+    {% for obj in active_tree.objectives %}
+    <div style="margin:1rem 0;padding-left:1rem;border-left:3px solid var(--indigo);">
+      <strong>{{ obj.title }}</strong>
+      {% if obj.description_md %}<p class="muted">{{ obj.description_md | truncate(200) }}</p>{% endif %}
+      {% if obj.key_results %}
+      <ul>
+        {% for kr in obj.key_results %}
+        <li>{{ kr.title }} — {{ kr.metric_current or 0 }}/{{ kr.metric_target or '?' }}{{ kr.metric_unit or '' }} ({{ kr.track_status }})</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="muted">No active objectives in this cycle.</p>
+    {% endfor %}
+  </div>
+  {% elif plans %}
+  <p class="muted">Plans exist but none loaded — open from list below.</p>
+  {% else %}
+  <p class="muted">No active OKR cycles. Agents can propose via <code>memory_strategic_plan_set</code>.</p>
+  {% endif %}
+
+  {% if plans|length > 1 %}
+  <h2>All active plans</h2>
+  <ul>
+    {% for p in plans %}
+    <li><a href="/app/strategy/plans/{{ p.id }}">{{ p.name }}</a> ({{ p.period_start }} – {{ p.period_end }})</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+{% endblock %}

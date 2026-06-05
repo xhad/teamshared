@@ -12,13 +12,14 @@ import pytest_asyncio
 from teamshared.memory import working as working_mod
 from teamshared.memory.working import (
     AUTO_CAPTURE_TOPIC,
+    CURATE_DEAD_LETTER_KEY,
     CURATE_PENDING_KEY,
     CURATE_QUEUE_KEY,
+    DISTILL_DEAD_LETTER_KEY,
     DISTILL_QUEUE_KEY,
     WorkingMemory,
     _auto_session_key,
 )
-
 # Every working-memory key is org-namespaced post-G2; tests pin one org.
 ORG = "00000000-0000-0000-0000-000000000001"
 
@@ -34,6 +35,24 @@ async def memory(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[WorkingMemory
     monkeypatch.setattr(working_mod.redis, "from_url", _from_url)
 
     mem = WorkingMemory("redis://fake", default_ttl=60)
+    await mem.connect()
+    try:
+        yield mem
+    finally:
+        await mem.close()
+
+
+@pytest_asyncio.fixture
+async def signed_memory(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[WorkingMemory]:
+    """WorkingMemory with HMAC job signing enabled."""
+    fake = fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+    def _from_url(url: str, **kwargs: object) -> fakeredis.aioredis.FakeRedis:
+        return fake
+
+    monkeypatch.setattr(working_mod.redis, "from_url", _from_url)
+
+    mem = WorkingMemory("redis://fake", default_ttl=60, job_signing_secret="test-signing-secret")
     await mem.connect()
     try:
         yield mem
@@ -66,6 +85,24 @@ async def test_open_append_close_session(memory: WorkingMemory) -> None:
     assert job["agent"] == "cursor"
     assert job["org_id"] == ORG
     assert job["turn_count"] == 2
+
+
+async def test_open_session_github_in_distill_job(memory: WorkingMemory) -> None:
+    sid = await memory.open_session(
+        ORG,
+        "cursor",
+        topic="github scope",
+        repo="home-chad-code-teamshared",
+        github="xhad/teamshared",
+    )
+    await memory.append_turn(ORG, sid, "user", "hello")
+    await memory.close_session(ORG, sid, distill=True)
+
+    job_raw = await memory.client.lpop(DISTILL_QUEUE_KEY)
+    assert job_raw is not None
+    job = json.loads(job_raw)
+    assert job["repo"] == "home-chad-code-teamshared"
+    assert job["github"] == "xhad/teamshared"
 
 
 async def test_append_to_closed_session_fails(memory: WorkingMemory) -> None:
@@ -270,3 +307,54 @@ async def test_set_login_otp_overwrites_prior_code(memory: WorkingMemory) -> Non
     await memory.set_login_otp(EMAIL, "222222", ttl=30)
     assert await memory.verify_login_otp(EMAIL, "111111") is False
     assert await memory.verify_login_otp(EMAIL, "222222") is True
+
+
+# --------------------------------------------------------------------------- #
+# Signed queue jobs (Stage 4.1)
+# --------------------------------------------------------------------------- #
+async def test_signed_distill_job_roundtrip(signed_memory: WorkingMemory) -> None:
+    sid = await signed_memory.open_session(ORG, "cursor", topic="signed")
+    await signed_memory.append_turn(ORG, sid, "user", "hello")
+    await signed_memory.close_session(ORG, sid, distill=True)
+
+    job = await signed_memory.pop_distill_job(timeout=1)
+    assert job is not None
+    assert job["session_id"] == sid
+    assert job["org_id"] == ORG
+
+
+async def test_forged_distill_job_rejected_to_dead_letter(signed_memory: WorkingMemory) -> None:
+    sid = await signed_memory.open_session(ORG, "cursor")
+    await signed_memory.close_session(ORG, sid, distill=True)
+    job_raw = await signed_memory.client.lpop(DISTILL_QUEUE_KEY)
+    assert job_raw is not None
+    parsed = json.loads(job_raw)
+    parsed["job"]["org_id"] = "evil-org"
+    await signed_memory.client.rpush(DISTILL_QUEUE_KEY, json.dumps(parsed))
+
+    assert await signed_memory.pop_distill_job(timeout=1) is None
+    assert int(await signed_memory.client.llen(DISTILL_DEAD_LETTER_KEY)) == 1
+
+
+async def test_unsigned_distill_job_rejected_when_signing_enabled(
+    signed_memory: WorkingMemory,
+) -> None:
+    plain = json.dumps({"org_id": ORG, "session_id": "sess_fake", "turn_count": 0})
+    await signed_memory.client.rpush(DISTILL_QUEUE_KEY, plain)
+    assert await signed_memory.pop_distill_job(timeout=1) is None
+    assert int(await signed_memory.client.llen(DISTILL_DEAD_LETTER_KEY)) == 1
+
+
+async def test_invalid_curate_job_clears_pending(signed_memory: WorkingMemory) -> None:
+    await signed_memory.enqueue_curate(ORG, "infra")
+    assert int(await signed_memory.client.scard(CURATE_PENDING_KEY)) == 1
+
+    job_raw = await signed_memory.client.lpop(CURATE_QUEUE_KEY)
+    assert job_raw is not None
+    parsed = json.loads(job_raw)
+    parsed["sig"] = "bad-signature"
+    await signed_memory.client.rpush(CURATE_QUEUE_KEY, json.dumps(parsed))
+
+    assert await signed_memory.pop_curate_job(timeout=1) is None
+    assert int(await signed_memory.client.scard(CURATE_PENDING_KEY)) == 0
+    assert int(await signed_memory.client.llen(CURATE_DEAD_LETTER_KEY)) == 1

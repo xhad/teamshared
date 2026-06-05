@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}Playbooks{% endblock %}
+{% block head %}
+  <style>
+    .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+    .page-head .sub { margin-bottom: 0; }
+    .pb .pb-actions { margin-top: .75rem; display: flex; gap: .5rem; }
+    .pb .meta { font-size: .78rem; color: var(--faint); margin: .15rem 0 .4rem; }
+    .flash-ok { color: #6ee7b7; background: rgba(52,211,153,.08);
+      border: 1px solid rgba(52,211,153,.28); border-radius: 8px;
+      padding: .6rem .8rem; font-size: .85rem; margin-bottom: 1rem; }
+    .pb-search { position: relative; margin: 1rem 0 1.25rem; }
+    .pb-search input { width: 100%; padding: .6rem .8rem .6rem 2.2rem;
+      border: 1px solid var(--border-strong); border-radius: 10px; font-size: .95rem;
+      background: var(--panel-2); color: var(--text); }
+    .pb-search input:focus { outline: none; border-color: var(--indigo-bright);
+      box-shadow: 0 0 0 2px rgba(99,102,241,.25); }
+    .pb-search .icon { position: absolute; left: .75rem; top: 50%; transform: translateY(-50%);
+      color: var(--faint); pointer-events: none; }
+    .pb-search .count { position: absolute; right: .75rem; top: 50%; transform: translateY(-50%);
+      color: var(--faint); font-size: .8rem; pointer-events: none; }
+    #pb-empty { display: none; }
+  </style>
+{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Playbooks</h1>
+      <p class="sub">Procedural memory &mdash; versioned how-tos your team's agents read and follow. Edit in Markdown; saving creates a new version.</p>
+    </div>
+    <a href="/app/playbooks/new"><button type="button">+ New playbook</button></a>
+  </div>
+
+  {% if flash == 'saved' %}<div class="flash-ok">Playbook saved as a new version.</div>{% endif %}
+  {% if flash == 'invalid' %}<div class="unavailable">Name and steps are required.</div>{% endif %}
+  {% if flash == 'error' %}<div class="unavailable">Could not save the playbook. Please try again.</div>{% endif %}
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if playbooks %}
+  <div class="pb-search">
+    <span class="icon" aria-hidden="true">&#128269;</span>
+    <input type="search" id="pb-filter" placeholder="Search playbooks by name, description, tags, or steps&hellip;"
+      autocomplete="off" aria-label="Search playbooks" />
+    <span class="count" id="pb-count"></span>
+  </div>
+
+  <div id="pb-list">
+  {% for p in playbooks %}
+  <div class="pb panel" data-search="{{ p.search }}">
+    <div class="head">
+      <h3 style="margin:0">{{ p.name }}</h3>
+      <span class="ver">v{{ p.version }}</span>
+    </div>
+    {% if p.description %}<p class="sub">{{ p.description }}</p>{% endif %}
+    <p class="meta">Updated {{ p.updated }}{% if p.author %} &middot; {{ p.author }}{% endif %}</p>
+    {% if p.tags %}<div class="tagcloud" style="margin:.4rem 0">{% for t in p.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>{% endif %}
+    <div class="prose">{{ p.body_html | safe }}</div>
+    <div class="pb-actions">
+      <a href="/app/playbooks/{{ p.name }}"><button type="button" class="ghost">Edit</button></a>
+    </div>
+  </div>
+  {% endfor %}
+  </div>
+  <p class="muted" id="pb-empty">No playbooks match your search.</p>
+
+  <script>
+    (function () {
+      var input = document.getElementById('pb-filter');
+      var cards = Array.prototype.slice.call(
+        document.querySelectorAll('#pb-list .pb'));
+      var empty = document.getElementById('pb-empty');
+      var count = document.getElementById('pb-count');
+      function apply() {
+        var q = input.value.trim().toLowerCase();
+        var shown = 0;
+        cards.forEach(function (card) {
+          var hit = !q || (card.getAttribute('data-search') || '').indexOf(q) !== -1;
+          card.style.display = hit ? '' : 'none';
+          if (hit) shown++;
+        });
+        empty.style.display = shown === 0 ? '' : 'none';
+        count.textContent = q ? shown + ' / ' + cards.length : '';
+      }
+      input.addEventListener('input', apply);
+    })();
+  </script>
+  {% elif not note %}
+  <p class="muted">No playbooks yet. Create one above, or agents can add them with <code>memory_procedure_set</code>.</p>
+  {% endif %}
+{% endblock %}

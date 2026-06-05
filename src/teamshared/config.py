@@ -82,6 +82,38 @@ class Settings(BaseSettings):
         default=120,
         description="MCP and bearer-scoped routes per principal per minute.",
     )
+    rate_limit_v1_per_minute: int = Field(
+        default=120,
+        description="Authenticated /v1 REST API requests per principal per minute.",
+    )
+    idempotency_ttl_seconds: int = Field(
+        default=600,
+        description="TTL for Redis Idempotency-Key claims on /v1 mutating requests.",
+    )
+    export_max_items: int = Field(
+        default=50_000,
+        description="Max active memory_items per org export (hard cap).",
+    )
+    rate_limit_admin_export_per_hour: int = Field(
+        default=6,
+        description="Org memory export operations per principal per hour.",
+    )
+    rate_limit_admin_purge_per_hour: int = Field(
+        default=20,
+        description="Per-user memory erasure operations per principal per hour.",
+    )
+    queue_depth_warn_threshold: int = Field(
+        default=100,
+        description="Distill/curate queue depth that surfaces a warning in /health.",
+    )
+    queue_depth_critical_threshold: int = Field(
+        default=500,
+        description="Distill/curate queue depth that degrades /health and fires alerts.",
+    )
+    observability_poll_seconds: int = Field(
+        default=30,
+        description="Background interval for refreshing queue depth Prometheus gauges.",
+    )
     invites_file: Path = Field(default=Path("./.teamshared/invites.json"))
     self_service_tokens: bool = Field(
         default=True,
@@ -111,6 +143,13 @@ class Settings(BaseSettings):
     session_secret: str | None = Field(
         default=None,
         description="HMAC secret for human dashboard JWT sessions (verify_session).",
+    )
+    job_signing_secret: str | None = Field(
+        default=None,
+        description=(
+            "HMAC secret for distill/curate Redis queue jobs. When set, producers "
+            "sign each job and workers reject unsigned or tampered payloads."
+        ),
     )
     otp_ttl_seconds: int = Field(
         default=30,

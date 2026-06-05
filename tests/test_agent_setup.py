@@ -3,10 +3,29 @@
 from __future__ import annotations
 
 from teamshared.clients.agent_setup import (
+    RULE_VERSION_FALLBACK,
     agent_setup,
     load_teamshared_memory_rule_mdc,
     normalize_agent_type,
+    parse_rule_version,
+    teamshared_rule_version,
 )
+
+
+def test_parse_rule_version_from_frontmatter() -> None:
+    md = "---\ndescription: x\nalwaysApply: true\nversion: 2.3.4\n---\n# Body\n"
+    assert parse_rule_version(md) == "2.3.4"
+
+
+def test_parse_rule_version_missing_returns_fallback() -> None:
+    assert parse_rule_version("# no version here\n") == RULE_VERSION_FALLBACK
+
+
+def test_canonical_rule_is_versioned() -> None:
+    # The shipped rule must carry a real (non-fallback) version marker.
+    version = teamshared_rule_version()
+    assert version != RULE_VERSION_FALLBACK
+    assert version in load_teamshared_memory_rule_mdc()
 
 
 def test_normalize_agent_type() -> None:
@@ -44,6 +63,8 @@ def test_load_teamshared_memory_rule_mdc() -> None:
     mdc = load_teamshared_memory_rule_mdc()
     assert mdc.startswith("---")
     assert "memory_recall" in mdc
+    assert "github=" in mdc
+    assert "git rev-parse --show-toplevel" in mdc
 
 
 def test_codex_setup_uses_inline_token_toml() -> None:
@@ -61,12 +82,14 @@ def test_codex_setup_uses_inline_token_toml() -> None:
     assert "export TEAMSHARED_TOKEN" not in setup.snippet
 
 
-def test_hermes_setup_uses_trailing_slash_mcp_url() -> None:
+def test_hermes_setup_uses_mcp_url_without_trailing_slash() -> None:
     setup = agent_setup(
         "hermes",
         mcp_url="https://teamshared.com/mcp",
         token="tsk_testtoken_secret",
     )
     assert setup is not None
-    assert "url: https://teamshared.com/mcp/" in setup.snippet
+    # The server rewrites /mcp -> /mcp/ in-place, so we emit the bare /mcp URL.
+    assert "url: https://teamshared.com/mcp\n" in setup.snippet
+    assert "https://teamshared.com/mcp/" not in setup.snippet
     assert "SOUL.md" in setup.snippet

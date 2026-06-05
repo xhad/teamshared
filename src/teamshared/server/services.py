@@ -26,6 +26,7 @@ from teamshared.memory.embeddings import Embedder, build_embedder
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.retrieval import SecureRetrieval
 from teamshared.memory.service import MemoryService
+from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.vectorstore import VectorStore
 from teamshared.memory.wiki import WikiStore
 from teamshared.memory.working import WorkingMemory
@@ -43,6 +44,7 @@ class ProductionServices:
     embedder: Embedder
     vector_store: VectorStore
     procedural: OrgProceduralStore
+    strategic: OrgStrategicStore
     wiki: WikiStore
     audit: AuditLog
     memory_service: MemoryService
@@ -60,7 +62,7 @@ class ProductionServices:
         return Authorizer(self.tenant_db)
 
     def retrieval(self) -> SecureRetrieval:
-        return SecureRetrieval(self.vector_store, self.audit)
+        return SecureRetrieval(self.vector_store, self.audit, self.strategic)
 
     def ingestion(self) -> IngestionPipeline:
         return IngestionPipeline(
@@ -68,6 +70,7 @@ class ProductionServices:
             self.approvals,
             self.audit,
             self.procedural,
+            self.strategic,
         )
 
 
@@ -88,10 +91,15 @@ def make_services(settings: Settings) -> ProductionServices:
     services = ProductionServices(
         settings=settings,
         tenant_db=tenant_db,
-        working=WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl),
+        working=WorkingMemory(
+            settings.redis_url,
+            default_ttl=settings.session_ttl,
+            job_signing_secret=settings.job_signing_secret,
+        ),
         embedder=embedder,
         vector_store=vector_store,
         procedural=OrgProceduralStore(tenant_db),
+        strategic=OrgStrategicStore(tenant_db),
         wiki=WikiStore(tenant_db),
         audit=audit,
         memory_service=memory_service,
@@ -108,10 +116,13 @@ def make_services(settings: Settings) -> ProductionServices:
                 approvals,
                 audit,
                 OrgProceduralStore(tenant_db),
+                OrgStrategicStore(tenant_db),
             ),
             audit=audit,
         ),
-        admin=AdminService(tenant_db, roles, audit),
+        admin=AdminService(
+            tenant_db, roles, audit, export_max_items=settings.export_max_items
+        ),
         consent=ConsentStore(tenant_db),
     )
     return services

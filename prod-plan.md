@@ -1000,13 +1000,22 @@ keeps `main` deployable; prefer feature flags and tests that pin contracts.
 
 | ID | Work |
 |----|------|
-| 4.1 | HMAC-signed distill/curate jobs |
-| 4.2 | Redis-backed rate limit + idempotency for multi-instance |
-| 4.3 | Capture/consent + queue observability alerts |
+| 4.1 | HMAC-signed distill/curate jobs | **Done** |
+| 4.2 | Redis-backed rate limit + idempotency for multi-instance | **Done** |
+| 4.3 | Capture/consent + queue observability alerts | **Done** |
 
 ### Stage 5 — Enterprise layer (ongoing)
 
-Org memory policies, export/erasure, Neo4j hardening, Mem0 removal, console CSRF, threat model / pen test.
+| ID | Work | Status |
+|----|------|--------|
+| 5.1 | Console CSRF on all ``/app/*`` POST forms (HMAC-bound to ``ts_session``) | **Done** |
+| 5.2 | Export / erasure: audit, rate limits, console or admin UX | **Done** |
+| 5.3 | Org memory policies: retention UI + worker enforcement | Pending |
+| 5.4 | Mem0 removal: pgvector-only path, drop deps and call sites | Pending |
+| 5.5 | Neo4j hardening: prod auth/TLS checklist + config validation | Pending |
+| 5.6 | Threat model doc + pen-test prep runbook | Pending |
+
+**PR slicing:** `5.1 csrf` → `5.2 export` → `5.3 retention` → `5.4 mem0` → `5.5 neo4j` → `5.6 threat-model`
 
 ### PR slicing (review-friendly)
 

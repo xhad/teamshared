@@ -33,6 +33,12 @@ def validate_settings(settings: Settings) -> None:
             "TEAMSHARED_SESSION_SECRET is required in production (console sign-in)"
         )
 
+    if not settings.job_signing_secret:
+        errors.append(
+            "TEAMSHARED_JOB_SIGNING_SECRET is required in production "
+            "(distill/curate queue job signing)"
+        )
+
     if not settings.pg_app_user:
         errors.append(
             "TEAMSHARED_PG_APP_USER is required in production so Postgres RLS "

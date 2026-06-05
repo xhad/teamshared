@@ -112,6 +112,18 @@ class Metrics:
         self.embed_calls = _Counter("teamshared_embed_calls_total", "Embedding API calls")
         self.embed_texts = _Counter("teamshared_embed_texts_total", "Texts embedded")
         self.queue_depth = _Gauge("teamshared_queue_depth", "Pending jobs per stream")
+        self.queue_dead_letter = _Gauge(
+            "teamshared_queue_dead_letter_depth",
+            "Jobs in dead-letter queues",
+        )
+        self.queue_pending = _Gauge(
+            "teamshared_queue_pending_depth",
+            "Subjects awaiting curation (debounce set size)",
+        )
+        self.capture_recorded = _Counter(
+            "teamshared_capture_recorded_total",
+            "Conversation turns recorded after consent checks",
+        )
         self.permission_denied = _Counter(
             "teamshared_permission_denied_total", "Permission checks denied"
         )
@@ -137,16 +149,30 @@ class Metrics:
         self.rate_limited = _Counter(
             "teamshared_rate_limited_total", "HTTP requests rejected by edge rate limits"
         )
+        self.job_signature_invalid = _Counter(
+            "teamshared_job_signature_invalid_total",
+            "Distill/curate queue jobs rejected due to missing or invalid HMAC",
+        )
+        self.admin_export_total = _Counter(
+            "teamshared_admin_export_total",
+            "Org memory exports (API or console)",
+        )
+        self.admin_purge_total = _Counter(
+            "teamshared_admin_purge_total",
+            "Per-user memory erasure operations",
+        )
 
     def render(self) -> str:
         with self._lock:
             lines: list[str] = []
             for metric in (
                 self.retrieval_latency, self.embed_calls, self.embed_texts,
-                self.queue_depth, self.permission_denied, self.cross_tenant_violation,
-                self.memory_writes, self.auth_rejected, self.otp_failed,
-                self.consent_denied_capture, self.ingestion_quarantined,
-                self.rate_limited,
+                self.queue_depth, self.queue_dead_letter, self.queue_pending,
+                self.capture_recorded, self.permission_denied,
+                self.cross_tenant_violation, self.memory_writes, self.auth_rejected,
+                self.otp_failed, self.consent_denied_capture, self.ingestion_quarantined,
+                self.rate_limited, self.job_signature_invalid,
+                self.admin_export_total, self.admin_purge_total,
             ):
                 lines.extend(metric.render())
             return "\n".join(lines) + "\n"

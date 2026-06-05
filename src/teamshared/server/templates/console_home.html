@@ -2,16 +2,8 @@
 {% block title %}Home{% endblock %}
 {% block content %}
   <h1>Team mind overview</h1>
-  <p class="sub">The shared brain at a glance &mdash; live counts, system health, and recent activity.</p>
-
-  {% if health %}
-  <div class="badges">
-    <span class="badge"><span class="dot {{ 'ok' if health.status == 'ok' else 'warn' }}"></span>{{ health.status }}</span>
-    {% for name, value in (health.components or {}).items() %}
-    <span class="badge"><span class="dot {{ 'ok' if value == 'ok' or value.startswith('ok ') else ('warn' if value in ('disabled', 'not_ready', 'down') else 'bad') }}"></span>{{ name }}: {{ value }}</span>
-    {% endfor %}
-  </div>
-  {% endif %}
+  <p class="sub">The shared brain at a glance &mdash; live counts and recent activity.
+    <a href="/app/settings">System status</a> is on Settings.</p>
 
   <h2>Overview</h2>
   <div class="cards">

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Request blocked{% endblock %}
+{% block content %}
+  <h1>Request blocked</h1>
+  <p class="sub">This form submission failed CSRF validation. That usually means the page was open
+    before you switched orgs or signed in again.</p>
+  <p class="sub">Refresh the page (or sign out and back in), then submit the form once more.</p>
+  <p><a href="/app">Back to home</a> &middot; <a href="/logout">Sign out</a></p>
+{% endblock %}

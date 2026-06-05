@@ -100,6 +100,76 @@ def test_set_agent_status_rejects_bad_status() -> None:
         asyncio.run(admin.set_agent_status(_Ctx(), AGENT, "bogus"))  # type: ignore[arg-type]
 
 
+def test_grant_role_to_user_syncs_membership_and_replaces_binding() -> None:
+    # User path: replace the RBAC binding (set_user_role) AND update the
+    # memberships row so the People list reflects the new role.
+    user_id = uuid.uuid4()
+    roles = type("R", (), {"set_user_role": AsyncMock()})()
+    conn = _Conn([_Cur(rowcount=1)])  # the memberships UPDATE
+    admin = _admin(conn, roles=roles)
+    ctx = _Ctx()
+    ok = asyncio.run(
+        admin.grant_role(  # type: ignore[arg-type]
+            ctx, principal_type="user", principal_id=user_id, role_name="org_admin"
+        )
+    )
+    assert ok is True
+    roles.set_user_role.assert_awaited_once_with(
+        org_id=ORG, principal_id=user_id, role_name="org_admin"
+    )
+    sql, params = conn.calls[0]
+    assert "UPDATE memberships SET role" in sql
+    assert params == ("org_admin", str(ORG), str(user_id))
+    admin.audit.record.assert_awaited_once()
+
+
+def test_grant_role_to_agent_uses_binding_only() -> None:
+    # Agent path: bind a role, never touch memberships.
+    roles = type("R", (), {"bind_role": AsyncMock(return_value=True)})()
+    conn = _Conn([])
+    admin = _admin(conn, roles=roles)
+    ctx = _Ctx()
+    ok = asyncio.run(
+        admin.grant_role(  # type: ignore[arg-type]
+            ctx, principal_type="agent", principal_id=AGENT, role_name="agent"
+        )
+    )
+    assert ok is True
+    roles.bind_role.assert_awaited_once()
+    assert conn.calls == []  # no membership update for agents
+    admin.audit.record.assert_awaited_once()
+
+
+def test_rolestore_bind_dedupes_null_scope() -> None:
+    # Org-wide bindings (NULL scope) must dedupe via NOT EXISTS, since the
+    # table's UNIQUE constraint treats NULL scope columns as distinct.
+    role_id = uuid.uuid4()
+    conn = _Conn([_Cur(one=(role_id,)), _Cur(rowcount=0)])
+    store = RoleStore(_DB(conn))  # type: ignore[arg-type]
+    ok = asyncio.run(
+        store.bind_role(
+            org_id=ORG, principal_type="agent", principal_id=AGENT, role_name="agent"
+        )
+    )
+    assert ok is False  # already bound -> NOT EXISTS short-circuits the insert
+    insert_sql = conn.calls[1][0]
+    assert "WHERE NOT EXISTS" in insert_sql
+    assert "IS NOT DISTINCT FROM" in insert_sql
+
+
+def test_rolestore_set_user_role_replaces_then_inserts() -> None:
+    role_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    # resolve_role_id, DELETE existing system bindings, INSERT the new one.
+    conn = _Conn([_Cur(one=(role_id,)), _Cur(rowcount=2), _Cur(rowcount=1)])
+    store = RoleStore(_DB(conn))  # type: ignore[arg-type]
+    asyncio.run(
+        store.set_user_role(org_id=ORG, principal_id=user_id, role_name="member")
+    )
+    assert "DELETE FROM role_bindings" in conn.calls[1][0]
+    assert "INSERT INTO role_bindings" in conn.calls[2][0]
+
+
 def test_revoke_role_delegates_and_audits() -> None:
     roles = type("R", (), {"unbind_role": AsyncMock(return_value=True)})()
     admin = _admin(_Conn([]), roles=roles)

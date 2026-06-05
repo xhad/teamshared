@@ -23,6 +23,11 @@ _KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*(?:/[a-z][a-z0-9_-]*)*$")
 # of the form ``repo:<slug>``. This rides the existing free-form ``tags``
 # plumbing (no schema change) and lets recall boost the caller's current repo.
 REPO_TAG_PREFIX = "repo:"
+GITHUB_TAG_PREFIX = "github:"
+
+_GITHUB_PATTERN = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+)
 
 
 def validate_repo(repo: str) -> str:
@@ -37,6 +42,20 @@ def validate_repo(repo: str) -> str:
 def repo_tag(repo: str) -> str:
     """Return the canonical ``repo:<slug>`` tag for a workspace slug."""
     return f"{REPO_TAG_PREFIX}{validate_repo(repo)}"
+
+
+def validate_github(github: str) -> str:
+    github = github.strip()
+    if not github or not _GITHUB_PATTERN.fullmatch(github):
+        raise ValueError(
+            "github must be owner/repo (e.g. xhad/teamshared)"
+        )
+    return github
+
+
+def github_tag(github: str) -> str:
+    """Return the canonical ``github:<owner>/<repo>`` tag for a GitHub remote."""
+    return f"{GITHUB_TAG_PREFIX}{validate_github(github)}"
 
 
 def validate_key(key: str) -> str:

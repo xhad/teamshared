@@ -11,17 +11,18 @@ stores.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
-from teamshared.memory.agent_state import AgentStateStore, repo_tag
+from teamshared.memory.agent_state import AgentStateStore, github_tag, repo_tag
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
+from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.types import MemoryKind, MemoryRecord, MemoryScope, RecallResult, TimeRange
 from teamshared.memory.working import WorkingMemory
 from teamshared.server.services import ProductionServices
@@ -30,6 +31,7 @@ log = get_logger(__name__)
 
 _PILLAR_WEIGHTS: dict[str, float] = {
     "semantic": 1.0,
+    "strategic": 0.95,
     "episodic": 0.9,
     "procedural": 0.85,
     "working": 0.7,
@@ -39,6 +41,7 @@ _PILLAR_WEIGHTS: dict[str, float] = {
 # Records from other repos (or with no repo) stay visible; same-repo hits just
 # rank higher. Kept modest so a strong cross-repo match can still surface.
 _REPO_BOOST = 1.3
+_GITHUB_BOOST = 1.3
 
 
 class MemoryFacade:
@@ -50,6 +53,7 @@ class MemoryFacade:
         working: WorkingMemory,
         agent_state: AgentStateStore,
         procedural: OrgProceduralStore,
+        strategic: OrgStrategicStore,
         graph: GraphStore | None,
     ) -> None:
         self.services = services
@@ -57,6 +61,7 @@ class MemoryFacade:
         self.working = working
         self.agent_state = agent_state
         self.procedural = procedural
+        self.strategic = strategic
         self.graph = graph
 
     def _ctx(self, principal: Principal) -> RequestContext:
@@ -128,6 +133,7 @@ class MemoryFacade:
         tags: list[str] | None,
         agent_override: str | None,
         repo: str | None = None,
+        github: str | None = None,
     ) -> dict[str, Any]:
         caller_ctx = self._ctx(principal)
         writer = await self._write_principal(
@@ -139,7 +145,7 @@ class MemoryFacade:
         ctx = self._ctx(writer)
         ctx.request_id = caller_ctx.request_id
         pillar = "episodic" if kind == "event" else "semantic"
-        tag_list = _with_repo_tag(tags, repo)
+        tag_list = _with_scope_tags(tags, repo=repo, github=github)
         result = await self.services.ingestion().ingest(
             ctx, content, kind=kind, pillar=pillar, scope="org",
             visibility="private", subject=subject, tags=tag_list, source="agent",
@@ -162,9 +168,10 @@ class MemoryFacade:
         agent_filter: str | None,
         caller_agent: str | None,
         repo: str | None = None,
+        github: str | None = None,
     ) -> RecallResult:
         ctx = self._ctx(principal)
-        durable = [s for s in scopes if s in {"semantic", "episodic", "procedural", "all"}]
+        durable = [s for s in scopes if s in {"semantic", "episodic", "procedural", "strategic", "all"}]
         author_id: UUID | None = None
         if agent_filter:
             author_id = await self._lookup_agent_id(principal.org_id, agent_filter)
@@ -187,7 +194,7 @@ class MemoryFacade:
                 records.extend(working)
             except Exception as exc:
                 errors["working"] = str(exc)
-        ranked = _rerank(records, k=k, repo=repo)
+        ranked = _rerank(records, k=k, repo=repo, github=github)
         return RecallResult(
             query=query, records=ranked, counts_by_pillar=counts, errors_by_pillar=errors
         )
@@ -263,6 +270,175 @@ class MemoryFacade:
         rows = await self.procedural.list_procedures(principal.org_id, tag=tag, limit=limit)
         return {"count": len(rows), "procedures": rows}
 
+    async def strategic_statement_get(
+        self, principal: Principal, *, kind: str
+    ) -> dict[str, Any] | None:
+        row = await self.strategic.get_active_statement(principal.org_id, kind)  # type: ignore[arg-type]
+        return _serialize_strategic(row) if row else None
+
+    async def strategic_statement_set(
+        self,
+        principal: Principal,
+        *,
+        kind: str,
+        content_md: str,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="strategic_statement_set",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
+        result = await self.services.ingestion().ingest_strategic_statement(
+            ctx, kind=kind, content_md=content_md, agent=writer.display or writer.attribution,
+        )
+        out = _serialize_strategic(result.entity)
+        out["status"] = result.status
+        return out
+
+    async def strategic_plan_list(
+        self, principal: Principal, *, active_only: bool, limit: int
+    ) -> dict[str, Any]:
+        rows = await self.strategic.list_plans(
+            principal.org_id, active_only=active_only, limit=limit
+        )
+        return {"count": len(rows), "plans": [_serialize_strategic(r) for r in rows]}
+
+    async def strategic_plan_get(
+        self, principal: Principal, *, plan_id: str, include_tree: bool
+    ) -> dict[str, Any] | None:
+        pid = UUID(plan_id)
+        if include_tree:
+            tree = await self.strategic.get_plan_tree(principal.org_id, pid)
+            return _serialize_strategic(tree) if tree else None
+        row = await self.strategic.get_plan(principal.org_id, pid)
+        return _serialize_strategic(row) if row else None
+
+    async def strategic_plan_set(
+        self,
+        principal: Principal,
+        *,
+        name: str,
+        period_start: date,
+        period_end: date,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="strategic_plan_set",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
+        result = await self.services.ingestion().ingest_strategic_plan(
+            ctx, name=name, period_start=period_start, period_end=period_end,
+            agent=writer.display or writer.attribution,
+        )
+        out = _serialize_strategic(result.entity)
+        out["status"] = result.status
+        return out
+
+    async def strategic_objective_set(
+        self,
+        principal: Principal,
+        *,
+        plan_id: str,
+        title: str,
+        description_md: str | None,
+        owner_type: str | None,
+        owner_id: str | None,
+        sort_order: int,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="strategic_objective_set",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
+        result = await self.services.ingestion().ingest_strategic_objective(
+            ctx,
+            plan_id=UUID(plan_id),
+            title=title,
+            description_md=description_md,
+            owner_type=owner_type,
+            owner_id=UUID(owner_id) if owner_id else None,
+            sort_order=sort_order,
+            agent=writer.display or writer.attribution,
+        )
+        out = _serialize_strategic(result.entity)
+        out["status"] = result.status
+        return out
+
+    async def strategic_key_result_set(
+        self,
+        principal: Principal,
+        *,
+        objective_id: str,
+        title: str,
+        description_md: str | None,
+        metric_target: float | None,
+        metric_current: float | None,
+        metric_unit: str | None,
+        track_status: str,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="strategic_key_result_set",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
+        result = await self.services.ingestion().ingest_strategic_key_result(
+            ctx,
+            objective_id=UUID(objective_id),
+            title=title,
+            description_md=description_md,
+            metric_target=metric_target,
+            metric_current=metric_current,
+            metric_unit=metric_unit,
+            track_status=track_status,
+            agent=writer.display or writer.attribution,
+        )
+        out = _serialize_strategic(result.entity)
+        out["status"] = result.status
+        return out
+
+    async def strategic_initiative_set(
+        self,
+        principal: Principal,
+        *,
+        plan_id: str,
+        title: str,
+        description_md: str | None,
+        objective_id: str | None,
+        key_result_id: str | None,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="strategic_initiative_set",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
+        result = await self.services.ingestion().ingest_strategic_initiative(
+            ctx,
+            plan_id=UUID(plan_id),
+            title=title,
+            description_md=description_md,
+            objective_id=UUID(objective_id) if objective_id else None,
+            key_result_id=UUID(key_result_id) if key_result_id else None,
+            agent=writer.display or writer.attribution,
+        )
+        out = _serialize_strategic(result.entity)
+        out["status"] = result.status
+        return out
+
     async def session_open(
         self,
         principal: Principal,
@@ -271,6 +447,7 @@ class MemoryFacade:
         ttl: int | None,
         agent_override: str | None,
         repo: str | None = None,
+        github: str | None = None,
     ) -> dict[str, str]:
         caller_ctx = self._ctx(principal)
         writer = await self._write_principal(
@@ -281,7 +458,7 @@ class MemoryFacade:
         )
         agent = writer.display or writer.attribution
         session_id = await self.working.open_session(
-            principal.org_id, agent, topic=topic, ttl=ttl, repo=repo
+            principal.org_id, agent, topic=topic, ttl=ttl, repo=repo, github=github
         )
         return {"session_id": session_id, "agent": agent}
 
@@ -353,11 +530,39 @@ class MemoryFacade:
             raise PermissionError(f"session {session_id} belongs to {owner!r}, not {caller!r}")
 
 
-def _with_repo_tag(tags: list[str] | None, repo: str | None) -> list[str] | None:
-    """Append the canonical ``repo:<slug>`` tag (deduped) when ``repo`` is set.
+def _serialize_strategic(value: dict[str, Any] | None) -> dict[str, Any]:
+    if value is None:
+        return {}
+    out: dict[str, Any] = {}
+    for key, val in value.items():
+        if isinstance(val, dict):
+            out[key] = _serialize_strategic(val)
+        elif isinstance(val, list):
+            out[key] = [
+                _serialize_strategic(v) if isinstance(v, dict) else _serialize_value(v) for v in val
+            ]
+        else:
+            out[key] = _serialize_value(val)
+    return out
 
-    An unparseable slug is ignored rather than failing the write — the memory
-    is still worth storing even if it can't be repo-scoped.
+
+def _serialize_value(val: Any) -> Any:
+    if isinstance(val, UUID):
+        return str(val)
+    if isinstance(val, (datetime, date)):
+        return val.isoformat()
+    return val
+
+
+def _with_scope_tags(
+    tags: list[str] | None,
+    *,
+    repo: str | None = None,
+    github: str | None = None,
+) -> list[str] | None:
+    """Append canonical ``repo:`` / ``github:`` tags (deduped) when scope is set.
+
+    Unparseable values are ignored rather than failing the write.
     """
     tag_list = list(tags or [])
     if repo:
@@ -368,24 +573,50 @@ def _with_repo_tag(tags: list[str] | None, repo: str | None) -> list[str] | None
         else:
             if rt not in tag_list:
                 tag_list.append(rt)
+    if github:
+        try:
+            gt = github_tag(github)
+        except ValueError:
+            log.warning("github_tag_invalid", github=github)
+        else:
+            if gt not in tag_list:
+                tag_list.append(gt)
     return tag_list or None
 
 
+def _with_repo_tag(tags: list[str] | None, repo: str | None) -> list[str] | None:
+    """Backward-compatible wrapper for repo-only tagging."""
+    return _with_scope_tags(tags, repo=repo)
+
+
 def _rerank(
-    records: list[MemoryRecord], *, k: int, repo: str | None = None
+    records: list[MemoryRecord],
+    *,
+    k: int,
+    repo: str | None = None,
+    github: str | None = None,
 ) -> list[MemoryRecord]:
-    target_tag: str | None = None
+    repo_target: str | None = None
+    github_target: str | None = None
     if repo:
         try:
-            target_tag = repo_tag(repo)
+            repo_target = repo_tag(repo)
         except ValueError:
-            target_tag = None
+            repo_target = None
+    if github:
+        try:
+            github_target = github_tag(github)
+        except ValueError:
+            github_target = None
 
     def score_of(r: MemoryRecord) -> float:
         base = r.score if r.score is not None else 0.5
         score = base * _PILLAR_WEIGHTS.get(r.pillar, 0.5)
-        if target_tag and target_tag in (r.tags or []):
+        record_tags = r.tags or []
+        if repo_target and repo_target in record_tags:
             score *= _REPO_BOOST
+        if github_target and github_target in record_tags:
+            score *= _GITHUB_BOOST
         return score
 
     return sorted(records, key=score_of, reverse=True)[:k]

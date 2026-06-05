@@ -1,0 +1,94 @@
+# Prometheus alert rules for teamshared (Stage 4.3).
+# Wire into your Prometheus scrape config alongside GET /metrics on the server.
+
+groups:
+  - name: teamshared_queues
+    rules:
+      - alert: TeamsharedDistillQueueBacklog
+        expr: teamshared_queue_depth{stream="distill"} >= 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Distill queue backlog
+          description: >-
+            {{ $value }} jobs waiting in working:distill:queue for 15m+.
+            Check distiller process, Ollama/LLM latency, and ingestion errors.
+
+      - alert: TeamsharedDistillQueueCritical
+        expr: teamshared_queue_depth{stream="distill"} >= 500
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Distill queue critically backed up
+          description: >-
+            {{ $value }} jobs in distill queue. Scale distiller workers or
+            reduce session-close volume until depth falls.
+
+      - alert: TeamsharedCurateQueueBacklog
+        expr: teamshared_queue_depth{stream="curate"} >= 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Curate queue backlog
+          description: >-
+            {{ $value }} wiki curation jobs pending. Check curator worker and
+            LLM availability.
+
+      - alert: TeamsharedDistillDeadLetter
+        expr: teamshared_queue_dead_letter_depth{stream="distill"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Distill dead-letter queue non-empty
+          description: >-
+            {{ $value }} failed distillation job(s) in working:distill:dead.
+            Inspect logs and replay or discard after root-cause fix.
+
+      - alert: TeamsharedCurateDeadLetter
+        expr: teamshared_queue_dead_letter_depth{stream="curate"} > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Curate dead-letter queue non-empty
+          description: >-
+            {{ $value }} failed curation job(s) in working:curate:dead.
+
+      - alert: TeamsharedJobSignatureInvalid
+        expr: increase(teamshared_job_signature_invalid_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: Unsigned or tampered queue jobs rejected
+          description: >-
+            Distill/curate jobs failed HMAC verification. Align
+            TEAMSHARED_JOB_SIGNING_SECRET across server and workers.
+
+  - name: teamshared_capture_consent
+    rules:
+      - alert: TeamsharedCaptureConsentDeniedSpike
+        expr: rate(teamshared_consent_denied_capture_total[5m]) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: High rate of capture blocked by missing consent
+          description: >-
+            Agents are calling tools or /sessions/turns without an active
+            consent grant. Direct users to /app/consent to grant scopes.
+
+      - alert: TeamsharedCrossTenantViolation
+        expr: increase(teamshared_cross_tenant_violation_total[1m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: Cross-tenant memory leakage detected
+          description: >-
+            Retrieval dropped out-of-scope rows. Page on-call immediately;
+            this counter should always be zero.

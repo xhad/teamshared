@@ -47,6 +47,15 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     working.client = MagicMock()
     working.client.ping = AsyncMock(return_value=True)
     working.last_heartbeat = AsyncMock(return_value="2026-01-01T00:00:00+00:00")
+    working.queue_stats = AsyncMock(
+        return_value={
+            "distill_queue": 0,
+            "distill_dead": 0,
+            "curate_queue": 0,
+            "curate_dead": 0,
+            "curate_pending": 0,
+        }
+    )
 
     # services + tenant_db.admin() for the health probe.
     conn = MagicMock()
@@ -89,6 +98,11 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     )
     facade.procedure_get = AsyncMock(return_value=None)
     facade.procedures_list = AsyncMock(return_value={"count": 0, "procedures": []})
+    facade.strategic_statement_get = AsyncMock(return_value=None)
+    facade.strategic_statement_set = AsyncMock(
+        return_value={"kind": "vision", "status": "pending_approval", "id": "s1"}
+    )
+    facade.strategic_plan_list = AsyncMock(return_value={"count": 0, "plans": []})
     facade.graph_relate = AsyncMock(return_value={"ok": False, "reason": "graph_disabled"})
     facade.graph_related = AsyncMock(return_value={"records": [], "reason": "graph_disabled"})
     facade.forget = AsyncMock(return_value={"memory_id": "m1", "deleted": True})
@@ -98,6 +112,8 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     settings = MagicMock()
     settings.embed_provider = "openai"
     settings.llm_provider = "openai"
+    settings.queue_depth_warn_threshold = 100
+    settings.queue_depth_critical_threshold = 500
 
     graph = MagicMock()
     graph.verify = AsyncMock(return_value=None)
@@ -140,6 +156,31 @@ async def test_health_tool(mcp_with_mocks: tuple[FastMCP, ServerState]) -> None:
     assert comps["ollama"] == "disabled"
 
 
+async def test_version_tool_reports_update_when_behind(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, _ = mcp_with_mocks
+    data = await _call(mcp, "version", installed_rule_version="0.0.1")
+    assert data["server_version"]
+    assert data["rule_version"]
+    assert data["installed_rule_version"] == "0.0.1"
+    assert data["update_available"] is True
+    # Behind ⇒ the full canonical rule markdown is returned for rewriting.
+    assert "# teamshared Memory Protocol" in data["rule_markdown"]
+    assert data["rule_path"].endswith("teamshared.mdc")
+
+
+async def test_version_tool_no_update_when_current(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, _ = mcp_with_mocks
+    current = await _call(mcp, "version")  # no installed version ⇒ update_available
+    assert current["update_available"] is True  # unknown installed ⇒ update
+    data = await _call(mcp, "version", installed_rule_version=current["rule_version"])
+    assert data["update_available"] is False
+    assert "rule_markdown" not in data
+
+
 async def test_memory_remember_delegates_to_facade(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:
@@ -148,6 +189,39 @@ async def test_memory_remember_delegates_to_facade(
     assert data["pillar"] == "semantic"
     state.facade.remember.assert_awaited_once()
     assert state.facade.remember.await_args.kwargs["kind"] == "preference"
+
+
+async def test_memory_remember_passes_repo_and_github(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(
+        mcp,
+        "memory_remember",
+        content="deploy uses railtail",
+        kind="fact",
+        repo="home-chad-code-teamshared",
+        github="xhad/teamshared",
+    )
+    kwargs = state.facade.remember.await_args.kwargs
+    assert kwargs["repo"] == "home-chad-code-teamshared"
+    assert kwargs["github"] == "xhad/teamshared"
+
+
+async def test_memory_recall_passes_repo_and_github(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(
+        mcp,
+        "memory_recall",
+        query="deploy",
+        repo="home-chad-code-teamshared",
+        github="xhad/teamshared",
+    )
+    kwargs = state.facade.recall.await_args.kwargs
+    assert kwargs["repo"] == "home-chad-code-teamshared"
+    assert kwargs["github"] == "xhad/teamshared"
 
 
 async def test_memory_remember_rejects_procedure_kind(
@@ -247,6 +321,14 @@ async def test_memory_procedure_set_and_get(
 
     result = await _call(mcp, "memory_procedure_get", name="p1")
     assert result is None or result == {}
+
+
+async def test_memory_strategic_statement_get(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "memory_strategic_statement_get", kind="mission")
+    state.facade.strategic_statement_get.assert_awaited_once()
 
 
 async def test_memory_state_get_and_set(

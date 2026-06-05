@@ -50,5 +50,10 @@ def test_security_counters_render() -> None:
     assert "teamshared_consent_denied_capture_total" in out
     assert "teamshared_ingestion_quarantined_total" in out
     m.rate_limited.inc()
+    m.capture_recorded.inc(capability="tool_calls", source="mcp")
+    m.queue_dead_letter.set(2, stream="distill")
+    m.queue_pending.set(3, stream="curate")
     out = m.render()
     assert "teamshared_rate_limited_total" in out
+    assert "teamshared_capture_recorded_total" in out
+    assert 'teamshared_queue_dead_letter_depth{stream="distill"} 2' in out

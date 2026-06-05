@@ -36,18 +36,54 @@ class RoleStore:
         role_id = await self.resolve_role_id(org_id, role_name)
         if role_id is None:
             raise ValueError(f"unknown role: {role_name!r}")
+        # The table's UNIQUE constraint covers (scope_type, scope_id), but Postgres
+        # treats NULLs as distinct, so ``ON CONFLICT DO NOTHING`` never fires for
+        # org-wide (NULL scope) bindings and duplicates accumulate. Guard the insert
+        # with NOT EXISTS using IS NOT DISTINCT FROM so NULL scopes dedupe too.
+        scope_id_s = str(scope_id) if scope_id else None
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
                 "INSERT INTO role_bindings "
                 "(org_id, principal_type, principal_id, role_id, scope_type, scope_id) "
-                "VALUES (%s, %s, %s, %s, %s, %s) "
-                "ON CONFLICT DO NOTHING",
+                "SELECT %s, %s, %s, %s, %s, %s WHERE NOT EXISTS ("
+                "  SELECT 1 FROM role_bindings WHERE org_id = %s "
+                "  AND principal_type = %s AND principal_id = %s AND role_id = %s "
+                "  AND scope_type IS NOT DISTINCT FROM %s "
+                "  AND scope_id IS NOT DISTINCT FROM %s)",
                 (
                     str(org_id), principal_type, str(principal_id), str(role_id),
-                    scope_type, str(scope_id) if scope_id else None,
+                    scope_type, scope_id_s,
+                    str(org_id), principal_type, str(principal_id), str(role_id),
+                    scope_type, scope_id_s,
                 ),
             )
             return cur.rowcount > 0
+
+    async def set_user_role(
+        self, *, org_id: UUID, principal_id: UUID, role_name: str
+    ) -> None:
+        """Make ``role_name`` the user's sole org-wide system role binding.
+
+        Replaces any existing org-wide (NULL scope) system-role bindings so the
+        member ends up with exactly one effective role and no duplicate rows.
+        """
+        role_id = await self.resolve_role_id(org_id, role_name)
+        if role_id is None:
+            raise ValueError(f"unknown role: {role_name!r}")
+        async with self.db.org(org_id) as conn:
+            await conn.execute(
+                "DELETE FROM role_bindings rb USING roles r "
+                "WHERE rb.role_id = r.id AND r.is_system "
+                "AND rb.principal_type = 'user' AND rb.principal_id = %s "
+                "AND rb.scope_type IS NULL AND rb.scope_id IS NULL",
+                (str(principal_id),),
+            )
+            await conn.execute(
+                "INSERT INTO role_bindings "
+                "(org_id, principal_type, principal_id, role_id) "
+                "VALUES (%s, 'user', %s, %s)",
+                (str(org_id), str(principal_id), str(role_id)),
+            )
 
     async def unbind_role(
         self,

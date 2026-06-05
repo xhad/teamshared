@@ -28,6 +28,8 @@ import redis.asyncio as redis
 
 from teamshared.logging import get_logger
 from teamshared.memory.types import MemoryRecord
+from teamshared.metrics import METRICS
+from teamshared.queue.job_sign import JobSignError, encode_job, decode_job, peek_job
 
 log = get_logger(__name__)
 
@@ -91,12 +93,29 @@ def _auto_session_key(org_id: UUID | str, agent: str) -> str:
     return f"working:{_org(org_id)}:agent:{agent}:autosession"
 
 
+def _redis_text(value: str | bytes) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return value
+
+
+def _normalize_hash(meta: dict[str | bytes, str | bytes]) -> dict[str, str]:
+    return {_redis_text(k): _redis_text(v) for k, v in meta.items()}
+
+
 class WorkingMemory:
     """Async Redis client wrapper for the working-memory pillar."""
 
-    def __init__(self, url: str, default_ttl: int) -> None:
+    def __init__(
+        self,
+        url: str,
+        default_ttl: int,
+        *,
+        job_signing_secret: str | None = None,
+    ) -> None:
         self._url = url
         self._default_ttl = default_ttl
+        self._job_signing_secret = job_signing_secret
         self._client: redis.Redis | None = None
 
     async def connect(self) -> None:
@@ -177,6 +196,7 @@ class WorkingMemory:
         topic: str | None = None,
         ttl: int | None = None,
         repo: str | None = None,
+        github: str | None = None,
     ) -> str:
         """Create a new session and return its id."""
         session_id = "sess_" + secrets.token_urlsafe(12)
@@ -187,6 +207,7 @@ class WorkingMemory:
             "agent": agent,
             "topic": topic or "",
             "repo": repo or "",
+            "github": github or "",
             "opened_at": now,
             "closed_at": "",
             "ttl": str(ttl),
@@ -223,7 +244,7 @@ class WorkingMemory:
         meta = await self.client.hgetall(_session_key(org_id, session_id))
         if not meta:
             raise KeyError(f"unknown session: {session_id}")
-        return meta
+        return _normalize_hash(meta)
 
     async def close_session(
         self, org_id: UUID | str, session_id: str, *, distill: bool = True
@@ -235,19 +256,18 @@ class WorkingMemory:
         await self.client.hset(_session_key(org_id, session_id), "closed_at", now)
 
         if distill:
-            job = json.dumps(
-                {
-                    "org_id": _org(org_id),
-                    "session_id": session_id,
-                    "agent": meta.get("agent"),
-                    "topic": meta.get("topic") or None,
-                    "repo": meta.get("repo") or None,
-                    "opened_at": meta.get("opened_at"),
-                    "closed_at": now,
-                    "turn_count": len(turns),
-                }
-            )
-            await self.client.rpush(DISTILL_QUEUE_KEY, job)
+            job = {
+                "org_id": _org(org_id),
+                "session_id": session_id,
+                "agent": meta.get("agent"),
+                "topic": meta.get("topic") or None,
+                "repo": meta.get("repo") or None,
+                "github": meta.get("github") or None,
+                "opened_at": meta.get("opened_at"),
+                "closed_at": now,
+                "turn_count": len(turns),
+            }
+            await self._push_queue_job(DISTILL_QUEUE_KEY, job)
             log.info("session_enqueued_for_distill", session_id=session_id, turns=len(turns))
 
         return {
@@ -377,6 +397,17 @@ class WorkingMemory:
             "recent": recent,
         }
 
+    async def queue_stats(self) -> dict[str, int]:
+        """Global distill/curate queue depths for metrics and health probes."""
+        client = self.client
+        return {
+            "distill_queue": int(await client.llen(DISTILL_QUEUE_KEY)),
+            "distill_dead": int(await client.llen(DISTILL_DEAD_LETTER_KEY)),
+            "curate_queue": int(await client.llen(CURATE_QUEUE_KEY)),
+            "curate_dead": int(await client.llen(CURATE_DEAD_LETTER_KEY)),
+            "curate_pending": int(await client.scard(CURATE_PENDING_KEY)),
+        }
+
     async def list_open_sessions(
         self, org_id: UUID | str, agent: str, limit: int = 20
     ) -> list[dict[str, Any]]:
@@ -425,26 +456,25 @@ class WorkingMemory:
 
     async def pop_distill_job(self, timeout: int = 5) -> dict[str, Any] | None:
         """Blocking-pop the next distillation job. Returns None on timeout."""
-        result = await self.client.blpop([DISTILL_QUEUE_KEY], timeout=timeout)
-        if result is None:
-            return None
-        _, payload = result
-        return json.loads(payload)
+        return await self._pop_queue_job(DISTILL_QUEUE_KEY, DISTILL_DEAD_LETTER_KEY, timeout)
 
     async def requeue_distill_job(self, job: dict[str, Any]) -> None:
         """Retry a failed distillation job or move it to the dead-letter queue."""
         attempts = int(job.get("attempts", 0)) + 1
         job["attempts"] = attempts
-        payload = json.dumps(job)
         if attempts >= MAX_DISTILL_ATTEMPTS:
-            await self.client.rpush(DISTILL_DEAD_LETTER_KEY, payload)
+            await self._push_dead_letter(
+                DISTILL_DEAD_LETTER_KEY,
+                encode_job(job, self._job_signing_secret),
+                reason="max_attempts",
+            )
             log.error(
                 "distill_job_dead_letter",
                 session_id=job.get("session_id"),
                 attempts=attempts,
             )
             return
-        await self.client.rpush(DISTILL_QUEUE_KEY, payload)
+        await self._push_queue_job(DISTILL_QUEUE_KEY, job)
         log.warning(
             "distill_job_requeued",
             session_id=job.get("session_id"),
@@ -481,18 +511,17 @@ class WorkingMemory:
         if not added:
             return False
         await self.client.rpush(
-            CURATE_QUEUE_KEY, json.dumps({"org_id": _org(org_id), "subject": subject})
+            CURATE_QUEUE_KEY,
+            encode_job({"org_id": _org(org_id), "subject": subject}, self._job_signing_secret),
         )
         log.info("subject_enqueued_for_curation", org_id=_org(org_id), subject=subject)
         return True
 
     async def pop_curate_job(self, timeout: int = 5) -> dict[str, Any] | None:
         """Blocking-pop the next curation job; clears its pending flag. None on timeout."""
-        result = await self.client.blpop([CURATE_QUEUE_KEY], timeout=timeout)
-        if result is None:
+        job = await self._pop_queue_job(CURATE_QUEUE_KEY, CURATE_DEAD_LETTER_KEY, timeout)
+        if job is None:
             return None
-        _, payload = result
-        job: dict[str, Any] = json.loads(payload)
         member = f"{job.get('org_id')}::{job.get('subject')}"
         await self.client.srem(CURATE_PENDING_KEY, member)
         return job
@@ -501,17 +530,72 @@ class WorkingMemory:
         """Retry a failed curation job or move it to the dead-letter queue."""
         attempts = int(job.get("attempts", 0)) + 1
         job["attempts"] = attempts
-        payload = json.dumps(job)
         if attempts >= MAX_CURATE_ATTEMPTS:
-            await self.client.rpush(CURATE_DEAD_LETTER_KEY, payload)
+            await self._push_dead_letter(
+                CURATE_DEAD_LETTER_KEY,
+                encode_job(job, self._job_signing_secret),
+                reason="max_attempts",
+            )
             log.error("curate_job_dead_letter", subject=job.get("subject"), attempts=attempts)
             return
-        await self.client.rpush(CURATE_QUEUE_KEY, payload)
+        await self._push_queue_job(CURATE_QUEUE_KEY, job)
         log.warning("curate_job_requeued", subject=job.get("subject"), attempts=attempts)
 
     async def _require_open(self, org_id: UUID | str, session_id: str) -> None:
-        meta = await self.client.hgetall(_session_key(org_id, session_id))
-        if not meta:
+        raw = await self.client.hgetall(_session_key(org_id, session_id))
+        if not raw:
             raise KeyError(f"unknown session: {session_id}")
+        meta = _normalize_hash(raw)
         if meta.get("closed_at"):
             raise ValueError(f"session {session_id} is closed")
+
+    async def _push_queue_job(self, queue_key: str, job: dict[str, Any]) -> None:
+        await self.client.rpush(queue_key, encode_job(job, self._job_signing_secret))
+
+    async def _pop_queue_job(
+        self, queue_key: str, dead_letter_key: str, timeout: int
+    ) -> dict[str, Any] | None:
+        result = await self.client.blpop([queue_key], timeout=timeout)
+        if result is None:
+            return None
+        _, payload = result
+        job, err = decode_job(payload, self._job_signing_secret)
+        if err is not None:
+            await self._reject_queue_job(
+                queue_key, dead_letter_key, payload, err,
+            )
+            return None
+        return job
+
+    async def _reject_queue_job(
+        self,
+        queue_key: str,
+        dead_letter_key: str,
+        raw_payload: str,
+        err: JobSignError,
+    ) -> None:
+        METRICS.job_signature_invalid.inc(queue=queue_key)
+        await self._push_dead_letter(
+            dead_letter_key,
+            raw_payload,
+            reason=str(err),
+        )
+        if queue_key == CURATE_QUEUE_KEY:
+            await self._srem_curate_pending_from_raw(raw_payload)
+        log.warning("job_signature_rejected", queue=queue_key, error=str(err))
+
+    async def _srem_curate_pending_from_raw(self, raw_payload: str) -> None:
+        """Best-effort pending cleanup when a curate job is rejected or dropped."""
+        job = peek_job(raw_payload)
+        if not job:
+            return
+        org_id = job.get("org_id")
+        subject = job.get("subject")
+        if org_id and subject:
+            await self.client.srem(CURATE_PENDING_KEY, f"{org_id}::{subject}")
+
+    async def _push_dead_letter(
+        self, dead_letter_key: str, raw_payload: str, *, reason: str
+    ) -> None:
+        entry = json.dumps({"reason": reason, "raw": raw_payload}, separators=(",", ":"))
+        await self.client.rpush(dead_letter_key, entry)

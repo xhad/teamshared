@@ -1,9 +1,11 @@
+{% import "console_macros.html" as cm with context %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex" />
+  {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}" />{% endif %}
   <title>{% block title %}Console{% endblock %} &middot; TeamShared</title>
   <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
   <style>
@@ -31,6 +33,9 @@
     aside { background: var(--bg-soft); border-right: 1px solid var(--border); color: var(--muted); padding: 1.25rem 0; }
     aside .brand { display: flex; align-items: center; gap: .55rem; font-weight: 700; color: #fff;
       font-size: 1.12rem; padding: 0 1.25rem 1.1rem; }
+    aside .brand .ver { font-size: .62rem; font-weight: 600; color: var(--faint);
+      letter-spacing: .02em; align-self: center; margin-left: -.2rem; }
+    aside .brand a.ver:hover { color: var(--indigo-bright); }
     .brand-mark { width: 1.05rem; height: 1.05rem; border-radius: 6px; flex: none;
       background: linear-gradient(135deg, var(--indigo-bright), var(--indigo)); box-shadow: 0 0 18px rgba(99,102,241,.6); }
     aside nav { display: flex; flex-direction: column; gap: .15rem; padding: 0 .6rem; }
@@ -71,6 +76,7 @@
     th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .72rem; letter-spacing: .03em; }
     .muted { color: var(--faint); }
+    .alert-list { margin: .75rem 0 0; padding-left: 1.2rem; color: var(--muted); font-size: .88rem; }
     .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
     .unavailable { color: #fcd34d; background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.28); border-radius: 8px;
       padding: .6rem .8rem; font-size: .85rem; }
@@ -102,6 +108,22 @@
     .inline-form { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
     .inline-form input, .inline-form select { padding: .45rem .6rem; border: 1px solid var(--border-strong);
       border-radius: 8px; font-size: .9rem; background: var(--panel-2); color: var(--text); }
+    .stack-form { display: flex; flex-direction: column; gap: 1rem; }
+    .field { display: flex; flex-direction: column; gap: .35rem; }
+    .field > label { font-size: .8rem; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .03em; }
+    .field input, .field select, .field textarea { width: 100%; padding: .55rem .7rem;
+      border: 1px solid var(--border-strong); border-radius: 8px; font-size: .9rem;
+      background: var(--panel-2); color: var(--text); font-family: inherit; box-sizing: border-box; }
+    .field textarea { min-height: 8rem; resize: vertical; line-height: 1.5; }
+    .field select { appearance: none; -webkit-appearance: none; cursor: pointer;
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+      background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 2rem; }
+    .field input:focus, .field select:focus, .field textarea:focus { outline: none;
+      border-color: var(--indigo-bright); box-shadow: 0 0 0 2px rgba(99,102,241,.25); }
+    .field textarea.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
     button { padding: .45rem .9rem; border: 0; border-radius: 8px; background: var(--indigo);
       color: #fff; cursor: pointer; font-size: .85rem; font-weight: 600; transition: background .15s ease; }
     button:hover { background: var(--indigo-bright); }
@@ -136,7 +158,7 @@
 <body>
   <div class="layout">
     <aside>
-      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>TeamShared</div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>TeamShared{% if app_version %}<a class="ver" href="/health" target="_blank" rel="noopener" title="Server health">v{{ app_version }}</a>{% endif %}</div>
       <nav>
         {% for href, label, key in nav %}
         <a href="{{ href }}"{% if key == active %} class="active"{% endif %}>{{ label }}</a>
@@ -148,6 +170,7 @@
         {% if orgs and orgs|length > 0 %}
         <div class="orgswitch">
           <form method="post" action="/app/orgs/switch">
+            {{ cm.csrf_field() }}
             <select name="org_id" onchange="this.form.submit()" aria-label="Active organization">
               {% for o in orgs %}
               <option value="{{ o.org_id }}"{% if o.org_id|string == active_org_id %} selected{% endif %}>{{ o.name }}</option>

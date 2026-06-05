@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}{% if is_new %}New playbook{% else %}Edit playbook{% endif %}{% endblock %}
+{% block content %}
+  <p class="sub"><a href="/app/playbooks">&larr; Playbooks</a></p>
+  <h1>{% if is_new %}New playbook{% else %}Edit &ldquo;{{ playbook.name }}&rdquo;{% endif %}</h1>
+  {% if not is_new and playbook %}
+  <p class="sub">Currently v{{ playbook.version }}. Saving stores a new version; older versions are kept.</p>
+  {% endif %}
+
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if is_new or playbook %}
+  <form method="post" action="/app/playbooks/save" class="stack-form" style="margin-top:1rem">
+    {{ cm.csrf_field() }}
+    <div class="field">
+      <label for="pb-name">Name</label>
+      {% if is_new %}
+      <input id="pb-name" name="name" required placeholder="e.g. ship-pr" />
+      {% else %}
+      <input id="pb-name" name="name" value="{{ playbook.name }}" readonly />
+      {% endif %}
+    </div>
+    <div class="field">
+      <label for="pb-desc">Description</label>
+      <input id="pb-desc" name="description" value="{{ playbook.description or '' if playbook else '' }}"
+        placeholder="One-line summary" />
+    </div>
+    <div class="field">
+      <label for="pb-tags">Tags</label>
+      <input id="pb-tags" name="tags"
+        value="{{ (playbook.tags or []) | join(', ') if playbook else '' }}"
+        placeholder="comma, separated, tags" />
+    </div>
+    <div class="field">
+      <label for="pb-steps">Steps (Markdown)</label>
+      <textarea id="pb-steps" name="steps_md" rows="22" class="mono" required
+        placeholder="# Steps&#10;&#10;1. First do…">{{ playbook.steps_md if playbook else '' }}</textarea>
+    </div>
+    <div>
+      <button type="submit">{% if is_new %}Create playbook{% else %}Save new version{% endif %}</button>
+      <a href="/app/playbooks"><button type="button" class="ghost">Cancel</button></a>
+    </div>
+  </form>
+  {% endif %}
+{% endblock %}

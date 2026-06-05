@@ -16,15 +16,20 @@ read paths default to the shared brain (no agent filter).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any
 
 from pydantic import Field
 
+from teamshared import __version__
 from teamshared.auth import current_agent, current_principal, require_current_agent
+from teamshared.clients.agent_setup import (
+    load_teamshared_memory_rule_mdc,
+    teamshared_rule_version,
+)
 from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
-from teamshared.memory.types import MemoryKind, MemoryScope, TimeRange
+from teamshared.memory.types import MemoryKind, MemoryScope, StrategicStatementKind, TimeRange
 from teamshared.server.health import check_components
 from teamshared.server.state import get_state
 
@@ -74,6 +79,43 @@ def register_tools(mcp: Any) -> None:
         return await check_components(state)
 
     @mcp.tool()
+    async def version(
+        installed_rule_version: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "The `version` from your installed teamshared rule's "
+                    "frontmatter (e.g. the value in ~/.cursor/rules/teamshared.mdc). "
+                    "Omit if your rule has no version marker."
+                ),
+            ),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Report server + memory-rule version and whether the rule needs updating.
+
+        Returns ``{server_version, rule_version, installed_rule_version,
+        rule_path, update_available}``. When ``update_available`` is true (the
+        installed rule is missing or behind the canonical one), the response also
+        includes ``rule_markdown`` — write it verbatim to your rule file
+        (Cursor: ``~/.cursor/rules/teamshared.mdc``) to update the user, then
+        tell them the memory rule was updated. See the rule's "Staying current".
+        """
+        rule_md = load_teamshared_memory_rule_mdc()
+        current_rule_version = teamshared_rule_version()
+        installed = (installed_rule_version or "").strip() or None
+        update_available = installed is None or installed != current_rule_version
+        out: dict[str, Any] = {
+            "server_version": __version__,
+            "rule_version": current_rule_version,
+            "installed_rule_version": installed,
+            "rule_path": "~/.cursor/rules/teamshared.mdc",
+            "update_available": update_available,
+        }
+        if update_available:
+            out["rule_markdown"] = rule_md
+        return out
+
+    @mcp.tool()
     async def memory_remember(
         content: Annotated[str, Field(description="Free-form text to remember")],
         kind: Annotated[
@@ -104,14 +146,25 @@ def register_tools(mcp: Any) -> None:
                 ),
             ),
         ] = None,
+        github: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "GitHub repository as owner/repo (e.g. xhad/teamshared). "
+                    "Stored as a 'github:<owner>/<repo>' tag for cross-machine "
+                    "association; use with or instead of workspace repo= when "
+                    "the same GitHub repo is checked out at different paths."
+                ),
+            ),
+        ] = None,
     ) -> dict[str, Any]:
         """Write a durable memory into the caller's org.
 
         ``fact`` / ``preference`` / ``note`` -> semantic pillar. ``event`` ->
         episodic. ``procedure`` -> rejected; use ``memory_procedure_set``.
         Routed through the guarded ingestion pipeline (dedup, PII, injection
-        screening, approval routing) under RLS. When ``repo`` is given the
-        memory is tagged ``repo:<slug>`` so it can be scoped to that workspace.
+        screening, approval routing) under RLS. When ``repo`` / ``github`` are
+        given the memory is tagged ``repo:<slug>`` / ``github:<owner>/<repo>``.
         """
         if kind == "procedure":
             raise ValueError("Use memory_procedure_set for procedures, not memory_remember.")
@@ -119,7 +172,7 @@ def register_tools(mcp: Any) -> None:
         principal = await _principal()
         return await state.facade.remember(
             principal, content=content, kind=kind, subject=subject, tags=tags,
-            agent_override=agent, repo=repo,
+            agent_override=agent, repo=repo, github=github,
         )
 
     @mcp.tool()
@@ -157,18 +210,27 @@ def register_tools(mcp: Any) -> None:
                 ),
             ),
         ] = None,
+        github: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "GitHub repository as owner/repo. Boosts memories tagged "
+                    "github:<owner>/<repo> (portable across checkout paths)."
+                ),
+            ),
+        ] = None,
     ) -> dict[str, Any]:
-        """Hybrid recall across the four memory pillars, within the caller's org.
+        """Hybrid recall across the five memory pillars, within the caller's org.
 
         Default behaviour is the shared brain on durable pillars (semantic,
-        episodic, procedural): callers see every agent's writes in their org.
-        Pass ``agent="cursor"`` to narrow to one agent's history. Pass ``repo``
-        to softly boost memories scoped to your current workspace. Working
-        memory is always caller-scoped.
+        episodic, procedural, strategic): callers see every agent's writes in
+        their org. Pass ``agent="cursor"`` to narrow to one agent's history.
+        Pass ``repo`` and/or ``github`` to softly boost workspace- or
+        GitHub-scoped memories. Working memory is always caller-scoped.
         """
         state = get_state()
         principal = await _principal()
-        scopes = scope or ["semantic", "episodic", "procedural", "working"]
+        scopes = scope or ["semantic", "episodic", "procedural", "strategic", "working"]
         result = await state.facade.recall(
             principal,
             query=query,
@@ -178,6 +240,7 @@ def register_tools(mcp: Any) -> None:
             agent_filter=agent,
             caller_agent=_caller_agent(),
             repo=repo,
+            github=github,
         )
         return result.model_dump(mode="json")
 
@@ -202,12 +265,22 @@ def register_tools(mcp: Any) -> None:
                 ),
             ),
         ] = None,
+        github: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "GitHub repository as owner/repo. Distilled memories inherit "
+                    "a 'github:<owner>/<repo>' tag."
+                ),
+            ),
+        ] = None,
     ) -> dict[str, str]:
         """Open a working-memory session and return a ``session_id``."""
         state = get_state()
         principal = await _principal()
         return await state.facade.session_open(
-            principal, topic=topic, ttl=ttl, agent_override=agent, repo=repo
+            principal, topic=topic, ttl=ttl, agent_override=agent, repo=repo,
+            github=github,
         )
 
     @mcp.tool()
@@ -328,6 +401,149 @@ def register_tools(mcp: Any) -> None:
             "count": result["count"],
             "procedures": [_serialize_procedure(r) for r in result["procedures"]],
         }
+
+    @mcp.tool()
+    async def memory_strategic_statement_get(
+        kind: Annotated[
+            StrategicStatementKind,
+            Field(description="vision, mission, or purpose"),
+        ],
+    ) -> dict[str, Any] | None:
+        """Fetch the active org statement for vision, mission, or purpose."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.strategic_statement_get(principal, kind=kind)
+
+    @mcp.tool()
+    async def memory_strategic_statement_set(
+        kind: Annotated[StrategicStatementKind, Field(description="vision, mission, or purpose")],
+        content_md: Annotated[str, Field(description="Markdown body")],
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Propose a new version of vision, mission, or purpose (requires approval)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.strategic_statement_set(
+            principal, kind=kind, content_md=content_md, agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def memory_strategic_plan_list(
+        active_only: Annotated[bool, Field(description="Only active plans")] = True,
+        limit: Annotated[int, Field(ge=1, le=200)] = 50,
+    ) -> dict[str, Any]:
+        """List OKR cycles (strategic plans) for the org."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.strategic_plan_list(
+            principal, active_only=active_only, limit=limit,
+        )
+
+    @mcp.tool()
+    async def memory_strategic_plan_get(
+        plan_id: Annotated[str, Field(description="Plan UUID")],
+        include_tree: Annotated[
+            bool, Field(description="Include objectives, key results, initiatives")
+        ] = True,
+    ) -> dict[str, Any] | None:
+        """Fetch one strategic plan, optionally with the full OKR tree."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.strategic_plan_get(
+            principal, plan_id=plan_id, include_tree=include_tree,
+        )
+
+    @mcp.tool()
+    async def memory_strategic_plan_set(
+        name: Annotated[str, Field(description="Cycle name, e.g. 2026 Q2")],
+        period_start: Annotated[date, Field(description="Inclusive start date")],
+        period_end: Annotated[date, Field(description="Inclusive end date")],
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Propose a new OKR cycle (requires approval)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.strategic_plan_set(
+            principal,
+            name=name,
+            period_start=period_start,
+            period_end=period_end,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def memory_strategic_objective_set(
+        plan_id: Annotated[str, Field(description="Parent plan UUID")],
+        title: Annotated[str, Field(description="Objective title")],
+        description_md: Annotated[str | None, Field(description="Optional description")] = None,
+        owner_type: Annotated[str | None, Field(description="user or agent")] = None,
+        owner_id: Annotated[str | None, Field(description="Owner UUID")] = None,
+        sort_order: Annotated[int, Field(description="Display order")] = 0,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Propose an objective under a plan (requires approval)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.strategic_objective_set(
+            principal,
+            plan_id=plan_id,
+            title=title,
+            description_md=description_md,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            sort_order=sort_order,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def memory_strategic_key_result_set(
+        objective_id: Annotated[str, Field(description="Parent objective UUID")],
+        title: Annotated[str, Field(description="Key result title")],
+        description_md: Annotated[str | None, Field(description="Optional description")] = None,
+        metric_target: Annotated[float | None, Field(description="Target value")] = None,
+        metric_current: Annotated[float | None, Field(description="Current value")] = None,
+        metric_unit: Annotated[str | None, Field(description="Unit, e.g. %")] = None,
+        track_status: Annotated[
+            str, Field(description="on_track, at_risk, off_track, or done")
+        ] = "on_track",
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Propose a key result under an objective (requires approval)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.strategic_key_result_set(
+            principal,
+            objective_id=objective_id,
+            title=title,
+            description_md=description_md,
+            metric_target=metric_target,
+            metric_current=metric_current,
+            metric_unit=metric_unit,
+            track_status=track_status,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def memory_strategic_initiative_set(
+        plan_id: Annotated[str, Field(description="Parent plan UUID")],
+        title: Annotated[str, Field(description="Initiative title")],
+        description_md: Annotated[str | None, Field(description="Optional description")] = None,
+        objective_id: Annotated[str | None, Field(description="Aligned objective UUID")] = None,
+        key_result_id: Annotated[str | None, Field(description="Aligned key result UUID")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Propose a strategic initiative (requires approval)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.strategic_initiative_set(
+            principal,
+            plan_id=plan_id,
+            title=title,
+            description_md=description_md,
+            objective_id=objective_id,
+            key_result_id=key_result_id,
+            agent_override=agent,
+        )
 
     @mcp.tool()
     async def memory_graph_relate(

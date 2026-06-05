@@ -97,6 +97,8 @@ def serve(
         host=host or settings.host,
         port=port or settings.port,
         log_level=settings.log_level,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
     )
 
 

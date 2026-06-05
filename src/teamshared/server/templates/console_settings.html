@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+  <h1>Settings</h1>
+  <p class="sub">System health, data portability, and erasure for this org.</p>
+
+  {% if flash %}
+  <div class="panel ok">{{ flash }}</div>
+  {% endif %}
+  {% if request.query_params.get('error') == 'confirm' %}
+  <div class="panel warn">Erasure requires checking the confirmation box.</div>
+  {% elif request.query_params.get('error') == 'user' %}
+  <div class="panel warn">Select a valid org member to erase.</div>
+  {% elif request.query_params.get('error') == 'purge' %}
+  <div class="panel warn">Erasure failed (member missing, self-purge blocked, or permission denied).</div>
+  {% endif %}
+
+  {% if can_export or can_purge %}
+  <h2>Data portability &amp; erasure</h2>
+  <div class="panel">
+    {% if can_export %}
+    <p>Download a JSON snapshot of active semantic/episodic memories and playbooks
+       (up to {{ export_max_items }} memory items). Rate-limited per hour.</p>
+    <p><a class="btn" href="/app/settings/export">Download org export</a></p>
+    {% endif %}
+    {% if can_purge %}
+    <p class="muted">Soft-delete all memory owned by or scoped to a member. This cannot be undone from the console.</p>
+    <form method="post" action="/app/settings/purge">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label for="user_id">Member</label>
+      <select name="user_id" id="user_id" required>
+        <option value="">— select —</option>
+        {% for m in members %}
+        <option value="{{ m.user_id }}">{{ m.email }}{% if m.display_name %} ({{ m.display_name }}){% endif %}</option>
+        {% endfor %}
+      </select>
+      <label class="checkbox">
+        <input type="checkbox" name="confirm_erase" value="yes" required>
+        I understand this soft-deletes that user's memory in this org
+      </label>
+      <button type="submit" class="btn">Erase user memory</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if health %}
+  <h2>System status</h2>
+  <div class="badges">
+    <span class="badge"><span class="dot {{ 'ok' if health.status == 'ok' else 'warn' }}"></span>overall: {{ health.status }}</span>
+    {% for name, value in (health.components or {}).items() %}
+    <span class="badge"><span class="dot {{ 'ok' if value == 'ok' or value.startswith('ok ') else ('bad' if value.startswith('error') else 'warn') }}"></span>{{ name }}: {{ value }}</span>
+    {% endfor %}
+  </div>
+
+  {% if health.queues %}
+  <h2>Queues</h2>
+  <div class="panel">
+    <table>
+      <tbody>
+        <tr><th>Distill pending</th><td>{{ health.queues.distill_queue }}</td></tr>
+        <tr><th>Distill dead-letter</th><td>{{ health.queues.distill_dead }}</td></tr>
+        <tr><th>Curate pending</th><td>{{ health.queues.curate_queue }}</td></tr>
+        <tr><th>Curate dead-letter</th><td>{{ health.queues.curate_dead }}</td></tr>
+        <tr><th>Curate debounce set</th><td>{{ health.queues.curate_pending }}</td></tr>
+      </tbody>
+    </table>
+    {% if health.queues.alerts %}
+    <ul class="alert-list">
+      {% for alert in health.queues.alerts %}
+      <li><strong>{{ alert.severity }}</strong> &mdash; {{ alert.message }}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No queue alerts.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if health.version %}
+  <p class="muted">Server version {{ health.version }}</p>
+  {% endif %}
+  {% else %}
+  <div class="panel">
+    <p class="muted">Health probe unavailable (server still starting or MCP state not ready).</p>
+  </div>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}OKR Plan{% endblock %}
+{% block content %}
+  <h1>OKR plan</h1>
+  <p class="sub"><a href="/app/strategy">&larr; Strategy</a></p>
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+  {% if tree %}
+  <div class="panel">
+    <h3>{{ tree.name }}</h3>
+    <p class="muted">{{ tree.period_start }} – {{ tree.period_end }} · status {{ tree.status }}</p>
+    {% for obj in tree.objectives %}
+    <div style="margin:1.25rem 0;">
+      <h4>{{ obj.title }}</h4>
+      {% if obj.description_md %}<p>{{ obj.description_md }}</p>{% endif %}
+      {% if obj.key_results %}
+      <p><strong>Key results</strong></p>
+      <ul>
+        {% for kr in obj.key_results %}
+        <li>{{ kr.title }}: {{ kr.metric_current or 0 }}/{{ kr.metric_target or '?' }}{{ kr.metric_unit or '' }} ({{ kr.track_status }})</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if obj.initiatives %}
+      <p><strong>Initiatives</strong></p>
+      <ul>{% for i in obj.initiatives %}<li>{{ i.title }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if tree.initiatives %}
+    <h4>Unaligned initiatives</h4>
+    <ul>{% for i in tree.initiatives %}<li>{{ i.title }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+{% endblock %}

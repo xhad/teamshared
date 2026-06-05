@@ -9,7 +9,15 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 MemoryKind = Literal["fact", "preference", "event", "note", "procedure"]
-MemoryScope = Literal["working", "semantic", "episodic", "procedural", "all"]
+MemoryScope = Literal["working", "semantic", "episodic", "procedural", "strategic", "all"]
+
+StrategicStatementKind = Literal["vision", "mission", "purpose"]
+StrategicEntityType = Literal["statement", "plan", "objective", "key_result", "initiative"]
+StrategicPlanStatus = Literal["draft", "pending_approval", "active", "closed", "rejected"]
+StrategicEntityStatus = Literal[
+    "pending_approval", "active", "superseded", "rejected", "closed", "quarantined"
+]
+KeyResultTrackStatus = Literal["on_track", "at_risk", "off_track", "done"]
 
 # First-party memory metadata (migration 004). ``MemoryItemScope`` is the
 # access scope of a stored item; ``MemoryScope`` above is the retrieval pillar.

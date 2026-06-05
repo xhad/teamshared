@@ -5,7 +5,7 @@ AGENTS.md continual learning, and copy-paste snippets for other clients.
 
 | Component | Purpose |
 |---|---|
-| `rules/teamshared.mdc` | Recall-first protocol + console (`/app`) pointer (`alwaysApply`) |
+| `rules/teamshared.mdc` | Recall-first protocol, `repo=` + `github=` code scope, console pointer (`alwaysApply`) |
 | `skills/teamshared/` | Memory tool chooser + session workflow |
 | `skills/continual-learning/` | Orchestrates AGENTS.md updates from transcripts |
 | `hooks/` | Stop hook — cadence gating + teamshared-backed state |

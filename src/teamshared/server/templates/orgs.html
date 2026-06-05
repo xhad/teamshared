@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
 {% block title %}Organizations{% endblock %}
 {% block content %}
   <h1>Organizations</h1>
@@ -19,6 +20,7 @@
             <span class="status-pill active">active</span>
             {% else %}
             <form method="post" action="/app/orgs/switch">
+              {{ cm.csrf_field() }}
               <input type="hidden" name="org_id" value="{{ o.org_id }}" />
               <button type="submit" class="ghost">Switch</button>
             </form>
@@ -34,6 +36,7 @@
   <h2>Create a new organization</h2>
   <div class="panel">
     <form method="post" action="/app/orgs/create" class="inline-form">
+      {{ cm.csrf_field() }}
       <input type="text" name="name" placeholder="Organization name" required />
       <button type="submit">Create org</button>
     </form>

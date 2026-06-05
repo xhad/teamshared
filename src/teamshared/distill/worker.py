@@ -21,7 +21,7 @@ from teamshared.config import Settings, get_settings
 from teamshared.distill.summarizer import SummarizerError, summarize
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.logging import configure_logging, get_logger
-from teamshared.memory.agent_state import repo_tag
+from teamshared.memory.agent_state import github_tag, repo_tag
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.working import WorkingMemory
 from teamshared.server.services import ProductionServices, make_services
@@ -41,7 +41,11 @@ class DistillWorker:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.working = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl)
+        self.working = WorkingMemory(
+            settings.redis_url,
+            default_ttl=settings.session_ttl,
+            job_signing_secret=settings.job_signing_secret,
+        )
         self.services: ProductionServices = make_services(settings)
         self.resolver = PrincipalResolver(
             api_keys=self.services.api_keys,
@@ -102,14 +106,18 @@ class DistillWorker:
         topic = job.get("topic")
         org_id = UUID(str(job.get("org_id") or self.settings.default_org_id))
 
-        # Distilled memories inherit the session's repo scope (if any) so they
-        # stay tied to the workspace the conversation was about.
-        repo_tags: list[str] = []
+        # Distilled memories inherit session workspace/github scope when set.
+        scope_tags: list[str] = []
         if job.get("repo"):
             try:
-                repo_tags = [repo_tag(str(job["repo"]))]
+                scope_tags.append(repo_tag(str(job["repo"])))
             except ValueError:
                 log.warning("distill_repo_invalid", repo=job.get("repo"))
+        if job.get("github"):
+            try:
+                scope_tags.append(github_tag(str(job["github"])))
+            except ValueError:
+                log.warning("distill_github_invalid", github=job.get("github"))
 
         transcript = await self.working.get_turns(org_id, session_id)
         if not transcript:
@@ -137,7 +145,7 @@ class DistillWorker:
             await ingestion.ingest(
                 ctx, episode["summary"], kind="event", pillar="episodic",
                 scope="org", subject=topic,
-                tags=list(episode.get("tags") or []) + repo_tags,
+                tags=list(episode.get("tags") or []) + scope_tags,
                 source="agent",
                 source_ref={"session_id": session_id, "outcome": episode.get("outcome")},
             )
@@ -149,7 +157,7 @@ class DistillWorker:
             await ingestion.ingest(
                 ctx, content, kind=fact.get("kind") or "fact", pillar="semantic",
                 scope="org", subject=fact.get("subject"),
-                tags=repo_tags or None, source="agent",
+                tags=scope_tags or None, source="agent",
                 confidence=fact.get("confidence"),
                 source_ref={"session_id": session_id},
             )
@@ -160,7 +168,7 @@ class DistillWorker:
                 continue
             await ingestion.ingest(
                 ctx, content, kind="fact", pillar="semantic", scope="org",
-                subject=topic, tags=["decision"] + repo_tags, source="agent",
+                subject=topic, tags=["decision"] + scope_tags, source="agent",
                 source_ref={"session_id": session_id, "rationale": decision.get("rationale")},
             )
 

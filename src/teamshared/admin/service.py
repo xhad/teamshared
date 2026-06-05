@@ -6,23 +6,40 @@ import json
 from typing import Any
 from uuid import UUID
 
+from datetime import UTC, datetime
+
+from teamshared.admin.exceptions import (
+    ExportTooLarge,
+    SelfErasureBlocked,
+    UserNotInOrg,
+)
 from teamshared.identity.principal import PrincipalType
 from teamshared.identity.rbac import Permissions
 from teamshared.identity.roles import RoleStore
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.request_context import RequestContext
+from teamshared.metrics import METRICS
 from teamshared.tenancy.context import TenantDb
+
+_EXPORT_SCHEMA_VERSION = 1
 
 
 class AdminService:
-    def __init__(self, db: TenantDb, roles: RoleStore, audit: AuditLog) -> None:
+    def __init__(
+        self,
+        db: TenantDb,
+        roles: RoleStore,
+        audit: AuditLog,
+        *,
+        export_max_items: int = 50_000,
+    ) -> None:
         self.db = db
         self.roles = roles
         self.audit = audit
+        self.export_max_items = export_max_items
 
-    async def list_members(self, ctx: RequestContext) -> list[dict[str, Any]]:
-        await ctx.authorizer.require(ctx.principal, Permissions.ORG_ADMIN)
-        async with self.db.org(ctx.org_id) as conn:
+    async def _fetch_members(self, org_id: UUID) -> list[dict[str, Any]]:
+        async with self.db.org(org_id) as conn:
             cur = await conn.execute(
                 "SELECT u.id, u.email, u.display_name, m.role, u.status "
                 "FROM users u JOIN memberships m ON m.user_id = u.id ORDER BY u.created_at"
@@ -32,6 +49,15 @@ class AdminService:
             {"user_id": str(r[0]), "email": r[1], "display_name": r[2], "role": r[3], "status": r[4]}
             for r in rows
         ]
+
+    async def list_members(self, ctx: RequestContext) -> list[dict[str, Any]]:
+        await ctx.authorizer.require(ctx.principal, Permissions.ORG_ADMIN)
+        return await self._fetch_members(ctx.org_id)
+
+    async def list_members_for_erasure(self, ctx: RequestContext) -> list[dict[str, Any]]:
+        """Member directory for the console erasure UI (``memory:admin``)."""
+        await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_ADMIN)
+        return await self._fetch_members(ctx.org_id)
 
     async def add_member(
         self, ctx: RequestContext, *, email: str, role: str = "member"
@@ -88,10 +114,24 @@ class AdminService:
         role_name: str,
     ) -> bool:
         await ctx.authorizer.require(ctx.principal, Permissions.ORG_ADMIN)
-        ok = await self.roles.bind_role(
-            org_id=ctx.org_id, principal_type=principal_type,
-            principal_id=principal_id, role_name=role_name,
-        )
+        if principal_type == "user":
+            # A user has exactly one role: keep the RBAC binding and the
+            # membership row in sync so the People list reflects the change.
+            await self.roles.set_user_role(
+                org_id=ctx.org_id, principal_id=principal_id, role_name=role_name
+            )
+            async with self.db.org(ctx.org_id) as conn:
+                await conn.execute(
+                    "UPDATE memberships SET role = %s "
+                    "WHERE org_id = %s AND user_id = %s",
+                    (role_name, str(ctx.org_id), str(principal_id)),
+                )
+            ok = True
+        else:
+            ok = await self.roles.bind_role(
+                org_id=ctx.org_id, principal_type=principal_type,
+                principal_id=principal_id, role_name=role_name,
+            )
         await self.audit.record(
             agent=ctx.principal.attribution, action="rbac.grant_role", org_id=ctx.org_id,
             actor_type=ctx.principal.type, actor_id=ctx.principal.id, resource_type="role_binding",
@@ -211,45 +251,106 @@ class AdminService:
             for r in rows
         ]
 
+    async def _assert_org_member(self, org_id: UUID, user_id: UUID) -> None:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                "SELECT 1 FROM users u JOIN memberships m ON m.user_id = u.id "
+                "WHERE u.id = %s AND u.status = 'active' LIMIT 1",
+                (str(user_id),),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            raise UserNotInOrg(user_id)
+
     async def export_memory(self, ctx: RequestContext) -> dict[str, Any]:
-        """GDPR/portability: dump the org's active memory items."""
+        """GDPR/portability: dump active semantic/episodic items and procedures."""
         await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_EXPORT)
         async with self.db.org(ctx.org_id) as conn:
             cur = await conn.execute(
-                "SELECT id, kind, scope, visibility, content, subject, tags, source, "
-                "created_at FROM memory_items WHERE status = 'active' ORDER BY created_at"
+                "SELECT COUNT(*) FROM memory_items WHERE status = 'active'"
+            )
+            count_row = await cur.fetchone()
+            total = int(count_row[0]) if count_row else 0
+            if total > self.export_max_items:
+                raise ExportTooLarge(total, self.export_max_items)
+            cur = await conn.execute(
+                "SELECT id, pillar, kind, scope, visibility, content, subject, tags, "
+                "source, owner_type, owner_id, created_at, updated_at "
+                "FROM memory_items WHERE status = 'active' ORDER BY created_at"
             )
             rows = await cur.fetchall()
+            cur = await conn.execute(
+                "SELECT name, version, description, steps_md, tool_recipe, tags, "
+                "created_by, created_at, status FROM procedures "
+                "WHERE status = 'active' ORDER BY name, version"
+            )
+            proc_rows = await cur.fetchall()
         items = [
             {
-                "id": str(r[0]), "kind": r[1], "scope": r[2], "visibility": r[3],
-                "content": r[4], "subject": r[5], "tags": list(r[6] or []), "source": r[7],
-                "created_at": r[8].isoformat() if r[8] else None,
+                "id": str(r[0]), "pillar": r[1], "kind": r[2], "scope": r[3],
+                "visibility": r[4], "content": r[5], "subject": r[6],
+                "tags": list(r[7] or []), "source": r[8],
+                "owner_type": r[9], "owner_id": str(r[10]) if r[10] else None,
+                "created_at": r[11].isoformat() if r[11] else None,
+                "updated_at": r[12].isoformat() if r[12] else None,
             }
             for r in rows
         ]
+        procedures = [
+            {
+                "name": r[0], "version": r[1], "description": r[2], "steps_md": r[3],
+                "tool_recipe": r[4], "tags": list(r[5] or []), "created_by": r[6],
+                "created_at": r[7].isoformat() if r[7] else None, "status": r[8],
+            }
+            for r in proc_rows
+        ]
+        exported_at = datetime.now(UTC).isoformat()
         await self.audit.record(
             agent=ctx.principal.attribution, action="memory.export", org_id=ctx.org_id,
             actor_type=ctx.principal.type, actor_id=ctx.principal.id, resource_type="org",
-            request_id=ctx.request_id, after={"count": len(items)},
+            request_id=ctx.request_id,
+            after={
+                "memory_items": len(items),
+                "procedures": len(procedures),
+                "exported_at": exported_at,
+            },
         )
-        return {"org_id": str(ctx.org_id), "count": len(items), "items": items}
+        METRICS.admin_export_total.inc()
+        return {
+            "schema_version": _EXPORT_SCHEMA_VERSION,
+            "org_id": str(ctx.org_id),
+            "exported_at": exported_at,
+            "exported_by": ctx.principal.attribution,
+            "memory_items": items,
+            "procedures": procedures,
+            "counts": {"memory_items": len(items), "procedures": len(procedures)},
+        }
 
     async def purge_user_memory(self, ctx: RequestContext, user_id: UUID) -> int:
-        """GDPR hard-delete: remove memory owned by a user."""
+        """GDPR erasure: soft-delete memory owned by or scoped to a user."""
         await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_ADMIN)
+        if ctx.principal.type == "user" and ctx.principal.id == user_id:
+            raise SelfErasureBlocked()
+        await self._assert_org_member(ctx.org_id, user_id)
+        uid = str(user_id)
         async with self.db.org(ctx.org_id) as conn:
             cur = await conn.execute(
-                "DELETE FROM memory_items WHERE owner_type = 'user' AND owner_id = %s",
-                (str(user_id),),
+                "UPDATE memory_items SET status = 'soft_deleted', deleted_at = now(), "
+                "updated_at = now() WHERE status != 'soft_deleted' AND ("
+                "  (owner_type = 'user' AND owner_id = %s) "
+                "  OR (scope = 'user' AND scope_ref_id = %s)"
+                ")",
+                (uid, uid),
             )
             deleted = cur.rowcount
         await self.audit.record(
             agent=ctx.principal.attribution, action="memory.purge_user", org_id=ctx.org_id,
             actor_type=ctx.principal.type, actor_id=ctx.principal.id, resource_type="user",
-            target_id=str(user_id), request_id=ctx.request_id,
-            before={"deleted_estimate": deleted}, best_effort=False,
+            target_id=uid, request_id=ctx.request_id,
+            after={"soft_deleted": deleted, "mode": "soft_delete"},
+            best_effort=False,
         )
+        METRICS.admin_purge_total.inc()
         return deleted
 
     @staticmethod

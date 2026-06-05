@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
 KNOWN_AGENT_TYPES = frozenset({"cursor", "codex", "hermes", "claude", "openclaw"})
+
+# Fallback when the rule markdown carries no parseable ``version:`` marker.
+RULE_VERSION_FALLBACK = "0.0.0"
+
+_RULE_VERSION_RE = re.compile(
+    r"^\s*(?:#\s*)?version:\s*([0-9]+(?:\.[0-9]+){1,2}[0-9A-Za-z.\-]*)\s*$",
+    re.MULTILINE,
+)
 
 _REPO_RULE_MDC = (
     Path(__file__).resolve().parents[3]
@@ -29,6 +38,20 @@ def load_teamshared_memory_rule_mdc() -> str:
         raise FileNotFoundError(
             "teamshared.mdc is not bundled and repo copy is missing"
         ) from None
+
+
+def parse_rule_version(rule_md: str) -> str:
+    """Extract the ``version:`` marker from rule markdown (frontmatter or body)."""
+    match = _RULE_VERSION_RE.search(rule_md)
+    return match.group(1) if match else RULE_VERSION_FALLBACK
+
+
+def teamshared_rule_version() -> str:
+    """Version of the canonical ``teamshared.mdc`` rule the server ships."""
+    try:
+        return parse_rule_version(load_teamshared_memory_rule_mdc())
+    except FileNotFoundError:
+        return RULE_VERSION_FALLBACK
 
 
 def normalize_agent_type(value: str) -> str | None:
@@ -115,13 +138,12 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
         )
 
     if agent_type == "hermes":
-        mcp_endpoint = mcp_url if mcp_url.endswith("/") else f"{mcp_url}/"
         snippet = (
             "# Paste under mcp_servers: in ~/.hermes/config.yaml\n"
             "# Also paste clients/protocol.md into ~/.hermes/SOUL.md.\n"
             "mcp_servers:\n"
             "  teamshared:\n"
-            f"    url: {mcp_endpoint}\n"
+            f"    url: {mcp_url}\n"
             "    headers:\n"
             f'      Authorization: "Bearer {token}"\n'
             "    timeout: 30\n"

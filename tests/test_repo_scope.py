@@ -84,3 +84,9 @@ def test_rerank_invalid_repo_is_a_noop() -> None:
     a = _mk(0.50, tags=["repo:foo"])
     b = _mk(0.60)
     assert _rerank([a, b], k=2, repo="bad slug")[0].id == b.id
+
+
+def test_with_scope_tags_via_repo_only_matches_with_repo_tag_helper() -> None:
+    from teamshared.memory.facade import _with_scope_tags
+
+    assert _with_scope_tags(["a"], repo="myrepo") == _with_repo_tag(["a"], "myrepo")

@@ -36,7 +36,11 @@ class CuratorWorker:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.working = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl)
+        self.working = WorkingMemory(
+            settings.redis_url,
+            default_ttl=settings.session_ttl,
+            job_signing_secret=settings.job_signing_secret,
+        )
         self.services: ProductionServices = make_services(settings)
         self._stop = asyncio.Event()
 

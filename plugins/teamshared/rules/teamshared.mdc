@@ -1,13 +1,33 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
+version: 1.0.0
 ---
 
 # teamshared Memory Protocol
 
+<!-- teamshared-rule-version: 1.0.0 -->
+
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
 override it or narrow a read filter.
+
+## Staying current
+
+This rule is versioned (`version` in the frontmatter above, currently `1.0.0`).
+The server ships the canonical rule and its version. Keep the installed copy
+fresh:
+
+1. Early in a session (or whenever the user asks about teamshared versions or
+   updates), call the `version` tool, passing this rule's frontmatter `version`
+   as `installed_rule_version`.
+2. If the response has `update_available: true`, write the returned
+   `rule_markdown` verbatim to your rule file (Cursor:
+   `~/.cursor/rules/teamshared.mdc`; the response's `rule_path` is the hint),
+   then tell the user the memory rule was updated to the new version.
+3. If `update_available: false`, do nothing — you're current.
+
+Never invent a version; read it from the frontmatter or the `version` tool.
 
 ## Core workflows
 
@@ -18,13 +38,30 @@ call `memory_recall` with the user's query. Ground answers in hits; cite them.
 
 - Omit `scope` to search all pillars (default).
 - `scope=["procedural"]` for "how do we usually…".
+- `scope=["strategic"]` for vision, mission, OKRs, and initiatives.
 - `scope=["episodic"]` for "what did we do on X?".
 - `scope=["semantic"]` for stable facts and preferences.
 - `scope=["working"]` only when you need the caller's open session turns.
-- For code/repo-specific work, pass `repo=<workspace-slug>` to softly boost
-  memories scoped to the repo you're in (nothing is hidden).
+- For code/repo-specific work, pass `repo=<workspace-slug>` and/or
+  `github=<owner>/<repo>` to softly boost scoped memories (nothing is hidden).
 
 If recall is empty, say so before answering from priors.
+
+### Code work: resolve `repo` and `github`
+
+When the user is working on code in a git checkout:
+
+1. **Workspace slug** — run `git rev-parse --show-toplevel` (or use the Cursor
+   workspace root), strip a leading `/`, replace `/` with `-`. Pass as `repo=`
+   on `memory_recall`, `memory_remember`, and `memory_session_open` (same slug
+   as `memory_state` and plugin hooks).
+2. **GitHub repo** — when `command -v gh` succeeds, run
+   `gh repo view --json nameWithOwner` from the repo root and pass
+   `github=<nameWithOwner>` (e.g. `xhad/teamshared`). Stable across machines;
+   the server stores `github:<owner>/<repo>`. Optional `subject=<nameWithOwner>`.
+3. **Never** use `owner/repo` as `repo=` (slashes are invalid for workspace slugs).
+4. If an MCP call fails with invalid JSON mentioning `repo`, omit `repo` and use
+   `github=` (and/or explicit `tags`) instead; retry.
 
 ### Remember durable things
 
@@ -38,7 +75,7 @@ Call `memory_remember(content, kind=...)` for things still true next week:
 | Misc working note | `note` |
 
 Optional: `subject`, `tags`. For code/repo-specific memories, pass
-`repo=<workspace-slug>` to scope them to the current repo; omit it for
+`repo=<workspace-slug>` and/or `github=<owner>/<repo>`; omit both for
 cross-cutting preferences. Do **not** use `memory_remember` for playbooks —
 use `memory_procedure_set`.
 
@@ -100,15 +137,15 @@ Hybrid search across semantic, episodic, procedural, and working pillars.
 | Param | Use |
 |---|---|
 | `query` | Natural-language search (required) |
-| `scope` | Subset of pillars; omit = all four |
+| `scope` | Subset of pillars; omit = all five |
 | `k` | Max records (1–50, default 8) |
 | `time_range` | Optional bounds for episodic/working hits |
 | `agent` | Optional filter to one agent's durable writes |
-| `repo` | Optional workspace slug; soft-boosts this repo's memories (nothing hidden) |
+| `repo` | Optional workspace slug; soft-boosts `repo:<slug>` tags (nothing hidden) |
+| `github` | Optional `owner/repo`; soft-boosts `github:<owner>/<repo>` tags |
 
 Returns `records` with pillar, agent, timestamps, and content for citation.
-For code/repo-specific work, pass `repo=<workspace-slug>` (the same slug as
-`memory_state`) so memories scoped to this repo rank higher.
+For code work, pass `repo=<workspace-slug>` and/or `github=<owner>/<repo>`.
 
 ### `memory_remember`
 
@@ -121,12 +158,11 @@ Write semantic or episodic memory.
 | `subject` | Optional entity the memory is about |
 | `tags` | Optional string list |
 | `agent` | Optional attribution override |
-| `repo` | Optional workspace slug; tags the memory `repo:<slug>` to scope it to that repo |
+| `repo` | Optional workspace slug → `repo:<slug>` tag |
+| `github` | Optional `owner/repo` → `github:<owner>/<repo>` tag (portable) |
 
 Routing: `event` → episodic; others → semantic. Rejects `kind=procedure`.
-For code/repo-specific memories, pass `repo=<workspace-slug>` so the memory is
-scoped to the repo you're working in (and boosted on recall from it). Omit
-`repo` for cross-cutting preferences/facts that apply everywhere.
+For code work, pass `repo=` and/or `github=`; omit both for cross-cutting facts.
 
 ### `memory_session_open` / `memory_session_append` / `memory_session_close`
 
@@ -134,7 +170,7 @@ Working-memory buffer in Redis for the current task.
 
 | Tool | Key params |
 |---|---|
-| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo` (scopes distilled memories) → `{session_id, agent}` |
+| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo`, `github` (scope distilled memories) → `{session_id, agent}` |
 | `memory_session_append` | `session_id`, `role`, `content` → `{turn_count}` |
 | `memory_session_close` | `session_id`, `distill=true` (default) queues distillation to durable memory |
 
@@ -163,6 +199,24 @@ Versioned playbooks in Postgres (markdown steps agents read and follow).
 
 Each `memory_procedure_set` call creates a new version — use stable names
 (e.g. `ship-pr`, `debug-flaky-test`).
+
+### `memory_strategic_*`
+
+Org-wide vision, mission, purpose, and OKR cycles. **Never** use
+`memory_remember` for strategic content — use these tools instead.
+
+| Tool | When |
+|---|---|
+| `memory_strategic_statement_get` | Active vision, mission, or purpose |
+| `memory_strategic_statement_set` | Propose a new statement version |
+| `memory_strategic_plan_list` / `memory_strategic_plan_get` | Browse OKR cycles |
+| `memory_strategic_plan_set` | Propose a new cycle |
+| `memory_strategic_objective_set` | Propose an objective |
+| `memory_strategic_key_result_set` | Propose a key result |
+| `memory_strategic_initiative_set` | Propose an initiative |
+
+All strategic writes return `pending_approval` until a human approves them
+in the console (`/app/approvals`).
 
 ### `memory_graph_relate` / `memory_graph_related`
 
@@ -194,17 +248,32 @@ is available; fall back to `~/.cursor/hooks/state/...` locally.
 Soft-delete a semantic/episodic memory by `memory_id` (from a prior recall).
 Requires `reason` for audit. **Only when the user explicitly asks.**
 
+### `version`
+
+Report the server version and the canonical rule version, and check whether the
+installed rule is current.
+
+| Param | Use |
+|---|---|
+| `installed_rule_version` | The `version` from this rule's frontmatter (optional; omit if unknown) |
+
+Returns `{server_version, rule_version, installed_rule_version, rule_path,
+update_available}` and, when `update_available` is true, the full `rule_markdown`
+to write to the local rule file. See **Staying current** above.
+
 ## Quick chooser
 
 | Need | Tool |
 |---|---|
 | Is the server healthy? | `health` |
+| Server/rule version + update check | `version` |
 | Search all memory | `memory_recall` |
 | Store preference/fact/event/note | `memory_remember` |
 | Multi-turn buffer + distillation | `memory_session_*` |
 | Browse timeline | `memory_episodes_list` |
 | Versioned how-to | `memory_procedure_set` / `memory_procedure_get` |
 | List playbooks | `memory_procedures_list` |
+| Vision / OKRs / mission | `memory_strategic_*` or `scope=["strategic"]` |
 | Structured relationships | `memory_graph_*` |
 | Client incremental state | `memory_state_get` / `memory_state_set` |
 | Remove a bad memory | `memory_forget` (user-requested only) |

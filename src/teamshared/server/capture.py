@@ -45,6 +45,8 @@ async def ingest_turns(
     *,
     idle_seconds: int,
     max_turns: int,
+    capability: str = "raw_turns",
+    source: str = "sessions_turns",
 ) -> int:
     """Append validated conversation turns to ``agent``'s capture session.
 
@@ -64,6 +66,7 @@ async def ingest_turns(
         await working.record_turn(
             org_id, agent, role, content, idle_seconds=idle_seconds, max_turns=max_turns
         )
+        METRICS.capture_recorded.inc(capability=capability, source=source)
         recorded += 1
     return recorded
 
@@ -156,5 +159,6 @@ class ToolCallCaptureMiddleware(Middleware):
                 idle_seconds=self._idle_seconds,
                 max_turns=self._max_turns,
             )
+            METRICS.capture_recorded.inc(capability="tool_calls", source="mcp")
         except Exception as exc:  # never let capture break a tool call
             log.warning("tool_call_capture_failed", error=str(exc))

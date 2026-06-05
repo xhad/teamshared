@@ -26,6 +26,7 @@ def test_validate_production_requires_secrets() -> None:
     msg = str(exc.value)
     assert "AUTH_DISABLED" in msg
     assert "SESSION_SECRET" in msg
+    assert "JOB_SIGNING_SECRET" in msg
     assert "PG_APP_USER" in msg
     assert "MINT_SECRET" in msg
     assert "CONNECTOR_ENCRYPTION_KEY" in msg
@@ -38,6 +39,7 @@ def test_validate_production_passes_minimal_safe_config() -> None:
         deployment_env="production",
         auth_disabled=False,
         session_secret="test-session-secret",
+        job_signing_secret="test-job-signing-secret",
         pg_app_user="teamshared_app",
         pg_app_password="secret",
         mint_secret="mint-secret",

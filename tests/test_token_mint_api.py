@@ -333,7 +333,7 @@ def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
         assert "memory_recall" in resp.text
 
 
-def test_get_token_form_shows_readme(tmp_path: Path) -> None:
+def test_get_token_form_shows_connect_page(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         self_service_tokens=True,
@@ -344,9 +344,9 @@ def test_get_token_form_shows_readme(tmp_path: Path) -> None:
     with TestClient(_get_token_app(settings, minter, invites)) as client:
         resp = client.get("/get-token")
         assert resp.status_code == 200
-        assert 'id="about-teamshared"' in resp.text
+        assert "Connect an agent" in resp.text
         assert "Learn what teamshared does" in resp.text
-        assert "MCP tools" in resp.text
+        assert "Have an invite code?" in resp.text
 
 
 def test_invite_normalizes_cursor_chad_to_cursor(tmp_path: Path) -> None:

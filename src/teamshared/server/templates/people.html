@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
 {% block title %}People{% endblock %}
 {% block content %}
   <h1>People</h1>
@@ -7,6 +8,7 @@
 
   <div class="panel" style="margin-bottom:1rem">
     <form method="post" action="/app/people/add" class="inline-form">
+      {{ cm.csrf_field() }}
       <input type="email" name="email" placeholder="teammate@example.com" required />
       <select name="role">
         {% for r in roles %}<option value="{{ r }}"{% if r == 'member' %} selected{% endif %}>{{ r }}</option>{% endfor %}
@@ -21,13 +23,22 @@
   <div class="panel">
     {% if members %}
     <table>
-      <thead><tr><th>Email</th><th>Name</th><th>Membership</th><th>Status</th></tr></thead>
+      <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th></tr></thead>
       <tbody>
         {% for m in members %}
         <tr>
           <td>{{ m.email }}</td>
           <td>{{ m.display_name or '\u2014' }}</td>
-          <td>{{ m.role }}</td>
+          <td>
+            <form method="post" action="/app/people/grant" class="inline-form">
+              {{ cm.csrf_field() }}
+              <input type="hidden" name="principal_id" value="{{ m.user_id }}" />
+              <select name="role_name" aria-label="Role for {{ m.email }}">
+                {% for r in member_roles %}<option value="{{ r }}"{% if r == m.role %} selected{% endif %}>{{ r }}</option>{% endfor %}
+              </select>
+              <button type="submit">Save</button>
+            </form>
+          </td>
           <td>{{ m.status }}</td>
         </tr>
         {% endfor %}
@@ -37,19 +48,7 @@
   </div>
 
   <h2>Role bindings</h2>
-  <div class="panel">
-    <form method="post" action="/app/people/grant" class="inline-form">
-      <select name="principal_id" required>
-        <option value="">Member&hellip;</option>
-        {% for m in members %}<option value="{{ m.user_id }}">{{ m.email }}</option>{% endfor %}
-      </select>
-      <select name="role_name" required>
-        {% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
-      </select>
-      <button type="submit">Grant role</button>
-    </form>
-  </div>
-
+  <p class="sub">Raw RBAC bindings, including agents. Edit member roles above.</p>
   <div class="panel" style="margin-top:1rem">
     {% if bindings %}
     <table>
@@ -62,6 +61,7 @@
           <td>{{ b.role }}</td>
           <td class="actions">
             <form method="post" action="/app/people/revoke">
+              {{ cm.csrf_field() }}
               <input type="hidden" name="principal_type" value="{{ b.principal_type }}" />
               <input type="hidden" name="principal_id" value="{{ b.principal_id }}" />
               <input type="hidden" name="role_name" value="{{ b.role }}" />

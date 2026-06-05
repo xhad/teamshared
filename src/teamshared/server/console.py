@@ -9,7 +9,7 @@ stores via :func:`teamshared.server.state.get_state`.
 
 Sections: home overview, the wiki (topics/timeline/playbooks), read screens
 (memory/agents/people/keys/approvals/audit), and capture consent. Sections still
-on the roadmap (settings) render a placeholder through the same shell so
+unbuilt console sections render a placeholder through the same shell so
 navigation works end to end.
 """
 
@@ -22,10 +22,11 @@ from typing import Any
 from uuid import UUID
 
 from starlette.requests import Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 
+from teamshared import __version__
 from teamshared.config import Settings
 from teamshared.identity.principal import Principal
 from teamshared.identity.provisioning import signup_org
@@ -37,8 +38,20 @@ from teamshared.metrics import METRICS
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.wiki import slugify
 from teamshared.server import mailer
+from teamshared.server.console_csrf import (
+    cookie_secure,
+    csrf_failure_reason,
+    csrf_token_for_principal,
+    verify_console_csrf,
+)
 from teamshared.server.health import check_components
-from teamshared.server.rate_limit import enforce_otp_send, enforce_otp_verify
+from teamshared.admin.service import AdminService
+from teamshared.server.rate_limit import (
+    enforce_admin_export,
+    enforce_admin_purge,
+    enforce_otp_send,
+    enforce_otp_verify,
+)
 from teamshared.server.markdown_safe import render_markdown_safe
 from teamshared.server.services import ProductionServices
 from teamshared.server.state import get_state
@@ -56,6 +69,8 @@ _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 NAV: list[tuple[str, str, str]] = [
     ("/app", "Home", "home"),
     ("/app/wiki", "Wiki", "wiki"),
+    ("/app/playbooks", "Playbooks", "playbooks"),
+    ("/app/strategy", "Strategy", "strategy"),
     ("/app/memory", "Memory", "memory"),
     ("/app/agents", "Agents", "agents"),
     ("/app/people", "People", "people"),
@@ -68,9 +83,7 @@ NAV: list[tuple[str, str, str]] = [
 ]
 
 # Sections not yet built: rendered as a placeholder through the shell.
-_PLACEHOLDERS: dict[str, tuple[str, str]] = {
-    "/app/settings": ("settings", "Settings"),
-}
+_PLACEHOLDERS: dict[str, tuple[str, str]] = {}
 
 
 def _dt(value: Any, length: int = 16) -> str:
@@ -94,20 +107,52 @@ def _safe(value: Any, default: Any) -> Any:
     return default if isinstance(value, BaseException) else value
 
 
+async def _settings_context(
+    state: Any,
+    *,
+    principal: Principal | None = None,
+    services: ProductionServices | None = None,
+) -> dict[str, Any]:
+    """Probe deployment health and data-portability controls for settings."""
+    try:
+        health = await check_components(state)
+    except Exception as exc:
+        log.warning("settings_health_failed", error=str(exc))
+        health = None
+    ctx: dict[str, Any] = {"health": health, "can_export": False, "can_purge": False,
+                           "members": [], "export_max_items": 50_000}
+    if principal is None or services is None:
+        return ctx
+    authorizer = services.authorizer()
+    ctx["can_export"] = await authorizer.has(principal, Permissions.MEMORY_EXPORT)
+    ctx["can_purge"] = await authorizer.has(principal, Permissions.MEMORY_ADMIN)
+    ctx["export_max_items"] = services.admin.export_max_items
+    if ctx["can_purge"]:
+        try:
+            rctx = RequestContext(
+                principal=principal, db=services.tenant_db, authorizer=authorizer
+            )
+            ctx["members"] = await services.admin.list_members_for_erasure(rctx)
+        except Exception as exc:
+            log.warning("settings_members_failed", error=str(exc))
+            ctx["members"] = []
+    return ctx
+
+
 async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
     """Gather live stats for the console home, degrading on per-store failure."""
-    health, working, pillar, proc, events = await asyncio.gather(
-        check_components(state),
+    working, pillar, proc, strat, events = await asyncio.gather(
         state.working.stats(org_id),
         state.services.vector_store.pillar_stats(org_id),
         state.procedural.stats(org_id),
+        state.services.strategic.stats(org_id),
         state.services.audit.list_events(org_id, limit=8),
         return_exceptions=True,
     )
-    health = _safe(health, None)
     working = _safe(working, {})
     pillar = _safe(pillar, {})
     proc = _safe(proc, {})
+    strat = _safe(strat, {})
     events = _safe(events, [])
 
     by_agent = sorted(
@@ -116,13 +161,14 @@ async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
     by_agent_max = max((c for _, c in by_agent), default=1) or 1
 
     return {
-        "health": health,
         "working_active": working.get("active", 0),
         "working_total": working.get("total", 0),
         "semantic": pillar.get("semantic", 0),
         "episodic": pillar.get("episodic", 0),
         "procedural": proc.get("playbooks", 0),
         "procedural_versions": proc.get("versions", 0),
+        "strategic_plans": strat.get("plans", 0),
+        "strategic_objectives": strat.get("objectives", 0),
         "by_agent": by_agent,
         "by_agent_max": by_agent_max,
         "recent": events if isinstance(events, list) else [],
@@ -171,12 +217,59 @@ def register_console_routes(
             "active": active,
             "who": principal.display or str(principal.id),
             "org_name": _ORG_NAME,
+            "app_version": __version__,
         }
         ctx.update(await _org_context(principal))
+        secret = settings.session_secret or ""
+        if secret:
+            ctx["csrf_token"] = csrf_token_for_principal(
+                principal.org_id, principal.id, secret
+            )
+        else:
+            ctx["csrf_token"] = ""
         return ctx
 
+    def _csrf_failed(request: Request) -> Response:
+        return _TEMPLATES.TemplateResponse(
+            request,
+            "csrf_failed.html",
+            {"nav": NAV, "active": "", "csrf_token": ""},
+            status_code=403,
+        )
+
+    async def _verified_form(request: Request) -> tuple[Any, Response | None]:
+        """Parse a console POST form after CSRF validation."""
+        form = await request.form()
+        session = request.cookies.get(_COOKIE, "")
+        secret = settings.session_secret or ""
+        token = str(form.get("csrf_token") or "")
+        principal = _session(request)
+        if not verify_console_csrf(
+            session,
+            secret,
+            token,
+            csrf_cookie=request.cookies.get("ts_csrf"),
+            org_id=principal.org_id if principal else None,
+            user_id=principal.id if principal else None,
+        ):
+            log.warning(
+                "console_csrf_rejected",
+                path=request.url.path,
+                reason=csrf_failure_reason(
+                    session, secret, token, request.cookies.get("ts_csrf")
+                ),
+                has_csrf_cookie=bool(request.cookies.get("ts_csrf")),
+            )
+            return form, _csrf_failed(request)
+        return form, None
+
     def _issue_session_cookie(
-        resp: Response, *, org_id: UUID, user_id: UUID, email: str
+        request: Request,
+        resp: Response,
+        *,
+        org_id: UUID,
+        user_id: UUID,
+        email: str,
     ) -> None:
         # Only reached behind a verified session / OTP, both of which require a
         # configured secret; assert narrows the Optional for the type checker.
@@ -194,9 +287,20 @@ def register_console_routes(
             max_age=_SESSION_TTL,
             httponly=True,
             samesite="lax",
-            secure=not settings.auth_disabled,
+            secure=cookie_secure(request, auth_disabled=settings.auth_disabled),
             path="/",
         )
+        if settings.session_secret:
+            csrf = csrf_token_for_principal(org_id, user_id, settings.session_secret)
+            resp.set_cookie(
+                "ts_csrf",
+                csrf,
+                max_age=_SESSION_TTL,
+                httponly=False,
+                samesite="lax",
+                secure=cookie_secure(request, auth_disabled=settings.auth_disabled),
+                path="/",
+            )
 
     # --- auth flow -------------------------------------------------------
 
@@ -313,13 +417,16 @@ def register_console_routes(
                 status_code=500,
             )
         resp = RedirectResponse("/app", status_code=303)
-        _issue_session_cookie(resp, org_id=org_id, user_id=user_id, email=email)
+        _issue_session_cookie(
+            request, resp, org_id=org_id, user_id=user_id, email=email
+        )
         log.info("console_login_ok", email=email, org_id=str(org_id))
         return resp
 
     async def logout(request: Request) -> Response:
         resp = RedirectResponse("/login", status_code=303)
         resp.delete_cookie(_COOKIE, path="/")
+        resp.delete_cookie("ts_csrf", path="/")
         return resp
 
     # --- gated pages -----------------------------------------------------
@@ -332,10 +439,79 @@ def register_console_routes(
         try:
             ctx.update(await _home_context(get_state(), principal.org_id))
         except RuntimeError:
-            ctx.update({"health": None, "working_active": 0, "working_total": 0,
+            ctx.update({"working_active": 0, "working_total": 0,
                         "semantic": 0, "episodic": 0, "procedural": 0,
                         "procedural_versions": 0, "by_agent": [], "by_agent_max": 1, "recent": []})
         return _TEMPLATES.TemplateResponse(request, "console_home.html", ctx)
+
+    async def settings_page(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "settings")
+        try:
+            ctx.update(
+                await _settings_context(
+                    get_state(), principal=principal, services=services
+                )
+            )
+        except RuntimeError:
+            ctx.update({"health": None, "can_export": False, "can_purge": False,
+                        "members": []})
+        purged = request.query_params.get("purged")
+        if purged is not None:
+            ctx["flash"] = f"Soft-deleted {purged} memory item(s) for that user."
+        return _TEMPLATES.TemplateResponse(request, "console_settings.html", ctx)
+
+    async def settings_export(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        limiter = getattr(request.app.state, "rate_limiter", None)
+        if limiter is not None:
+            blocked = await enforce_admin_export(limiter, principal)
+            if blocked is not None:
+                return blocked
+        rctx = _ctx(principal)
+        try:
+            payload = await services.admin.export_memory(rctx)
+        except Exception as exc:
+            log.warning("settings_export_failed", error=str(exc))
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        body = AdminService.export_to_json(payload)
+        filename = f"teamshared-export-{principal.org_id}.json"
+        return Response(
+            body,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    async def settings_purge(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, failed = await _verified_form(request)
+        if failed is not None:
+            return failed
+        limiter = getattr(request.app.state, "rate_limiter", None)
+        if limiter is not None:
+            blocked = await enforce_admin_purge(limiter, principal)
+            if blocked is not None:
+                return blocked
+        if str(form.get("confirm_erase") or "") != "yes":
+            return RedirectResponse("/app/settings?error=confirm", status_code=303)
+        user_raw = str(form.get("user_id") or "").strip()
+        try:
+            user_id = UUID(user_raw)
+        except ValueError:
+            return RedirectResponse("/app/settings?error=user", status_code=303)
+        rctx = _ctx(principal)
+        try:
+            deleted = await services.admin.purge_user_memory(rctx, user_id)
+        except Exception as exc:
+            log.warning("settings_purge_failed", error=str(exc))
+            return RedirectResponse("/app/settings?error=purge", status_code=303)
+        return RedirectResponse(f"/app/settings?purged={deleted}", status_code=303)
 
     # --- wiki (Phase 4) -------------------------------------------------
 
@@ -420,27 +596,99 @@ def register_console_routes(
         return _TEMPLATES.TemplateResponse(request, "wiki_timeline.html", ctx)
 
     async def wiki_playbooks(request: Request) -> Response:
+        # Playbooks now live in their own top-level, editable section. Keep this
+        # path as a permanent redirect for bookmarks and the old wiki tab link.
+        return RedirectResponse("/app/playbooks", status_code=308)
+
+    # --- playbooks (editable procedural memory) -------------------------
+
+    async def playbooks_page(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        ctx = await _shell(request, principal, "wiki")
+        ctx = await _shell(request, principal, "playbooks")
         playbooks: list[dict[str, Any]] = []
         note = ""
         try:
-            procs = await services.procedural.list_procedures(principal.org_id, limit=100)
+            procs = await services.procedural.list_procedures(
+                principal.org_id, limit=200
+            )
             playbooks = [
                 {
                     "name": p["name"], "version": p["version"],
                     "description": p.get("description"), "tags": p.get("tags") or [],
+                    "author": p.get("created_by"),
+                    "updated": _dt(p.get("created_at")),
                     "body_html": render_markdown_safe(p.get("steps_md") or ""),
+                    "search": " ".join(
+                        filter(None, [
+                            p["name"], p.get("description") or "",
+                            " ".join(p.get("tags") or []), p.get("steps_md") or "",
+                        ])
+                    ).lower(),
                 }
                 for p in procs
             ]
         except Exception as exc:
-            log.warning("wiki_playbooks_failed", error=str(exc))
-            note = f"Wiki unavailable: {exc}"
-        ctx.update({"playbooks": playbooks, "note": note})
-        return _TEMPLATES.TemplateResponse(request, "wiki_playbooks.html", ctx)
+            log.warning("playbooks_page_failed", error=str(exc))
+            note = f"Playbooks unavailable: {exc}"
+        flash = request.query_params.get("flash") or ""
+        ctx.update({"playbooks": playbooks, "note": note, "flash": flash})
+        return _TEMPLATES.TemplateResponse(request, "playbooks.html", ctx)
+
+    async def playbook_new(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "playbooks")
+        ctx.update({"playbook": None, "is_new": True, "note": ""})
+        return _TEMPLATES.TemplateResponse(request, "playbook_edit.html", ctx)
+
+    async def playbook_edit(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "playbooks")
+        name = str(request.path_params["name"])
+        playbook: dict[str, Any] | None = None
+        note = ""
+        try:
+            playbook = await services.procedural.get_procedure(principal.org_id, name)
+            if playbook is None:
+                note = "Playbook not found."
+        except Exception as exc:
+            log.warning("playbook_edit_failed", error=str(exc))
+            note = f"Playbook unavailable: {exc}"
+        ctx.update({"playbook": playbook, "is_new": False, "note": note})
+        return _TEMPLATES.TemplateResponse(request, "playbook_edit.html", ctx)
+
+    async def playbook_save(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        name = str(form.get("name") or "").strip()
+        steps_md = str(form.get("steps_md") or "").strip()
+        description = str(form.get("description") or "").strip() or None
+        tags = [t.strip() for t in str(form.get("tags") or "").split(",") if t.strip()]
+        if not name or not steps_md:
+            return RedirectResponse("/app/playbooks?flash=invalid", status_code=303)
+        try:
+            await services.ingestion().ingest_procedure(
+                _ctx(principal),
+                name=name,
+                steps_md=steps_md,
+                description=description,
+                tags=tags or None,
+                agent=principal.attribution,
+                source="agent",
+            )
+        except Exception as exc:
+            log.warning("playbook_save_failed", error=str(exc))
+            return RedirectResponse("/app/playbooks?flash=error", status_code=303)
+        return RedirectResponse("/app/playbooks?flash=saved", status_code=303)
 
     # --- read screens (Phase 3) -----------------------------------------
 
@@ -539,7 +787,9 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         name = str(form.get("name") or "").strip()
         if name:
             try:
@@ -552,7 +802,9 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         status = str(form.get("status") or "").strip()
         try:
             await services.admin.set_agent_status(
@@ -579,7 +831,8 @@ def register_console_routes(
             note = f"Unavailable: {exc}"
         ctx.update(
             {"members": members, "bindings": bindings, "note": note,
-             "roles": ["org_admin", "member", "viewer", "agent"]}
+             "roles": ["org_admin", "member", "viewer", "agent"],
+             "member_roles": ["org_owner", "org_admin", "member", "viewer"]}
         )
         return _TEMPLATES.TemplateResponse(request, "people.html", ctx)
 
@@ -587,7 +840,9 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         pid = str(form.get("principal_id") or "").strip()
         role_name = str(form.get("role_name") or "").strip()
         try:
@@ -603,7 +858,9 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         ptype = str(form.get("principal_type") or "").strip()
         pid = str(form.get("principal_id") or "").strip()
         role_name = str(form.get("role_name") or "").strip()
@@ -620,7 +877,9 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         email = str(form.get("email") or "").strip().lower()
         role = str(form.get("role") or "member").strip() or "member"
         if email:
@@ -645,7 +904,9 @@ def register_console_routes(
             return _redirect_login()
         if not principal.display:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         name = str(form.get("name") or "").strip()
         resp = RedirectResponse("/app", status_code=303)
         if not name:
@@ -658,7 +919,10 @@ def register_console_routes(
                 owner_email=principal.display,
             )
             _issue_session_cookie(
-                resp, org_id=result.org_id, user_id=result.owner_user_id,
+                request,
+                resp,
+                org_id=result.org_id,
+                user_id=result.owner_user_id,
                 email=principal.display,
             )
         except Exception as exc:
@@ -673,7 +937,9 @@ def register_console_routes(
         email = principal.display
         if not email:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         target = str(form.get("org_id") or "").strip()
         # Re-issue the session only for an org the email actually belongs to.
         try:
@@ -686,8 +952,11 @@ def register_console_routes(
             return RedirectResponse("/app/orgs", status_code=303)
         resp = RedirectResponse("/app", status_code=303)
         _issue_session_cookie(
-            resp, org_id=UUID(str(match["org_id"])),
-            user_id=UUID(str(match["user_id"])), email=email,
+            request,
+            resp,
+            org_id=UUID(str(match["org_id"])),
+            user_id=UUID(str(match["user_id"])),
+            email=email,
         )
         return resp
 
@@ -723,14 +992,18 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         agent_id = str(form.get("agent_id") or "").strip()
         name = str(form.get("name") or "").strip() or "api-key"
         new_token = ""
         note = ""
         try:
             ctx = _ctx(principal)
-            await ctx.authorizer.require(principal, Permissions.ORG_ADMIN)
+            # Self-service: any read/write member (not view-only) can mint a key
+            # bound to an agent. The minted key never exceeds the agent's role.
+            await ctx.authorizer.require(principal, Permissions.MEMORY_CREATE)
             minted = await services.api_keys.mint(
                 org_id=principal.org_id, principal_type="agent",
                 principal_id=UUID(agent_id), name=name, created_by=principal.id,
@@ -745,6 +1018,9 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
+        _, deny = await _verified_form(request)
+        if deny:
+            return deny
         try:
             ctx = _ctx(principal)
             await ctx.authorizer.require(principal, Permissions.ORG_ADMIN)
@@ -754,6 +1030,78 @@ def register_console_routes(
         except Exception as exc:
             log.warning("key_revoke_failed", error=str(exc))
         return RedirectResponse("/app/keys", status_code=303)
+
+    # --- strategy -------------------------------------------------------
+
+    async def strategy_home(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "strategy")
+        note = request.query_params.get("flash") or ""
+        vision = mission = purpose = None
+        plans: list[dict[str, Any]] = []
+        active_tree: dict[str, Any] | None = None
+        try:
+            store = services.strategic
+            vision = await store.get_active_statement(principal.org_id, "vision")
+            mission = await store.get_active_statement(principal.org_id, "mission")
+            purpose = await store.get_active_statement(principal.org_id, "purpose")
+            plans = await store.list_plans(principal.org_id, active_only=True, limit=10)
+            if plans:
+                active_tree = await store.get_plan_tree(principal.org_id, plans[0]["id"])
+        except Exception as exc:
+            log.warning("strategy_home_failed", error=str(exc))
+            note = f"Strategy unavailable: {exc}"
+        ctx.update({
+            "vision": vision,
+            "mission": mission,
+            "purpose": purpose,
+            "plans": plans,
+            "active_tree": active_tree,
+            "note": note,
+        })
+        return _TEMPLATES.TemplateResponse(request, "strategy.html", ctx)
+
+    async def strategy_statement_propose(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        kind = str(form.get("kind") or "").strip()
+        content_md = str(form.get("content_md") or "").strip()
+        if kind not in {"vision", "mission", "purpose"} or not content_md:
+            return RedirectResponse("/app/strategy?flash=invalid", status_code=303)
+        try:
+            ctx = _ctx(principal)
+            await ctx.authorizer.require(principal, Permissions.MEMORY_CREATE)
+            await services.ingestion().ingest_strategic_statement(
+                ctx, kind=kind, content_md=content_md, agent=principal.attribution,
+            )
+        except Exception as exc:
+            log.warning("strategy_statement_propose_failed", error=str(exc))
+            return RedirectResponse("/app/strategy?flash=error", status_code=303)
+        return RedirectResponse("/app/strategy?flash=pending", status_code=303)
+
+    async def strategy_plan_detail(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "strategy")
+        plan_id = UUID(str(request.path_params["plan_id"]))
+        tree: dict[str, Any] | None = None
+        note = ""
+        try:
+            tree = await services.strategic.get_plan_tree(principal.org_id, plan_id)
+            if tree is None:
+                note = "Plan not found."
+        except Exception as exc:
+            log.warning("strategy_plan_detail_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({"tree": tree, "note": note})
+        return _TEMPLATES.TemplateResponse(request, "strategy_plan.html", ctx)
 
     async def approvals_page(request: Request) -> Response:
         principal = _session(request)
@@ -766,7 +1114,9 @@ def register_console_routes(
             data = await services.approvals.list_pending(principal.org_id)
             pending = [
                 {"id": d.get("id"), "created": _dt(d.get("created_at")),
-                 "reason": d.get("reason") or "\u2014", "content": d.get("content") or ""}
+                 "reason": d.get("reason") or "\u2014",
+                 "content": d.get("content") or "",
+                 "strategic_type": d.get("strategic_entity_type")}
                 for d in data
             ]
         except Exception as exc:
@@ -779,7 +1129,9 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         approved = str(form.get("decision") or "").strip() == "approve"
         try:
             ctx = _ctx(principal)
@@ -848,7 +1200,9 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form = await request.form()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
         agent = str(form.get("agent") or "").strip()
         mode = str(form.get("mode") or "review")
         scope = [str(s) for s in form.getlist("scope")]
@@ -869,6 +1223,9 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
+        _, deny = await _verified_form(request)
+        if deny:
+            return deny
         grant_id = request.path_params["grant_id"]
         try:
             await services.consent.revoke(principal.org_id, grant_id)
@@ -897,6 +1254,13 @@ def register_console_routes(
         Route("/app/wiki/timeline", wiki_timeline, methods=["GET"]),
         Route("/app/wiki/playbooks", wiki_playbooks, methods=["GET"]),
         Route("/app/wiki/topic/{slug}", wiki_topic, methods=["GET"]),
+        Route("/app/playbooks", playbooks_page, methods=["GET"]),
+        Route("/app/playbooks/new", playbook_new, methods=["GET"]),
+        Route("/app/playbooks/save", playbook_save, methods=["POST"]),
+        Route("/app/playbooks/{name}", playbook_edit, methods=["GET"]),
+        Route("/app/strategy", strategy_home, methods=["GET"]),
+        Route("/app/strategy/statement", strategy_statement_propose, methods=["POST"]),
+        Route("/app/strategy/plans/{plan_id}", strategy_plan_detail, methods=["GET"]),
         Route("/app/memory", memory_explorer, methods=["GET"]),
         Route("/app/memory/{memory_id}", memory_detail, methods=["GET"]),
         Route("/app/agents", agents_page, methods=["GET"]),
@@ -918,6 +1282,9 @@ def register_console_routes(
         Route("/app/consent", consent_page, methods=["GET"]),
         Route("/app/consent/grant", consent_grant, methods=["POST"]),
         Route("/app/consent/{grant_id}/revoke", consent_revoke, methods=["POST"]),
+        Route("/app/settings", settings_page, methods=["GET"]),
+        Route("/app/settings/export", settings_export, methods=["GET"]),
+        Route("/app/settings/purge", settings_purge, methods=["POST"]),
     ]
     for path, (active, title) in _PLACEHOLDERS.items():
         routes.append(Route(path, _placeholder(active, title), methods=["GET"]))

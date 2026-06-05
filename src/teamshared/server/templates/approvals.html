@@ -1,26 +1,30 @@
 {% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
 {% block title %}Approvals{% endblock %}
 {% block content %}
   <h1>Pending approvals</h1>
-  <p class="sub">Memories and playbooks awaiting human review before they go live.</p>
+  <p class="sub">Memories, playbooks, and strategic proposals awaiting human review.</p>
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   <div class="panel">
     {% if pending %}
     <table>
-      <thead><tr><th>Created</th><th>Reason</th><th>Content</th><th></th></tr></thead>
+      <thead><tr><th>Created</th><th>Type</th><th>Reason</th><th>Content</th><th></th></tr></thead>
       <tbody>
         {% for p in pending %}
         <tr>
           <td>{{ p.created }}</td>
+          <td>{% if p.strategic_type %}strategic / {{ p.strategic_type }}{% else %}memory{% endif %}</td>
           <td>{{ p.reason }}</td>
           <td>{{ p.content | truncate(160) }}</td>
           <td class="actions">
             <form method="post" action="/app/approvals/{{ p.id }}/decide">
+              {{ cm.csrf_field() }}
               <input type="hidden" name="decision" value="approve" />
               <button type="submit">Approve</button>
             </form>
             <form method="post" action="/app/approvals/{{ p.id }}/decide">
+              {{ cm.csrf_field() }}
               <input type="hidden" name="decision" value="reject" />
               <button type="submit" class="danger">Reject</button>
             </form>

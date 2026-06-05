@@ -17,11 +17,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from teamshared.admin.exceptions import ErasureNotConfirmed
 from teamshared.identity.provisioning import signup_org
 from teamshared.identity.rbac import Permissions
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.types import TimeRange
 from teamshared.server.api.errors import ApiError, error_response, map_exception
+from teamshared.server.rate_limit import enforce_admin_export, enforce_admin_purge
 from teamshared.server.api.middleware import (
     IdempotencyMiddleware,
     PrincipalAuthMiddleware,
@@ -201,7 +203,7 @@ def build_api_app(
         tr = None
         if isinstance(body.get("time_range"), dict):
             tr = TimeRange(**body["time_range"])
-        scopes = body.get("scope") or ["semantic", "episodic", "procedural"]
+        scopes = body.get("scope") or ["semantic", "episodic", "procedural", "strategic"]
         result = await services.retrieval().search(
             ctx, query, scopes=scopes, k=int(body.get("k", 8)), time_range=tr
         )
@@ -342,14 +344,42 @@ def build_api_app(
 
     async def export_org(request: Request) -> JSONResponse:
         ctx = _ctx(request, services)
-        return JSONResponse(await services.admin.export_memory(ctx))
+        limiter = getattr(request.app.state, "rate_limiter", None)
+        if limiter is not None:
+            blocked = await enforce_admin_export(limiter, ctx.principal)
+            if blocked is not None:
+                return blocked
+        payload = await services.admin.export_memory(ctx)
+        return JSONResponse(
+            payload,
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="teamshared-export-{ctx.org_id}.json"'
+                ),
+            },
+        )
 
     async def purge_user(request: Request) -> JSONResponse:
         ctx = _ctx(request, services)
+        limiter = getattr(request.app.state, "rate_limiter", None)
+        if limiter is not None:
+            blocked = await enforce_admin_purge(limiter, ctx.principal)
+            if blocked is not None:
+                return blocked
+        confirmed = request.headers.get("x-confirm-erasure", "").strip() == "1"
+        if not confirmed:
+            try:
+                body = await request.json()
+            except Exception:
+                body = {}
+            if isinstance(body, dict):
+                confirmed = body.get("confirm") is True
+        if not confirmed:
+            raise ErasureNotConfirmed()
         deleted = await services.admin.purge_user_memory(
             ctx, UUID(request.path_params["user_id"])
         )
-        return JSONResponse({"deleted": deleted})
+        return JSONResponse({"soft_deleted": deleted})
 
     routes = [
         Route("/v1/healthz", healthz, methods=["GET"]),

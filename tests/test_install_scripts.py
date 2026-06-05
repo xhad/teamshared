@@ -36,7 +36,8 @@ def test_unified_install_script() -> None:
     # Accept both legacy /get-token tokens and console API keys.
     assert "tsk_*)" in body
     assert "token should start with tsk_" in body
-    assert "https://teamshared.com/mcp/" in body
+    assert "https://teamshared.com/mcp" in body
+    assert "https://teamshared.com/mcp/" not in body
     assert "_ts_install_hermes_soul" not in body
     assert "/install/assets" in body
     # Hermes ships a conversation-capture shell hook wired by the installer.

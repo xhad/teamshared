@@ -5,6 +5,12 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from teamshared.admin.exceptions import (
+    ErasureNotConfirmed,
+    ExportTooLarge,
+    SelfErasureBlocked,
+    UserNotInOrg,
+)
 from teamshared.identity.rbac import PermissionDenied
 from teamshared.ingestion.pipeline import IngestionRejected
 
@@ -32,6 +38,17 @@ def map_exception(request: Request, exc: Exception) -> JSONResponse:
         return error_response(request, 403, "permission_denied", str(exc))
     if isinstance(exc, IngestionRejected):
         return error_response(request, 422, "ingestion_rejected", str(exc))
+    if isinstance(exc, ExportTooLarge):
+        return error_response(
+            request, 413, "export_too_large",
+            f"{exc.count} items exceeds limit of {exc.limit}",
+        )
+    if isinstance(exc, UserNotInOrg):
+        return error_response(request, 404, "user_not_in_org", str(exc))
+    if isinstance(exc, SelfErasureBlocked):
+        return error_response(request, 400, "self_erasure_blocked", str(exc))
+    if isinstance(exc, ErasureNotConfirmed):
+        return error_response(request, 400, "erasure_not_confirmed", str(exc))
     if isinstance(exc, ValueError):
         return error_response(request, 400, "bad_request", str(exc))
     return error_response(request, 500, "internal_error", "internal server error")

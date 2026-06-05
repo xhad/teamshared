@@ -144,6 +144,9 @@ def _fake_state() -> SimpleNamespace:
                     ]
                 )
             ),
+            strategic=SimpleNamespace(
+                stats=AsyncMock(return_value={"plans": 1, "objectives": 2, "statements": 3})
+            ),
         ),
     )
 
@@ -178,6 +181,27 @@ def _login(client: TestClient) -> None:
     assert "ts_session" in verify.cookies or any(
         "ts_session" in c for c in verify.headers.get_list("set-cookie")
     )
+
+
+def _csrf_token(client: TestClient, page_path: str = "/app") -> str:
+    resp = client.get(page_path)
+    assert resp.status_code == 200
+    match = re.search(
+        r'<meta name="csrf-token" content="([^"]+)"'
+        r'|name="csrf_token" value="([^"]+)"',
+        resp.text,
+    )
+    assert match, f"csrf_token missing on {page_path}"
+    return match.group(1) or match.group(2)
+
+
+def _app_post(
+    client: TestClient, path: str, data: dict[str, str] | None = None
+):
+    """POST to a console write route with a valid CSRF token."""
+    payload = dict(data or {})
+    payload["csrf_token"] = _csrf_token(client)
+    return client.post(path, data=payload)
 
 
 def test_unauthenticated_app_redirects_to_login() -> None:
@@ -219,6 +243,18 @@ def test_otp_grants_session_and_renders_home(state_with_stats) -> None:
     # Live stats rendered through the home template.
     assert "Working sessions" in resp.text
     assert "cursor" in resp.text
+
+
+def test_console_shows_app_version_beside_brand(state_with_stats) -> None:
+    from teamshared import __version__
+
+    client, _ = _build()
+    _login(client)
+    resp = client.get("/app")
+    assert resp.status_code == 200
+    assert f"v{__version__}" in resp.text
+    # The version badge links to the health endpoint.
+    assert 'class="ver" href="/health"' in resp.text
 
 
 def test_invalid_otp_is_rejected() -> None:
@@ -275,13 +311,53 @@ def test_logout_clears_cookie() -> None:
     assert resp.headers["location"] == "/login"
 
 
-def test_placeholder_section_renders_when_authed(state_with_stats) -> None:
+def test_settings_renders_system_health_when_authed(state_with_stats) -> None:
     client, _ = _build()
     _login(client)
     resp = client.get("/app/settings")
     assert resp.status_code == 200
-    assert "Settings" in resp.text
-    assert "later build phase" in resp.text
+    assert "System status" in resp.text
+    assert "redis: ok" in resp.text
+    assert "later build phase" not in resp.text
+
+
+def test_settings_shows_export_when_permitted(state_with_stats) -> None:
+    client, services = _build()
+    services.authorizer.return_value.has = AsyncMock(return_value=True)
+    services.admin.export_max_items = 50_000
+    services.admin.list_members_for_erasure = AsyncMock(
+        return_value=[{"user_id": str(OWNER_ID), "email": "owner@example.com",
+                       "display_name": None, "role": "org_owner", "status": "active"}]
+    )
+    _login(client)
+    resp = client.get("/app/settings")
+    assert resp.status_code == 200
+    assert "Download org export" in resp.text
+    assert "/app/settings/export" in resp.text
+
+
+def test_settings_purge_requires_csrf(state_with_stats) -> None:
+    client, services = _build()
+    services.authorizer.return_value.has = AsyncMock(
+        side_effect=lambda _p, perm: perm == "memory:admin"
+    )
+    _login(client)
+    client.cookies.pop("ts_csrf", None)
+    resp = client.post(
+        "/app/settings/purge",
+        data={"user_id": str(OWNER_ID), "confirm_erase": "yes"},
+    )
+    assert resp.status_code == 403
+    services.admin.purge_user_memory.assert_not_called()
+
+
+def test_home_does_not_render_component_health_badges(state_with_stats) -> None:
+    client, _ = _build()
+    _login(client)
+    resp = client.get("/app")
+    assert resp.status_code == 200
+    assert "distiller:" not in resp.text
+    assert "System status" in resp.text
 
 
 def test_read_screen_redirects_when_unauthed() -> None:
@@ -406,6 +482,25 @@ def test_approvals_page_lists_pending() -> None:
     resp = client.get("/app/approvals")
     assert resp.status_code == 200
     assert "pii_detected" in resp.text
+
+
+def test_strategy_page_renders() -> None:
+    client, services = _build()
+    services.strategic = MagicMock()
+    services.strategic.get_active_statement = AsyncMock(
+        side_effect=lambda _org, kind: {
+            "kind": kind,
+            "content_md": f"Our {kind}",
+            "version": 1,
+            "created_by": "cursor",
+        }
+    )
+    services.strategic.list_plans = AsyncMock(return_value=[])
+    _login(client)
+    resp = client.get("/app/strategy")
+    assert resp.status_code == 200
+    assert "Strategy" in resp.text
+    assert "Our vision" in resp.text
 
 
 def test_audit_page_lists_events() -> None:
@@ -538,21 +633,92 @@ def test_wiki_topic_prefers_curated_page() -> None:
     assert "prod host is teamshared.com" in resp.text
 
 
-def test_wiki_playbooks_renders_markdown_and_sanitizes() -> None:
+def test_wiki_playbooks_redirects_to_dedicated_section() -> None:
+    # The old Wiki tab now redirects to the editable top-level Playbooks section.
+    client, _ = _build()
+    _login(client)
+    resp = client.get("/app/wiki/playbooks")
+    assert resp.status_code == 308
+    assert resp.headers["location"] == "/app/playbooks"
+
+
+# --------------------------------------------------------------------------- #
+# Playbooks section (editable procedural memory)
+# --------------------------------------------------------------------------- #
+def test_playbooks_page_lists_and_sanitizes() -> None:
     client, services = _build()
     services.procedural.list_procedures = AsyncMock(
         return_value=[
             {"name": "ship-pr", "version": 2, "description": "How to ship",
-             "tags": ["git"],
+             "tags": ["git"], "created_by": "cursor",
+             "created_at": "2026-05-28T10:00:00",
              "steps_md": "# Steps\n\n1. do **thing**\n\n<script>alert(1)</script>"}
         ]
     )
     _login(client)
-    resp = client.get("/app/wiki/playbooks")
+    resp = client.get("/app/playbooks")
     assert resp.status_code == 200
     assert "ship-pr" in resp.text
     assert "<strong>thing</strong>" in resp.text
     assert "<script>alert(1)</script>" not in resp.text
+    assert "/app/playbooks/ship-pr" in resp.text  # edit link
+    assert "/app/playbooks/new" in resp.text  # create button
+    assert 'id="pb-filter"' in resp.text  # live search bar
+    assert 'data-search="' in resp.text  # filterable card metadata
+
+
+def test_playbook_new_form_renders() -> None:
+    client, _ = _build()
+    _login(client)
+    resp = client.get("/app/playbooks/new")
+    assert resp.status_code == 200
+    assert 'name="steps_md"' in resp.text
+    assert 'name="name"' in resp.text
+
+
+def test_playbook_edit_form_prefills() -> None:
+    client, services = _build()
+    services.procedural.get_procedure = AsyncMock(
+        return_value={"name": "ship-pr", "version": 3, "description": "How to ship",
+                      "tags": ["git", "release"],
+                      "steps_md": "# Steps\n\n1. do thing"}
+    )
+    _login(client)
+    resp = client.get("/app/playbooks/ship-pr")
+    assert resp.status_code == 200
+    assert "ship-pr" in resp.text
+    assert "1. do thing" in resp.text
+    assert "git, release" in resp.text  # tags joined into the input
+
+
+def test_playbook_save_creates_version_and_redirects() -> None:
+    client, services = _build()
+    services.ingestion.return_value.ingest_procedure = AsyncMock(
+        return_value=SimpleNamespace(status="active")
+    )
+    _login(client)
+    resp = _app_post(
+        client, "/app/playbooks/save",
+        {"name": "ship-pr", "description": "How to ship",
+         "tags": "git, release", "steps_md": "# Steps\n\n1. do thing"},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/playbooks?flash=saved"
+    services.ingestion.return_value.ingest_procedure.assert_awaited_once()
+    kwargs = services.ingestion.return_value.ingest_procedure.await_args.kwargs
+    assert kwargs["name"] == "ship-pr"
+    assert kwargs["steps_md"] == "# Steps\n\n1. do thing"
+    assert kwargs["tags"] == ["git", "release"]
+
+
+def test_playbook_save_requires_name_and_steps() -> None:
+    client, services = _build()
+    services.ingestion.return_value.ingest_procedure = AsyncMock()
+    _login(client)
+    resp = _app_post(client, "/app/playbooks/save", {"name": "", "steps_md": ""})
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/playbooks?flash=invalid"
+    services.ingestion.return_value.ingest_procedure.assert_not_awaited()
 
 
 # --------------------------------------------------------------------------- #
@@ -569,7 +735,7 @@ def test_agent_add_creates_and_redirects() -> None:
     client, services = _build()
     services.admin.create_agent = AsyncMock(return_value=uuid.uuid4())
     _login(client)
-    resp = client.post("/app/agents/add", data={"name": "ralph"})
+    resp = _app_post(client, "/app/agents/add", {"name": "ralph"})
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/agents"
     services.admin.create_agent.assert_awaited_once()
@@ -581,7 +747,7 @@ def test_agent_disable_redirects() -> None:
     services.admin.set_agent_status = AsyncMock(return_value=True)
     aid = str(uuid.uuid4())
     _login(client)
-    resp = client.post(f"/app/agents/{aid}/status", data={"status": "disabled"})
+    resp = _app_post(client, f"/app/agents/{aid}/status", {"status": "disabled"})
     assert resp.status_code == 303
     services.admin.set_agent_status.assert_awaited_once()
     assert services.admin.set_agent_status.await_args.args[2] == "disabled"
@@ -595,12 +761,19 @@ def test_key_mint_shows_token_once() -> None:
         return_value=SimpleNamespace(id=uuid.uuid4(), prefix="tsk_abc", token="tsk_abc_secret")
     )
     _login(client)
-    resp = client.post(
-        "/app/keys/mint", data={"agent_id": str(uuid.uuid4()), "name": "CI"}
+    resp = _app_post(
+        client, "/app/keys/mint",
+        {"agent_id": str(uuid.uuid4()), "name": "CI"},
     )
     assert resp.status_code == 200
     assert "tsk_abc_secret" in resp.text  # shown once on the page, not via redirect
     services.api_keys.mint.assert_awaited_once()
+    # Minting is self-service: gated on memory:create (members), not org:admin.
+    perms_required = {
+        call.args[1] for call in services.authorizer().require.await_args_list
+    }
+    assert "memory:create" in perms_required
+    assert "org:admin" not in perms_required
 
 
 def test_key_revoke_redirects() -> None:
@@ -608,7 +781,7 @@ def test_key_revoke_redirects() -> None:
     services.api_keys.revoke = AsyncMock(return_value=True)
     kid = str(uuid.uuid4())
     _login(client)
-    resp = client.post(f"/app/keys/{kid}/revoke")
+    resp = _app_post(client, f"/app/keys/{kid}/revoke")
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/keys"
     services.api_keys.revoke.assert_awaited_once()
@@ -620,7 +793,7 @@ def test_approval_approve_redirects_and_decides() -> None:
     services.audit.record = AsyncMock()
     aid = str(uuid.uuid4())
     _login(client)
-    resp = client.post(f"/app/approvals/{aid}/decide", data={"decision": "approve"})
+    resp = _app_post(client, f"/app/approvals/{aid}/decide", {"decision": "approve"})
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/approvals"
     services.approvals.decide.assert_awaited_once()
@@ -633,14 +806,15 @@ def test_people_grant_and_revoke_redirect() -> None:
     services.admin.revoke_role = AsyncMock(return_value=True)
     _login(client)
     uid = str(uuid.uuid4())
-    grant = client.post(
-        "/app/people/grant", data={"principal_id": uid, "role_name": "member"}
+    grant = _app_post(
+        client, "/app/people/grant", {"principal_id": uid, "role_name": "member"}
     )
     assert grant.status_code == 303
     services.admin.grant_role.assert_awaited_once()
-    revoke = client.post(
+    revoke = _app_post(
+        client,
         "/app/people/revoke",
-        data={"principal_type": "user", "principal_id": uid, "role_name": "member"},
+        {"principal_type": "user", "principal_id": uid, "role_name": "member"},
     )
     assert revoke.status_code == 303
     services.admin.revoke_role.assert_awaited_once()
@@ -674,7 +848,7 @@ def test_login_auto_signs_up_own_org_when_no_orgs(monkeypatch) -> None:
 def test_org_switch_rejects_org_you_do_not_belong_to() -> None:
     client, _ = _build(orgs=_orgs((DEFAULT_ORG, OWNER_ID, "teamshared")))
     _login(client)
-    resp = client.post("/app/orgs/switch", data={"org_id": str(uuid.uuid4())})
+    resp = _app_post(client, "/app/orgs/switch", {"org_id": str(uuid.uuid4())})
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/orgs"
     # No session cookie re-issued for a foreign org.
@@ -688,7 +862,7 @@ def test_org_switch_accepts_org_you_belong_to() -> None:
         orgs=_orgs((DEFAULT_ORG, OWNER_ID, "teamshared"), (other_org, other_user, "Side Co"))
     )
     _login(client)
-    resp = client.post("/app/orgs/switch", data={"org_id": str(other_org)})
+    resp = _app_post(client, "/app/orgs/switch", {"org_id": str(other_org)})
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app"
     assert any("ts_session" in c for c in resp.headers.get_list("set-cookie"))
@@ -717,7 +891,7 @@ def test_org_create_signs_up_and_switches(monkeypatch) -> None:
     monkeypatch.setattr(console_mod, "signup_org", signup)
     client, _ = _build()
     _login(client)
-    resp = client.post("/app/orgs/create", data={"name": "New Team"})
+    resp = _app_post(client, "/app/orgs/create", {"name": "New Team"})
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app"
     signup.assert_awaited_once()
@@ -730,8 +904,8 @@ def test_people_add_member_redirects() -> None:
         return_value={"user_id": "u9", "email": "new@team.io", "role": "member"}
     )
     _login(client)
-    resp = client.post(
-        "/app/people/add", data={"email": "new@team.io", "role": "member"}
+    resp = _app_post(
+        client, "/app/people/add", {"email": "new@team.io", "role": "member"}
     )
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/people"
@@ -783,9 +957,10 @@ def test_consent_grant_posts_and_redirects() -> None:
     consent = _consent_stub()
     client, _ = _build(consent=consent)
     _login(client)
-    resp = client.post(
+    resp = _app_post(
+        client,
         "/app/consent/grant",
-        data={"agent": "hermes", "mode": "policy", "scope": ["tool_calls", "raw_turns"]},
+        {"agent": "hermes", "mode": "policy", "scope": "tool_calls"},
     )
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/consent"
@@ -793,14 +968,14 @@ def test_consent_grant_posts_and_redirects() -> None:
     kwargs = consent.grant.await_args.kwargs
     assert kwargs["agent"] == "hermes"
     assert kwargs["mode"] == "policy"
-    assert kwargs["scope"] == ["tool_calls", "raw_turns"]
+    assert kwargs["scope"] == ["tool_calls"]
 
 
 def test_consent_revoke_posts_and_redirects() -> None:
     consent = _consent_stub()
     client, _ = _build(consent=consent)
     _login(client)
-    resp = client.post("/app/consent/g1/revoke")
+    resp = _app_post(client, "/app/consent/g1/revoke")
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/consent"
     consent.revoke.assert_awaited_once()

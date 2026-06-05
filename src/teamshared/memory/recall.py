@@ -24,10 +24,11 @@ from teamshared.memory.working import WorkingMemory
 
 log = get_logger(__name__)
 
-DEFAULT_SCOPE: tuple[MemoryScope, ...] = ("semantic", "episodic", "procedural", "working")
+DEFAULT_SCOPE: tuple[MemoryScope, ...] = ("semantic", "episodic", "procedural", "strategic", "working")
 
 PILLAR_WEIGHTS: dict[str, float] = {
     "semantic": 1.0,
+    "strategic": 0.95,
     "episodic": 0.9,
     "procedural": 0.85,
     "working": 0.7,

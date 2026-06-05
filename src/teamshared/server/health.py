@@ -2,18 +2,31 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 import httpx
 
 from teamshared import __version__
+from teamshared.observability.queues import (
+    evaluate_queue_alerts,
+    fetch_queue_stats,
+    queues_degraded,
+    refresh_queue_metrics,
+)
 from teamshared.server.state import ServerState
 
 
 def _is_healthy(value: str) -> bool:
     """A component is healthy if it is ``ok`` (optionally with a detail suffix,
-    e.g. ``ok (model)``) or an intentionally-off optional dep (``disabled``)."""
-    return value == "ok" or value.startswith("ok ") or value == "disabled"
+    e.g. ``ok (model)``), ``warning`` (queue depth warn — see ``queues`` body),
+    or an intentionally-off optional dep (``disabled``)."""
+    return (
+        value == "ok"
+        or value.startswith("ok ")
+        or value == "disabled"
+        or value == "warning"
+    )
 
 
 async def check_components(state: ServerState) -> dict[str, Any]:
@@ -80,8 +93,35 @@ async def check_components(state: ServerState) -> dict[str, Any]:
     else:
         components["ollama"] = "disabled"
 
+    queues: dict[str, object] = {}
+    try:
+        stats = await refresh_queue_metrics(state.working)
+        alerts = evaluate_queue_alerts(stats, settings)
+        queues = {**stats.as_dict(), "alerts": alerts}
+        if queues_degraded(alerts):
+            components["queues"] = "degraded"
+        elif alerts:
+            components["queues"] = "warning"
+        else:
+            components["queues"] = "ok"
+    except Exception as exc:
+        components["queues"] = f"error: {exc}"
+        with contextlib.suppress(Exception):
+            raw = await fetch_queue_stats(state.working)
+            queues = raw.as_dict()
+
+    queue_alerts = queues.get("alerts", []) if isinstance(queues.get("alerts"), list) else []
     overall = "ok" if all(_is_healthy(v) for v in components.values()) else "degraded"
-    return {"status": overall, "version": __version__, "components": components}
+    if queues_degraded(queue_alerts):
+        overall = "degraded"
+    body: dict[str, object] = {
+        "status": overall,
+        "version": __version__,
+        "components": components,
+    }
+    if queues:
+        body["queues"] = queues
+    return body
 
 
 async def _probe_ollama(settings: Any) -> str:

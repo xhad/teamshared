@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from teamshared.metrics import METRICS
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
+from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.types import MemoryItemScope, MemoryKind, MemorySource, Visibility
 from teamshared.memory.vectorstore import VectorStore
 
@@ -51,6 +53,15 @@ class ProcedureIngestionResult:
     injection: InjectionVerdict | None = None
 
 
+@dataclass
+class StrategicIngestionResult:
+    entity: dict[str, Any]
+    entity_type: str
+    status: str               # pending_approval | quarantined
+    pii: list[PIIFinding] = field(default_factory=list)
+    injection: InjectionVerdict | None = None
+
+
 class IngestionPipeline:
     def __init__(
         self,
@@ -58,11 +69,13 @@ class IngestionPipeline:
         approvals: ApprovalQueue,
         audit: AuditLog,
         procedural: OrgProceduralStore,
+        strategic: OrgStrategicStore,
     ) -> None:
         self.vector_store = vector_store
         self.approvals = approvals
         self.audit = audit
         self.procedural = procedural
+        self.strategic = strategic
 
     async def ingest(
         self,
@@ -237,4 +250,203 @@ class IngestionPipeline:
         )
         return ProcedureIngestionResult(
             procedure=row, status=status, pii=findings, injection=verdict
+        )
+
+    async def ingest_strategic_statement(
+        self,
+        ctx: RequestContext,
+        *,
+        kind: str,
+        content_md: str,
+        agent: str,
+    ) -> StrategicIngestionResult:
+        return await self._ingest_strategic(
+            ctx,
+            entity_type="statement",
+            screen_text=f"{kind}\n{content_md}",
+            agent=agent,
+            create=lambda status: self.strategic.set_statement(
+                ctx.org_id, kind, content_md, agent=agent, status=status  # type: ignore[arg-type]
+            ),
+            audit_action="strategic.statement.create",
+            audit_payload={"kind": kind},
+        )
+
+    async def ingest_strategic_plan(
+        self,
+        ctx: RequestContext,
+        *,
+        name: str,
+        period_start: date,
+        period_end: date,
+        agent: str,
+    ) -> StrategicIngestionResult:
+        return await self._ingest_strategic(
+            ctx,
+            entity_type="plan",
+            screen_text=f"{name}\n{period_start}\n{period_end}",
+            agent=agent,
+            create=lambda status: self.strategic.create_plan(
+                ctx.org_id,
+                name=name,
+                period_start=period_start,
+                period_end=period_end,
+                agent=agent,
+                status=status,
+            ),
+            audit_action="strategic.plan.create",
+            audit_payload={"name": name},
+        )
+
+    async def ingest_strategic_objective(
+        self,
+        ctx: RequestContext,
+        *,
+        plan_id: UUID,
+        title: str,
+        description_md: str | None,
+        owner_type: str | None,
+        owner_id: UUID | None,
+        sort_order: int,
+        agent: str,
+    ) -> StrategicIngestionResult:
+        return await self._ingest_strategic(
+            ctx,
+            entity_type="objective",
+            screen_text=f"{title}\n{description_md or ''}",
+            agent=agent,
+            create=lambda status: self.strategic.create_objective(
+                ctx.org_id,
+                plan_id=plan_id,
+                title=title,
+                description_md=description_md,
+                owner_type=owner_type,
+                owner_id=owner_id,
+                sort_order=sort_order,
+                agent=agent,
+                status=status,
+            ),
+            audit_action="strategic.objective.create",
+            audit_payload={"plan_id": str(plan_id), "title": title},
+        )
+
+    async def ingest_strategic_key_result(
+        self,
+        ctx: RequestContext,
+        *,
+        objective_id: UUID,
+        title: str,
+        description_md: str | None,
+        metric_target: float | None,
+        metric_current: float | None,
+        metric_unit: str | None,
+        track_status: str,
+        agent: str,
+    ) -> StrategicIngestionResult:
+        return await self._ingest_strategic(
+            ctx,
+            entity_type="key_result",
+            screen_text=f"{title}\n{description_md or ''}",
+            agent=agent,
+            create=lambda status: self.strategic.create_key_result(
+                ctx.org_id,
+                objective_id=objective_id,
+                title=title,
+                description_md=description_md,
+                metric_target=metric_target,
+                metric_current=metric_current,
+                metric_unit=metric_unit,
+                track_status=track_status,
+                agent=agent,
+                status=status,
+            ),
+            audit_action="strategic.key_result.create",
+            audit_payload={"objective_id": str(objective_id), "title": title},
+        )
+
+    async def ingest_strategic_initiative(
+        self,
+        ctx: RequestContext,
+        *,
+        plan_id: UUID,
+        title: str,
+        description_md: str | None,
+        objective_id: UUID | None,
+        key_result_id: UUID | None,
+        agent: str,
+    ) -> StrategicIngestionResult:
+        return await self._ingest_strategic(
+            ctx,
+            entity_type="initiative",
+            screen_text=f"{title}\n{description_md or ''}",
+            agent=agent,
+            create=lambda status: self.strategic.create_initiative(
+                ctx.org_id,
+                plan_id=plan_id,
+                title=title,
+                description_md=description_md,
+                objective_id=objective_id,
+                key_result_id=key_result_id,
+                agent=agent,
+                status=status,
+            ),
+            audit_action="strategic.initiative.create",
+            audit_payload={"plan_id": str(plan_id), "title": title},
+        )
+
+    async def _ingest_strategic(
+        self,
+        ctx: RequestContext,
+        *,
+        entity_type: str,
+        screen_text: str,
+        agent: str,
+        create: Any,
+        audit_action: str,
+        audit_payload: dict[str, Any],
+    ) -> StrategicIngestionResult:
+        await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
+
+        findings = scan_pii(screen_text)
+        if has_hard_secret(findings):
+            await self.audit.record(
+                agent=ctx.principal.attribution,
+                action=f"{audit_action}.rejected_secret",
+                org_id=ctx.org_id,
+                actor_type=ctx.principal.type,
+                actor_id=ctx.principal.id,
+                resource_type="strategic",
+                request_id=ctx.request_id,
+                payload={**audit_payload, "findings": [f.kind for f in findings]},
+            )
+            raise IngestionRejected("content contains a hard secret and was not stored")
+
+        verdict = screen_injection(screen_text)
+        status = "quarantined" if verdict.quarantine else "pending_approval"
+        row = await create(status)
+
+        reason = "prompt_injection_suspected" if verdict.quarantine else "strategic_review_required"
+        METRICS.ingestion_quarantined.inc(status=status, reason=reason)
+        await self.approvals.enqueue_strategic(
+            ctx.org_id,
+            entity_type,
+            UUID(str(row["id"])),
+            reason=reason,
+            requested_by=ctx.principal.id,
+        )
+
+        await self.audit.record(
+            agent=ctx.principal.attribution,
+            action=audit_action,
+            org_id=ctx.org_id,
+            actor_type=ctx.principal.type,
+            actor_id=ctx.principal.id,
+            resource_type="strategic",
+            target_id=str(row["id"]),
+            request_id=ctx.request_id,
+            after={**audit_payload, "status": status, "entity_type": entity_type},
+        )
+        return StrategicIngestionResult(
+            entity=row, entity_type=entity_type, status=status,
+            pii=findings, injection=verdict,
         )

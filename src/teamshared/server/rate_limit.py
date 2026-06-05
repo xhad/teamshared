@@ -5,8 +5,8 @@ tool traffic (per org principal). When Redis is unreachable the limiter fails
 open (logs a warning, allows the request) so a Redis outage does not brick the
 server; mint/OTP abuse is the main threat surface this stage targets.
 
-The ``/v1`` REST stack still uses in-process :class:`RateLimitMiddleware` in
-``server.api.middleware``; swapping that to Redis is Stage 4.2.
+The ``/v1`` REST stack uses the same :class:`RedisRateLimiter` via
+``server.api.middleware`` (``app.state.rate_limiter`` on the mounted API app).
 """
 
 from __future__ import annotations
@@ -43,6 +43,9 @@ class RateLimitLimits:
     otp_send_per_minute: int = 3
     otp_verify_per_minute: int = 5
     mcp_per_minute: int = 120
+    v1_per_minute: int = 120
+    admin_export_per_hour: int = 6
+    admin_purge_per_hour: int = 20
 
 
 def client_ip(request: Request) -> str:
@@ -87,6 +90,10 @@ class RedisRateLimiter:
         if self._client is not None:
             await self._client.close()
             self._client = None
+
+    def share_client(self) -> redis.Redis | None:
+        """Return the connected client for reuse (e.g. idempotency guard)."""
+        return self._client
 
     async def allow(
         self,
@@ -144,6 +151,26 @@ class RedisRateLimiter:
             token_prefix = header[7:15] if header.lower().startswith("bearer ") else "anon"
             bucket = f"mcp:anon:{token_prefix}"
         return await self.allow(bucket, limit=self.limits.mcp_per_minute)
+
+    async def check_v1(self, principal: Principal) -> RateLimitResult:
+        bucket = f"v1:{principal.org_id}:{principal.type}:{principal.id}"
+        return await self.allow(bucket, limit=self.limits.v1_per_minute)
+
+    async def check_admin_export(self, principal: Principal) -> RateLimitResult:
+        bucket = f"admin:export:{principal.org_id}:{principal.type}:{principal.id}"
+        return await self.allow(
+            bucket,
+            limit=self.limits.admin_export_per_hour,
+            window_seconds=3600,
+        )
+
+    async def check_admin_purge(self, principal: Principal) -> RateLimitResult:
+        bucket = f"admin:purge:{principal.org_id}:{principal.type}:{principal.id}"
+        return await self.allow(
+            bucket,
+            limit=self.limits.admin_purge_per_hour,
+            window_seconds=3600,
+        )
 
 
 def rate_limit_response(
@@ -210,6 +237,24 @@ async def enforce_otp_send(limiter: RedisRateLimiter, email: str) -> JSONRespons
 async def enforce_otp_verify(limiter: RedisRateLimiter, email: str) -> JSONResponse | None:
     """Return a 429 response when the verify limit is exceeded, else ``None``."""
     result = await limiter.check_otp_verify(email)
+    if not result.allowed:
+        return rate_limit_response(result)
+    return None
+
+
+async def enforce_admin_export(
+    limiter: RedisRateLimiter, principal: Principal
+) -> JSONResponse | None:
+    result = await limiter.check_admin_export(principal)
+    if not result.allowed:
+        return rate_limit_response(result)
+    return None
+
+
+async def enforce_admin_purge(
+    limiter: RedisRateLimiter, principal: Principal
+) -> JSONResponse | None:
+    result = await limiter.check_admin_purge(principal)
     if not result.allowed:
         return rate_limit_response(result)
     return None

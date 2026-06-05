@@ -10,7 +10,7 @@ Conventions for anything that edits this repo (you, future me, an agent).
 ## Architecture in one paragraph
 
 `teamshared` is an MCP server. Each MCP tool in [`src/teamshared/server/tools.py`](src/teamshared/server/tools.py)
-is a thin façade over one of the four pillars in [`src/teamshared/memory/`](src/teamshared/memory).
+is a thin façade over one of the five pillars in [`src/teamshared/memory/`](src/teamshared/memory).
 The server fetches its shared resources (Redis client, Mem0 instance, Postgres
 pool) through [`teamshared.server.state.get_state()`](src/teamshared/server/state.py).
 The distillation worker is a separate process that reads a Redis queue,
@@ -123,7 +123,8 @@ build, so dropping it breaks both the `server` and `distiller` images.
 
 - The Python package, CLI, and env prefix are `teamshared` / `TEAMSHARED_*`.
 - Team production host is `https://teamshared.com` (`/health`, `/mcp`, `/get-token`, unified install at `/install.sh` and `/install`); `mcp.teamshared.com` is retired.
-- Continual-learning workspace slug: repo root path with leading `/` removed and `/` replaced by `-` (this repo: `Users-chad-code-sapien-teamshared`).
+- Continual-learning workspace slug: repo root path with leading `/` removed and `/` replaced by `-` (this checkout: `home-chad-code-teamshared` for `/home/chad/code/teamshared`).
+- Code-scoped durable memory uses two optional MCP params: `repo=` (workspace path slug, aligns with hooks/`memory_state`) and `github=` (`owner/repo`, stored as `github:<owner>/<repo>` tag, portable across machines). Both softly boost recall; see `plugins/teamshared/rules/teamshared.mdc`.
 - There is ONE compose file (`infra/docker-compose.yml`) and ONE Makefile command set — the `docker-compose.ollama-host.yml` override and `build-ollama-host` / `invite-create-host` targets are gone. `server`/`distiller` always run on the compose bridge network and reach a host Ollama via `host.docker.internal` (`extra_hosts: host-gateway`). On Linux/Spark, make the host Ollama reachable from the bridge instead of switching to host networking: run Ollama with `OLLAMA_HOST=0.0.0.0:11434` and allow the docker bridge subnet to 11434 (e.g. `sudo ufw allow from 172.16.0.0/12 to any port 11434 proto tcp`).
 - On Spark there is no global `teamshared` on PATH — run the CLI via Docker Compose / Makefile targets (one-off targets `migrate`/`seed`/`token-mint`/`invite-create` pass `--no-deps` so they don't start conflicting Postgres/Redis; they share the `teamshareddata` volume so invites land in `/data/invites.json`); override `TEAMSHARED_PG_PORT` / `TEAMSHARED_REDIS_PORT` in `.env` when host 5432/6379 are taken. The server runs on the Spark box and is exposed publicly at `teamshared.com` through a proxy/tunnel (railtail / Cloudflare Tunnel), so users don't need Tailscale.
 - Self-service token onboarding uses agent types (`cursor`, `codex`, `hermes`, `claude`, `openclaw`), not personalized names (`cursor-chad` → `cursor`); redeem via `curl -fsS 'https://teamshared.com/?invite=CODE&agent=TYPE'` for the raw bearer token.
