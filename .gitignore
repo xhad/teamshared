@@ -36,5 +36,8 @@ infra/data/
 # Local Cursor MCP config (contains org bearer token)
 .cursor/mcp.json
 .cursor/
+!.cursor/
+!.cursor/rules/
+!.cursor/rules/*.mdc
 
 agent-tools/
