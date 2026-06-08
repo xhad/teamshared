@@ -146,3 +146,65 @@ async def test_approval_decide_work_activate(monkeypatch: pytest.MonkeyPatch) ->
     result = await queue.decide(ORG, uuid4(), approved=True, decided_by=PRINCIPAL_ID)
     assert result is None
     activate_mock.assert_awaited_once_with(ORG, WORK_ID)
+
+
+async def test_list_items_excludes_closed_by_default() -> None:
+    from teamshared.memory.work import WorkStore
+
+    db = MagicMock()
+    conn = MagicMock()
+    cur = MagicMock()
+    cur.fetchall = AsyncMock(return_value=[])
+    conn.execute = AsyncMock(return_value=cur)
+    conn.__aenter__ = AsyncMock(return_value=conn)
+    conn.__aexit__ = AsyncMock(return_value=False)
+    db.org = MagicMock(return_value=conn)
+
+    store = WorkStore(db)
+    await store.list_items(ORG, exclude_closed=True)
+    sql = conn.execute.await_args.args[0]
+    assert "work_status NOT IN ('done', 'cancelled')" in sql
+
+
+async def test_work_close_emits_episodic_event() -> None:
+    from teamshared.memory.facade import MemoryFacade
+
+    closed_row = {
+        "id": WORK_ID,
+        "title": "Ship work queue",
+        "work_status": "done",
+        "assignee_label": "cursor",
+        "initiative_title": None,
+        "blocked_reason": None,
+        "repo": None,
+        "github": None,
+    }
+    work = MagicMock()
+    work.close = AsyncMock(return_value=closed_row)
+    work.enrich_labels = AsyncMock()
+    ingestion = MagicMock()
+    ingestion.ingest = AsyncMock(return_value=MagicMock(status="active"))
+    services = MagicMock()
+    services.tenant_db = MagicMock()
+    services.work = work
+    services.ingestion = MagicMock(return_value=ingestion)
+    services.audit.record = AsyncMock()
+    services.authorizer = MagicMock(return_value=MagicMock(require=AsyncMock()))
+    facade = MemoryFacade(
+        services=services,
+        resolver=MagicMock(),
+        working=MagicMock(),
+        agent_state=MagicMock(),
+        procedural=MagicMock(),
+        strategic=MagicMock(),
+        graph=None,
+    )
+    principal = Principal(
+        org_id=ORG, type="user", id=PRINCIPAL_ID, display="owner@example.com", roles=("member",),
+    )
+    await facade.work_close(principal, work_id=str(WORK_ID), work_status="done", agent_override=None)
+    ingestion.ingest.assert_awaited_once()
+    kwargs = ingestion.ingest.await_args.kwargs
+    assert kwargs["kind"] == "event"
+    assert kwargs["pillar"] == "episodic"
+    assert "work:" in kwargs["tags"][1]

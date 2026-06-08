@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.1.0
+version: 1.2.0
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.1.0 -->
+<!-- teamshared-rule-version: 1.2.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.1.0`).
+This rule is versioned (`version` in the frontmatter above, currently `1.2.0`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
 1. Early in a session (or whenever the user asks about teamshared versions or
    updates), call the `version` tool, passing this rule's frontmatter `version`
-   (`1.1.0`) as `installed_rule_version`.
+   (`1.2.0`) as `installed_rule_version`.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor:
    `~/.cursor/rules/teamshared.mdc`; the response's `rule_path` is the hint),
@@ -90,7 +90,10 @@ Use `work_*` for durable, assignable tasks — not `memory_remember`.
    create/update. Humans and agents are first-class assignees.
 3. **Progress:** `work_update(work_id=..., work_status="in_progress")` — no
    re-approval. Use `work_status="blocked"` with `blocked_reason=` when stuck.
-4. **Finish:** `work_close(work_id=..., work_status="done")` when complete.
+4. **Progress notes:** `work_comment_add(work_id=..., body=...)` for handoffs and
+   blockers — not `memory_remember`.
+5. **Finish:** `work_close(work_id=..., work_status="done")` when complete.
+   Closing writes an episodic event for the timeline.
 
 Agent-created tasks land in `/app/approvals` until a human approves them.
 Human/console-created tasks are active immediately. Optional `initiative_id=`
@@ -239,21 +242,23 @@ Org-wide vision, mission, purpose, and OKR cycles. **Never** use
 All strategic writes return `pending_approval` until a human approves them
 in the console (`/app/approvals`).
 
-### `work_list` / `work_get` / `work_create` / `work_update` / `work_close`
+### `work_list` / `work_get` / `work_create` / `work_update` / `work_close` / `work_comment_*`
 
 Org-scoped task queue. Assign to **users** (`assignee_email` / `assignee_type=user`)
 or **agents** (`assignee_agent` / `assignee_type=agent`).
 
 | Tool | When |
 |---|---|
-| `work_list` | Backlog views; `mine=true` for caller's assignments; filter `work_status` |
+| `work_list` | Table backlog; `mine=true`; filter `work_status`; `exclude_closed` (default true); `sort` |
 | `work_get` | One item by `work_id` |
 | `work_create` | New task; agent writes → `pending_approval` |
 | `work_update` | Status, assignee, priority, `blocked_reason` — immediate |
-| `work_close` | `work_status=done` or `cancelled` |
+| `work_close` | `work_status=done` or `cancelled`; writes episodic timeline event |
+| `work_comment_add` | Progress note on a task |
+| `work_comment_list` | Thread on a task (oldest first) |
 
 Workflow statuses: `backlog`, `todo`, `in_progress`, `blocked`, `done`, `cancelled`.
-Do **not** store tasks via `memory_remember`.
+Do **not** store tasks via `memory_remember`. Use comments for progress, not facts.
 
 ### `memory_graph_relate` / `memory_graph_related`
 
@@ -312,6 +317,7 @@ to write to the local rule file. See **Staying current** above.
 | List playbooks | `memory_procedures_list` |
 | Vision / OKRs / mission | `memory_strategic_*` or `scope=["strategic"]` |
 | Tasks / assignees / blockers | `work_*` or `scope=["work"]` |
+| Task progress notes | `work_comment_add` / `work_comment_list` |
 | Structured relationships | `memory_graph_*` |
 | Client incremental state | `memory_state_get` / `memory_state_set` |
 | Remove a bad memory | `memory_forget` (user-requested only) |

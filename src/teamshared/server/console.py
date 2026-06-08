@@ -141,11 +141,12 @@ async def _settings_context(
 
 async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
     """Gather live stats for the console home, degrading on per-store failure."""
-    working, pillar, proc, strat, events = await asyncio.gather(
+    working, pillar, proc, strat, work, events = await asyncio.gather(
         state.working.stats(org_id),
         state.services.vector_store.pillar_stats(org_id),
         state.procedural.stats(org_id),
         state.services.strategic.stats(org_id),
+        state.services.work.stats(org_id),
         state.services.audit.list_events(org_id, limit=8),
         return_exceptions=True,
     )
@@ -153,6 +154,7 @@ async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
     pillar = _safe(pillar, {})
     proc = _safe(proc, {})
     strat = _safe(strat, {})
+    work = _safe(work, {})
     events = _safe(events, [])
 
     by_agent = sorted(
@@ -169,6 +171,9 @@ async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
         "procedural_versions": proc.get("versions", 0),
         "strategic_plans": strat.get("plans", 0),
         "strategic_objectives": strat.get("objectives", 0),
+        "work_open": work.get("open", 0),
+        "work_blocked": work.get("blocked", 0),
+        "work_pending": work.get("pending_approval", 0),
         "by_agent": by_agent,
         "by_agent_max": by_agent_max,
         "recent": events if isinstance(events, list) else [],
@@ -441,6 +446,7 @@ def register_console_routes(
             ctx.update(await _home_context(get_state(), principal.org_id))
         except RuntimeError:
             ctx.update({"working_active": 0, "working_total": 0,
+                        "work_open": 0, "work_blocked": 0, "work_pending": 0,
                         "semantic": 0, "episodic": 0, "procedural": 0,
                         "procedural_versions": 0, "by_agent": [], "by_agent_max": 1, "recent": []})
         return _TEMPLATES.TemplateResponse(request, "console_home.html", ctx)
@@ -715,30 +721,39 @@ def register_console_routes(
             return _redirect_login()
         ctx = await _shell(request, principal, "work")
         view = str(request.query_params.get("view") or "all")
+        status_filter = str(request.query_params.get("status") or "").strip() or None
+        sort = str(request.query_params.get("sort") or "updated_at").strip()
+        sort_dir = str(request.query_params.get("dir") or "desc").strip()
+        include_done = request.query_params.get("include_done") == "1"
         items: list[dict[str, Any]] = []
         note = ""
         flash = request.query_params.get("flash") or ""
         try:
-            if view == "mine":
-                data = await get_state().facade.work_list(
-                    principal, work_status=None, assignee=None, mine=True,
-                    initiative_id=None, limit=100,
-                )
-            elif view == "blocked":
-                data = await get_state().facade.work_list(
-                    principal, work_status="blocked", assignee=None, mine=False,
-                    initiative_id=None, limit=100,
-                )
-            else:
-                data = await get_state().facade.work_list(
-                    principal, work_status=None, assignee=None, mine=False,
-                    initiative_id=None, limit=100,
-                )
+            work_status = status_filter
+            mine = view == "mine"
+            if view == "blocked":
+                work_status = "blocked"
+            data = await get_state().facade.work_list(
+                principal,
+                work_status=work_status,
+                assignee=None,
+                mine=mine,
+                initiative_id=None,
+                exclude_closed=not include_done and work_status is None,
+                sort=sort,
+                sort_dir=sort_dir,
+                limit=100,
+            )
             items = data.get("items") or []
         except Exception as exc:
             log.warning("work_page_failed", error=str(exc))
             note = f"Unavailable: {exc}"
-        ctx.update({"items": items, "view": view, "note": note, "flash": flash})
+        ctx.update({
+            "items": items, "view": view, "note": note, "flash": flash,
+            "status_filter": status_filter or "",
+            "sort": sort, "sort_dir": sort_dir,
+            "include_done": include_done,
+        })
         return _TEMPLATES.TemplateResponse(request, "work.html", ctx)
 
     async def work_new(request: Request) -> Response:
@@ -760,6 +775,33 @@ def register_console_routes(
         ctx = await _shell(request, principal, "work")
         work_id = str(request.path_params["work_id"])
         item: dict[str, Any] | None = None
+        comments: list[dict[str, Any]] = []
+        note = ""
+        try:
+            item = await get_state().facade.work_get(principal, work_id=work_id)
+            if item is None:
+                note = "Work item not found."
+            else:
+                thread = await get_state().facade.work_comment_list(
+                    principal, work_id=work_id, limit=100,
+                )
+                comments = thread.get("comments") or []
+        except Exception as exc:
+            log.warning("work_detail_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({
+            "item": item, "comments": comments, "note": note,
+            "flash": request.query_params.get("flash") or "",
+        })
+        return _TEMPLATES.TemplateResponse(request, "work_detail.html", ctx)
+
+    async def work_edit(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "work")
+        work_id = str(request.path_params["work_id"])
+        item: dict[str, Any] | None = None
         note = ""
         agents, members = await _work_assignee_options(principal)
         try:
@@ -767,7 +809,7 @@ def register_console_routes(
             if item is None:
                 note = "Work item not found."
         except Exception as exc:
-            log.warning("work_detail_failed", error=str(exc))
+            log.warning("work_edit_failed", error=str(exc))
             note = f"Unavailable: {exc}"
         ctx.update({
             "item": item, "is_new": False, "note": note,
@@ -775,6 +817,26 @@ def register_console_routes(
             "flash": request.query_params.get("flash") or "",
         })
         return _TEMPLATES.TemplateResponse(request, "work_edit.html", ctx)
+
+    async def work_comment(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        work_id = str(request.path_params["work_id"])
+        body = str(form.get("body") or "").strip()
+        if not body:
+            return RedirectResponse(f"/app/work/{work_id}?flash=invalid", status_code=303)
+        try:
+            await get_state().facade.work_comment_add(
+                principal, work_id=work_id, body=body, agent_override=None,
+            )
+            return RedirectResponse(f"/app/work/{work_id}?flash=commented", status_code=303)
+        except Exception as exc:
+            log.warning("work_comment_failed", error=str(exc))
+            return RedirectResponse(f"/app/work/{work_id}?flash=error", status_code=303)
 
     async def work_save(request: Request) -> Response:
         principal = _session(request)
@@ -1426,6 +1488,8 @@ def register_console_routes(
         Route("/app/work/new", work_new, methods=["GET"]),
         Route("/app/work/save", work_save, methods=["POST"]),
         Route("/app/work/{work_id}", work_detail, methods=["GET"]),
+        Route("/app/work/{work_id}/edit", work_edit, methods=["GET"]),
+        Route("/app/work/{work_id}/comment", work_comment, methods=["POST"]),
         Route("/app/strategy", strategy_home, methods=["GET"]),
         Route("/app/strategy/statement", strategy_statement_propose, methods=["POST"]),
         Route("/app/strategy/plans/{plan_id}", strategy_plan_detail, methods=["GET"]),

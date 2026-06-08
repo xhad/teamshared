@@ -18,6 +18,8 @@ from uuid import UUID
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.identity.principal import Principal
 from teamshared.identity.rbac import Permissions
+from teamshared.ingestion.pipeline import IngestionRejected
+from teamshared.ingestion.pii import has_hard_secret, scan_pii
 from teamshared.logging import get_logger
 from teamshared.memory.agent_state import AgentStateStore, github_tag, repo_tag
 from teamshared.memory.graph import GraphStore
@@ -535,6 +537,9 @@ class MemoryFacade:
         assignee: str | None,
         mine: bool,
         initiative_id: str | None,
+        exclude_closed: bool,
+        sort: str,
+        sort_dir: str,
         limit: int,
     ) -> dict[str, Any]:
         ctx = self._ctx(principal)
@@ -561,6 +566,9 @@ class MemoryFacade:
             assignee_type=assignee_type,  # type: ignore[arg-type]
             assignee_id=assignee_id,
             initiative_id=init_uuid,
+            exclude_closed=exclude_closed,
+            sort=sort,  # type: ignore[arg-type]
+            sort_dir=sort_dir,  # type: ignore[arg-type]
             limit=limit,
         )
         return {
@@ -726,6 +734,19 @@ class MemoryFacade:
             )
             fields["assignee_type"] = atype
             fields["assignee_id"] = aid
+        terminal = work_status in {"done", "cancelled"}
+        if terminal:
+            non_status = {k: v for k, v in fields.items() if k != "work_status"}
+            if non_status:
+                await self.services.work.update(
+                    principal.org_id, UUID(work_id), fields=non_status,
+                )
+            return await self.work_close(
+                principal,
+                work_id=work_id,
+                work_status=work_status or "done",
+                agent_override=agent_override,
+            )
         row = await self.services.work.update(
             principal.org_id, UUID(work_id), fields=fields,
         )
@@ -766,6 +787,7 @@ class MemoryFacade:
         )
         if row is None:
             return None
+        await self.services.work.enrich_labels(principal.org_id, [row])
         await self.services.audit.record(
             agent=writer.attribution,
             action="work.close",
@@ -777,7 +799,104 @@ class MemoryFacade:
             request_id=ctx.request_id,
             after={"work_status": work_status},
         )
+        await self._emit_work_close_episode(ctx, row, work_status)
         return _serialize_work(row)
+
+    async def work_comment_add(
+        self,
+        principal: Principal,
+        *,
+        work_id: str,
+        body: str,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="work_comment_add",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        item = await self.services.work.get(principal.org_id, UUID(work_id))
+        if item is None:
+            raise ValueError("work item not found")
+        body_md = body.strip()
+        if not body_md:
+            raise ValueError("comment body is required")
+        findings = scan_pii(body_md)
+        if has_hard_secret(findings):
+            raise IngestionRejected("comment contains a hard secret and was not stored")
+        author_type = writer.type if writer.type in {"user", "agent"} else "agent"
+        row = await self.services.work.add_comment(
+            principal.org_id,
+            UUID(work_id),
+            author_type=author_type,  # type: ignore[arg-type]
+            author_id=writer.id,
+            body_md=body_md,
+        )
+        await self.services.audit.record(
+            agent=writer.attribution,
+            action="work.comment",
+            org_id=principal.org_id,
+            actor_type=writer.type,
+            actor_id=writer.id,
+            resource_type="work",
+            target_id=work_id,
+            request_id=ctx.request_id,
+        )
+        return _serialize_work(row)
+
+    async def work_comment_list(
+        self,
+        principal: Principal,
+        *,
+        work_id: str,
+        limit: int,
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_READ)
+        rows = await self.services.work.list_comments(
+            principal.org_id, UUID(work_id), limit=limit,
+        )
+        return {
+            "count": len(rows),
+            "comments": [_serialize_work(r) for r in rows],
+        }
+
+    async def _emit_work_close_episode(
+        self,
+        ctx: RequestContext,
+        row: dict[str, Any],
+        work_status: str,
+    ) -> None:
+        assignee = row.get("assignee_label")
+        if not assignee and row.get("assignee_type") and row.get("assignee_id"):
+            assignee = f"{row['assignee_type']}:{row['assignee_id']}"
+        parts = [f"Work item closed ({work_status}): {row.get('title')}"]
+        if assignee:
+            parts.append(f"assignee={assignee}")
+        if row.get("initiative_title"):
+            parts.append(f"initiative={row['initiative_title']}")
+        if row.get("blocked_reason"):
+            parts.append(f"blocked_reason={row['blocked_reason']}")
+        tags = ["work", f"work:{row['id']}"]
+        if row.get("repo"):
+            tags.append(repo_tag(row["repo"]))
+        if row.get("github"):
+            tags.append(github_tag(row["github"]))
+        try:
+            await self.services.ingestion().ingest(
+                ctx,
+                " — ".join(parts),
+                kind="event",
+                pillar="episodic",
+                subject=str(row.get("title") or "work"),
+                tags=tags,
+                source="manual",
+            )
+        except Exception as exc:
+            log.warning("work_close_episode_failed", work_id=str(row.get("id")), error=str(exc))
 
     async def _resolve_assignee(
         self,

@@ -113,6 +113,8 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.work_create = AsyncMock(return_value={"id": "w1", "title": "t", "approval_status": "active"})
     facade.work_update = AsyncMock(return_value={"id": "w1", "work_status": "in_progress"})
     facade.work_close = AsyncMock(return_value={"id": "w1", "work_status": "done"})
+    facade.work_comment_add = AsyncMock(return_value={"id": "c1", "body_md": "note"})
+    facade.work_comment_list = AsyncMock(return_value={"count": 0, "comments": []})
 
     settings = MagicMock()
     settings.embed_provider = "openai"
@@ -345,6 +347,16 @@ async def test_work_list_and_create(
     created = await _call(mcp, "work_create", title="Test task", work_status="todo")
     assert created["id"] == "w1"
     state.facade.work_create.assert_awaited_once()
+
+
+async def test_work_comment_tools(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "work_comment_add", work_id="w1", body="Shipped it")
+    state.facade.work_comment_add.assert_awaited_once()
+    await _call(mcp, "work_comment_list", work_id="w1")
+    state.facade.work_comment_list.assert_awaited_once()
 
 
 async def test_memory_state_get_and_set(

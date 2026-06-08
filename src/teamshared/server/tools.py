@@ -563,6 +563,15 @@ def register_tools(mcp: Any) -> None:
             str | None,
             Field(description="Filter to tasks linked to a strategic initiative UUID"),
         ] = None,
+        exclude_closed: Annotated[
+            bool,
+            Field(description="Omit done/cancelled items (default true)"),
+        ] = True,
+        sort: Annotated[
+            str,
+            Field(description="Sort key: updated_at, priority, work_status, created_at"),
+        ] = "updated_at",
+        sort_dir: Annotated[str, Field(description="asc or desc")] = "desc",
         limit: Annotated[int, Field(ge=1, le=200)] = 50,
     ) -> dict[str, Any]:
         """List org work items (shared task queue for humans and agents)."""
@@ -574,6 +583,9 @@ def register_tools(mcp: Any) -> None:
             assignee=assignee,
             mine=mine,
             initiative_id=initiative_id,
+            exclude_closed=exclude_closed,
+            sort=sort,
+            sort_dir=sort_dir,
             limit=limit,
         )
 
@@ -687,6 +699,31 @@ def register_tools(mcp: Any) -> None:
         principal = await _principal()
         return await state.facade.work_close(
             principal, work_id=work_id, work_status=work_status, agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_comment_add(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+        body: Annotated[str, Field(description="Comment text (markdown ok)")],
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Add a comment to a work item."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_comment_add(
+            principal, work_id=work_id, body=body, agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_comment_list(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+        limit: Annotated[int, Field(ge=1, le=200)] = 50,
+    ) -> dict[str, Any]:
+        """List comments on a work item (oldest first)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_comment_list(
+            principal, work_id=work_id, limit=limit,
         )
 
     @mcp.tool()
