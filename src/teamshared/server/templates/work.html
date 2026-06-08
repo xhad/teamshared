@@ -16,11 +16,41 @@
   {% if flash == 'error' %}<div class="unavailable">Could not save the task. Please try again.</div>{% endif %}
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
-  <div class="tabs" style="margin:1rem 0;display:flex;gap:.5rem;">
-    <a href="/app/work?view=all" class="{% if view == 'all' %}active{% endif %}"><button type="button" class="ghost">All</button></a>
-    <a href="/app/work?view=mine" class="{% if view == 'mine' %}active{% endif %}"><button type="button" class="ghost">Mine</button></a>
-    <a href="/app/work?view=blocked" class="{% if view == 'blocked' %}active{% endif %}"><button type="button" class="ghost">Blocked</button></a>
+  <div class="tabs" style="margin:1rem 0;display:flex;gap:.5rem;flex-wrap:wrap;">
+    <a href="/app/work?view=all"><button type="button" class="ghost {% if view == 'all' %}active{% endif %}">All</button></a>
+    <a href="/app/work?view=mine"><button type="button" class="ghost {% if view == 'mine' %}active{% endif %}">Mine</button></a>
+    <a href="/app/work?view=blocked"><button type="button" class="ghost {% if view == 'blocked' %}active{% endif %}">Blocked</button></a>
   </div>
+
+  <form method="get" action="/app/work" class="panel" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;">
+    <input type="hidden" name="view" value="{{ view }}" />
+    <label>Status
+      <select name="status" onchange="this.form.submit()">
+        <option value="">Any open</option>
+        {% for s in ['backlog','todo','in_progress','blocked','done','cancelled'] %}
+        <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Sort
+      <select name="sort" onchange="this.form.submit()">
+        <option value="updated_at" {% if sort == 'updated_at' %}selected{% endif %}>Updated</option>
+        <option value="priority" {% if sort == 'priority' %}selected{% endif %}>Priority</option>
+        <option value="work_status" {% if sort == 'work_status' %}selected{% endif %}>Status</option>
+        <option value="created_at" {% if sort == 'created_at' %}selected{% endif %}>Created</option>
+      </select>
+    </label>
+    <label>Order
+      <select name="dir" onchange="this.form.submit()">
+        <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descending</option>
+        <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Ascending</option>
+      </select>
+    </label>
+    <label style="display:flex;align-items:center;gap:.35rem;">
+      <input type="checkbox" name="include_done" value="1" {% if include_done %}checked{% endif %} onchange="this.form.submit()" />
+      Include done/cancelled
+    </label>
+  </form>
 
   <div class="panel">
     {% if items %}
@@ -31,6 +61,8 @@
           <th>Status</th>
           <th>Priority</th>
           <th>Assignee</th>
+          <th>Initiative</th>
+          <th>Due</th>
           <th>Updated</th>
         </tr>
       </thead>
@@ -38,14 +70,12 @@
         {% for item in items %}
         <tr>
           <td><a href="/app/work/{{ item.id }}">{{ item.title }}</a></td>
-          <td>{{ item.work_status }}</td>
+          <td><span class="badge">{{ item.work_status }}</span></td>
           <td>{{ item.priority }}</td>
-          <td>
-            {% if item.assignee_type and item.assignee_id %}
-              {{ item.assignee_type }}:{{ item.assignee_id }}
-            {% else %}&mdash;{% endif %}
-          </td>
-          <td>{{ item.updated_at[:16] if item.updated_at else '' }}</td>
+          <td>{{ item.assignee_label or '—' }}</td>
+          <td>{{ item.initiative_title or '—' }}</td>
+          <td>{{ (item.due_at or '')[:10] }}</td>
+          <td>{{ (item.updated_at or '')[:16] | replace('T', ' ') }}</td>
         </tr>
         {% endfor %}
       </tbody>

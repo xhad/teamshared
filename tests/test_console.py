@@ -148,6 +148,9 @@ def _fake_state() -> SimpleNamespace:
             strategic=SimpleNamespace(
                 stats=AsyncMock(return_value={"plans": 1, "objectives": 2, "statements": 3})
             ),
+            work=SimpleNamespace(
+                stats=AsyncMock(return_value={"open": 4, "blocked": 1, "pending_approval": 2})
+            ),
         ),
     )
 
@@ -361,6 +364,16 @@ def test_home_does_not_render_component_health_badges(state_with_stats) -> None:
     assert "System status" in resp.text
 
 
+def test_home_renders_work_stats(state_with_stats) -> None:
+    client, _ = _build()
+    _login(client)
+    resp = client.get("/app")
+    assert resp.status_code == 200
+    assert "Open tasks" in resp.text
+    assert ">4<" in resp.text
+    assert "/app/work" in resp.text
+
+
 def test_read_screen_redirects_when_unauthed() -> None:
     client, _ = _build()
     resp = client.get("/app/agents")
@@ -491,7 +504,8 @@ def test_work_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     facade.work_list = AsyncMock(return_value={"count": 1, "items": [{
         "id": "w1", "title": "Ship work queue", "work_status": "todo",
         "priority": "normal", "assignee_type": "agent", "assignee_id": "a1",
-        "updated_at": "2026-06-07T12:00:00+00:00",
+        "assignee_label": "cursor", "initiative_title": None,
+        "updated_at": "2026-06-07T12:00:00+00:00", "due_at": None,
     }]})
     set_state(SimpleNamespace(facade=facade))
     services.admin.list_agents = AsyncMock(return_value=[{"id": "a1", "name": "cursor"}])
@@ -504,7 +518,34 @@ def test_work_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
         assert resp.status_code == 200
         assert "Work" in resp.text
         assert "Ship work queue" in resp.text
+        assert "cursor" in resp.text
         assert "/app/work/new" in resp.text
+    finally:
+        clear_state()
+
+
+def test_work_detail_renders_comments(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, services = _build()
+    facade = MagicMock()
+    facade.work_get = AsyncMock(return_value={
+        "id": "w1", "title": "Ship work queue", "work_status": "todo",
+        "priority": "normal", "assignee_label": "cursor",
+        "description_md": "MVP", "blocked_reason": None,
+    })
+    facade.work_comment_list = AsyncMock(return_value={
+        "count": 1,
+        "comments": [{
+            "id": "c1", "body_md": "Started implementation",
+            "author_label": "cursor", "created_at": "2026-06-07T12:00:00+00:00",
+        }],
+    })
+    set_state(SimpleNamespace(facade=facade))
+    try:
+        _login(client)
+        resp = client.get("/app/work/w1")
+        assert resp.status_code == 200
+        assert "Started implementation" in resp.text
+        assert "/app/work/w1/edit" in resp.text
     finally:
         clear_state()
 
