@@ -11,7 +11,7 @@ from teamshared.identity.accounts import AccountStore
 from teamshared.identity.api_keys import ApiKeyStore
 from teamshared.identity.hashing import hash_secret, verify_secret
 from teamshared.identity.provisioning import signup_org
-from teamshared.identity.rbac import Authorizer, PermissionDenied, Permissions
+from teamshared.identity.rbac import Authorizer, PermissionDenied, Permissions, implies_permission
 from teamshared.identity.roles import RoleStore
 from teamshared.tenancy.context import TenantDb
 from teamshared.tenancy.repository import TenancyRepository
@@ -26,6 +26,20 @@ def test_hash_roundtrip() -> None:
 
 def test_hash_rejects_garbage() -> None:
     assert not verify_secret("x", "not-a-valid-hash")
+
+
+def test_implies_work_permissions_from_memory_and_org_admin() -> None:
+    member = frozenset({Permissions.MEMORY_READ, Permissions.MEMORY_CREATE})
+    assert implies_permission(member, Permissions.WORK_READ)
+    assert implies_permission(member, Permissions.WORK_WRITE)
+
+    viewer = frozenset({Permissions.MEMORY_READ})
+    assert implies_permission(viewer, Permissions.WORK_READ)
+    assert not implies_permission(viewer, Permissions.WORK_WRITE)
+
+    admin = frozenset({Permissions.ORG_ADMIN})
+    assert implies_permission(admin, Permissions.WORK_READ)
+    assert implies_permission(admin, Permissions.WORK_WRITE)
 
 
 @pytest.mark.integration

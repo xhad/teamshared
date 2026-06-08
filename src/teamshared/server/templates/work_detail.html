@@ -1,69 +1,129 @@
 {% extends "base.html" %}
 {% import "console_macros.html" as cm with context %}
+{% import "work_macros.html" as wm %}
 {% block title %}{% if item %}{{ item.title }}{% else %}Task{% endif %}{% endblock %}
 {% block content %}
-  <p><a href="/app/work">&larr; Back to work</a></p>
+  <div class="work-detail-shell">
+    <a class="work-form-back" href="/app/work">&larr; Back to tasks</a>
 
-  {% if flash == 'saved' %}<div class="flash-ok">Task updated.</div>{% endif %}
-  {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
-  {% if flash == 'commented' %}<div class="flash-ok">Comment added.</div>{% endif %}
-  {% if flash == 'invalid' %}<div class="unavailable">Comment body is required.</div>{% endif %}
-  {% if flash == 'error' %}<div class="unavailable">Could not save. Please try again.</div>{% endif %}
-  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+    {% if flash == 'saved' %}<div class="flash-ok">Task updated.</div>{% endif %}
+    {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
+    {% if flash == 'commented' %}<div class="flash-ok">Comment added.</div>{% endif %}
+    {% if flash == 'invalid' %}<div class="unavailable">Comment body is required.</div>{% endif %}
+    {% if flash == 'error' %}<div class="unavailable">Could not save. Please try again.</div>{% endif %}
+    {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
-  {% if item %}
-  <div class="page-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
-    <div>
-      <h1>{{ item.title }}</h1>
-      <p class="sub">
-        <span class="badge">{{ item.work_status }}</span>
-        <span class="badge">{{ item.priority }}</span>
-        {% if item.assignee_label %}&middot; {{ item.assignee_label }}{% endif %}
-        {% if item.initiative_title %}&middot; {{ item.initiative_title }}{% endif %}
-      </p>
-    </div>
-    <a href="/app/work/{{ item.id }}/edit"><button type="button" class="ghost">Edit</button></a>
-  </div>
+    {% if item %}
+    <div class="work-detail-layout">
+      <div class="work-detail-main">
+        <h1 class="work-detail-title">{{ item.title }}</h1>
 
-  {% if item.description_md %}
-  <div class="panel" style="margin:1rem 0;">
-    <h3>Description</h3>
-    <pre style="white-space:pre-wrap;margin:0;">{{ item.description_md }}</pre>
-  </div>
-  {% endif %}
-
-  {% if item.blocked_reason %}
-  <div class="panel" style="margin:1rem 0;">
-    <h3>Blocked</h3>
-    <p>{{ item.blocked_reason }}</p>
-  </div>
-  {% endif %}
-
-  <div class="panel" style="margin:1rem 0;">
-    <h3>Comments</h3>
-    {% if comments %}
-    <ul style="list-style:none;padding:0;margin:0 0 1rem;">
-      {% for c in comments %}
-      <li style="padding:.75rem 0;border-bottom:1px solid var(--border);">
-        <div style="font-size:.8rem;color:var(--muted);margin-bottom:.25rem;">
-          {{ c.author_label or c.author_type }} &middot;
-          {{ (c.created_at or '')[:16] | replace('T', ' ') }}
+        {% if item.blocked_reason %}
+        <div class="work-blocked-banner">
+          <h3>Blocked</h3>
+          <p>{{ item.blocked_reason }}</p>
         </div>
-        <pre style="white-space:pre-wrap;margin:0;">{{ c.body_md }}</pre>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="muted">No comments yet.</p>
-    {% endif %}
+        {% endif %}
 
-    <form method="post" action="/app/work/{{ item.id }}/comment">
-      {{ cm.csrf_field() }}
-      <label>Add comment
-        <textarea name="body" rows="3" required placeholder="Progress note, blocker, handoff…"></textarea>
-      </label>
-      <button type="submit">Post comment</button>
-    </form>
+        {% if item.description_md %}
+        <div class="work-detail-section">
+          <h3>Description</h3>
+          <pre class="work-detail-body">{{ item.description_md }}</pre>
+        </div>
+        {% endif %}
+
+        <div class="work-detail-section">
+          <h3>Activity</h3>
+          {% if comments %}
+          <ul class="work-activity">
+            {% for c in comments %}
+            <li class="work-activity-item">
+              <span class="work-avatar" title="{{ c.author_label or c.author_type }}">
+                {{ wm.assignee_initial(c.author_label or c.author_type) }}
+              </span>
+              <div class="work-activity-body">
+                <div class="work-activity-meta">
+                  <strong>{{ c.author_label or c.author_type }}</strong>
+                  &middot; {{ (c.created_at or '')[:16] | replace('T', ' ') }}
+                </div>
+                <pre class="work-activity-text">{{ c.body_md }}</pre>
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="muted">No comments yet. Add a progress note or handoff below.</p>
+          {% endif %}
+
+          <form method="post" action="/app/work/{{ item.id }}/comment" class="stack-form work-comment-form">
+            {{ cm.csrf_field() }}
+            <div class="field">
+              <label for="work-comment-body">Add comment</label>
+              <textarea id="work-comment-body" name="body" rows="3" required
+                placeholder="Progress note, blocker, handoff…"></textarea>
+            </div>
+            <button type="submit">Post comment</button>
+          </form>
+        </div>
+      </div>
+
+      <aside class="work-detail-props">
+        <h3>Details</h3>
+
+        <div class="work-prop-row">
+          <div class="work-prop-label">Status</div>
+          <div class="work-prop-value">
+            <span class="work-status-dot {{ item.work_status }}" aria-hidden="true"
+              style="display:inline-block;vertical-align:middle;margin-right:.35rem;"></span>
+            <span class="work-status-pill {{ item.work_status }}">{{ wm.status_label(item.work_status) }}</span>
+          </div>
+        </div>
+
+        <div class="work-prop-row">
+          <div class="work-prop-label">Priority</div>
+          <div class="work-prop-value">
+            <span class="work-priority {{ item.priority }}">{{ wm.priority_label(item.priority) }}</span>
+          </div>
+        </div>
+
+        <div class="work-prop-row">
+          <div class="work-prop-label">Assignee</div>
+          <div class="work-prop-value">
+            {% if item.assignee_label %}
+            <span class="work-assignee">
+              <span class="work-avatar">{{ wm.assignee_initial(item.assignee_label) }}</span>
+              <span class="work-assignee-name">{{ item.assignee_label }}</span>
+            </span>
+            {% else %}
+            <span class="muted">Unassigned</span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if item.initiative_title %}
+        <div class="work-prop-row">
+          <div class="work-prop-label">Initiative</div>
+          <div class="work-prop-value">{{ item.initiative_title }}</div>
+        </div>
+        {% endif %}
+
+        {% if item.due_at %}
+        <div class="work-prop-row">
+          <div class="work-prop-label">Due</div>
+          <div class="work-prop-value">{{ (item.due_at or '')[:10] }}</div>
+        </div>
+        {% endif %}
+
+        <div class="work-prop-row">
+          <div class="work-prop-label">Updated</div>
+          <div class="work-prop-value work-cell-muted">{{ (item.updated_at or '')[:16] | replace('T', ' ') }}</div>
+        </div>
+
+        <div class="work-detail-actions">
+          <a href="/app/work/{{ item.id }}/edit"><button type="button">Edit task</button></a>
+        </div>
+      </aside>
+    </div>
+    {% endif %}
   </div>
-  {% endif %}
 {% endblock %}
