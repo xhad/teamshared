@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% import "console_macros.html" as cm with context %}
+{% import "work_macros.html" as wm %}
 {% block title %}Work{% endblock %}
 {% block content %}
-  <div class="page-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
+  <div class="page-head">
     <div>
       <h1>Work</h1>
       <p class="sub">Org-wide task queue for humans and agents. Assign to a person or an agent identity.</p>
     </div>
-    <a href="/app/work/new"><button type="button">+ New task</button></a>
+    <a href="/app/work/new"><button type="button" class="btn-new-task">+ New task</button></a>
   </div>
 
   {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
@@ -16,72 +17,99 @@
   {% if flash == 'error' %}<div class="unavailable">Could not save the task. Please try again.</div>{% endif %}
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
-  <div class="tabs" style="margin:1rem 0;display:flex;gap:.5rem;flex-wrap:wrap;">
-    <a href="/app/work?view=all"><button type="button" class="ghost {% if view == 'all' %}active{% endif %}">All</button></a>
-    <a href="/app/work?view=mine"><button type="button" class="ghost {% if view == 'mine' %}active{% endif %}">Mine</button></a>
-    <a href="/app/work?view=blocked"><button type="button" class="ghost {% if view == 'blocked' %}active{% endif %}">Blocked</button></a>
-  </div>
+  <nav class="tabs work-tabs" aria-label="Work views">
+    <a href="/app/work?view=all" class="{% if view == 'all' %}on{% endif %}">All tasks</a>
+    <a href="/app/work?view=mine" class="{% if view == 'mine' %}on{% endif %}">My tasks</a>
+    <a href="/app/work?view=blocked" class="{% if view == 'blocked' %}on{% endif %}">Blocked</a>
+  </nav>
 
-  <form method="get" action="/app/work" class="panel" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;">
+  <form method="get" action="/app/work" class="work-toolbar">
     <input type="hidden" name="view" value="{{ view }}" />
-    <label>Status
-      <select name="status" onchange="this.form.submit()">
-        <option value="">Any open</option>
-        {% for s in ['backlog','todo','in_progress','blocked','done','cancelled'] %}
-        <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>Sort
-      <select name="sort" onchange="this.form.submit()">
-        <option value="updated_at" {% if sort == 'updated_at' %}selected{% endif %}>Updated</option>
-        <option value="priority" {% if sort == 'priority' %}selected{% endif %}>Priority</option>
-        <option value="work_status" {% if sort == 'work_status' %}selected{% endif %}>Status</option>
-        <option value="created_at" {% if sort == 'created_at' %}selected{% endif %}>Created</option>
-      </select>
-    </label>
-    <label>Order
-      <select name="dir" onchange="this.form.submit()">
-        <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Descending</option>
-        <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Ascending</option>
-      </select>
-    </label>
-    <label style="display:flex;align-items:center;gap:.35rem;">
-      <input type="checkbox" name="include_done" value="1" {% if include_done %}checked{% endif %} onchange="this.form.submit()" />
-      Include done/cancelled
-    </label>
+    <div class="work-toolbar-filters">
+      <label>Status
+        <select name="status" onchange="this.form.submit()" aria-label="Filter by status">
+          <option value="">Any open</option>
+          {% for s in ['backlog','todo','in_progress','blocked','done','cancelled'] %}
+          <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ wm.status_label(s) }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Sort by
+        <select name="sort" onchange="this.form.submit()" aria-label="Sort tasks">
+          <option value="updated_at" {% if sort == 'updated_at' %}selected{% endif %}>Last updated</option>
+          <option value="priority" {% if sort == 'priority' %}selected{% endif %}>Priority</option>
+          <option value="work_status" {% if sort == 'work_status' %}selected{% endif %}>Status</option>
+          <option value="created_at" {% if sort == 'created_at' %}selected{% endif %}>Date created</option>
+        </select>
+      </label>
+      <label>Order
+        <select name="dir" onchange="this.form.submit()" aria-label="Sort direction">
+          <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Newest first</option>
+          <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Oldest first</option>
+        </select>
+      </label>
+      <label class="check-inline">
+        <input type="checkbox" name="include_done" value="1" {% if include_done %}checked{% endif %} onchange="this.form.submit()" />
+        Show completed
+      </label>
+    </div>
   </form>
 
-  <div class="panel">
+  <div class="work-list">
     {% if items %}
-    <table>
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th>Status</th>
-          <th>Priority</th>
-          <th>Assignee</th>
-          <th>Initiative</th>
-          <th>Due</th>
-          <th>Updated</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in items %}
-        <tr>
-          <td><a href="/app/work/{{ item.id }}">{{ item.title }}</a></td>
-          <td><span class="badge">{{ item.work_status }}</span></td>
-          <td>{{ item.priority }}</td>
-          <td>{{ item.assignee_label or '—' }}</td>
-          <td>{{ item.initiative_title or '—' }}</td>
-          <td>{{ (item.due_at or '')[:10] }}</td>
-          <td>{{ (item.updated_at or '')[:16] | replace('T', ' ') }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="work-list-header" aria-hidden="true">
+      <span></span>
+      <span>Task name</span>
+      <span>Status</span>
+      <span>Priority</span>
+      <span>Assignee</span>
+      <span>Due</span>
+      <span>Updated</span>
+    </div>
+    {% for item in items %}
+    <article class="work-row">
+      <div class="work-status-dot {{ item.work_status }}" title="{{ wm.status_label(item.work_status) }}" aria-hidden="true"></div>
+      <div class="work-row-title">
+        <a href="/app/work/{{ item.id }}">{{ item.title }}</a>
+        <div class="work-row-meta">
+          <span class="work-status-pill {{ item.work_status }}">{{ wm.status_label(item.work_status) }}</span>
+          <span class="work-priority {{ item.priority }}">{{ wm.priority_label(item.priority) }}</span>
+          {% if item.assignee_label %}
+          <span class="work-assignee">
+            <span class="work-avatar">{{ wm.assignee_initial(item.assignee_label) }}</span>
+            {{ item.assignee_label }}
+          </span>
+          {% endif %}
+          {% if item.due_at %}<span class="work-cell-muted">{{ (item.due_at or '')[:10] }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="work-col-status">
+        <span class="work-status-pill {{ item.work_status }}">{{ wm.status_label(item.work_status) }}</span>
+      </div>
+      <div class="work-col-priority">
+        <span class="work-priority {{ item.priority }}">{{ wm.priority_label(item.priority) }}</span>
+      </div>
+      <div class="work-col-assignee">
+        {% if item.assignee_label %}
+        <span class="work-assignee" title="{{ item.assignee_label }}">
+          <span class="work-avatar">{{ wm.assignee_initial(item.assignee_label) }}</span>
+          <span class="work-assignee-name">{{ item.assignee_label }}</span>
+        </span>
+        {% else %}
+        <span class="work-avatar unassigned" title="Unassigned">&mdash;</span>
+        {% endif %}
+      </div>
+      <div class="work-col-due work-cell-muted">{{ (item.due_at or '')[:10] or '—' }}</div>
+      <div class="work-col-updated work-cell-muted">{{ (item.updated_at or '')[:16] | replace('T', ' ') }}</div>
+    </article>
+    {% endfor %}
     {% else %}
-    <p class="muted">No work items in this view.</p>
+    <div class="work-empty">
+      <div class="work-empty-icon" aria-hidden="true">&#9744;</div>
+      <h3>No tasks in this view</h3>
+      <p>Create a task to track work for your team and agents, or adjust filters to see more items.</p>
+      <a href="/app/work/new"><button type="button">+ New task</button></a>
+    </div>
     {% endif %}
   </div>
 {% endblock %}

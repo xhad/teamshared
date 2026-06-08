@@ -1,0 +1,24 @@
+{# Shared helpers for work list and forms #}
+{% macro status_label(s) -%}
+{%- if s == 'backlog' -%}Backlog
+{%- elif s == 'todo' -%}To do
+{%- elif s == 'in_progress' -%}In progress
+{%- elif s == 'blocked' -%}Blocked
+{%- elif s == 'done' -%}Done
+{%- elif s == 'cancelled' -%}Cancelled
+{%- else -%}{{ s | replace('_', ' ') | title }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro priority_label(p) -%}
+{%- if p == 'urgent' -%}Urgent
+{%- elif p == 'high' -%}High
+{%- elif p == 'normal' -%}Normal
+{%- elif p == 'low' -%}Low
+{%- else -%}{{ p | title }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro assignee_initial(label) -%}
+{%- if label -%}{{ label[:1] | upper }}{%- else -%}?{%- endif -%}
+{%- endmacro %}

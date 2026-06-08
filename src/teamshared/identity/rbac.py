@@ -47,6 +47,19 @@ class PermissionDenied(Exception):  # noqa: N818 - idiomatic name; not an *Error
         )
 
 
+def implies_permission(granted: frozenset[str], permission: str) -> bool:
+    """Return whether ``granted`` satisfies ``permission``, including implied caps."""
+    if permission in granted:
+        return True
+    if Permissions.MEMORY_ADMIN in granted and permission.startswith("memory:"):
+        return True
+    if Permissions.ORG_ADMIN in granted and permission.startswith("work:"):
+        return True
+    if permission == Permissions.WORK_READ and Permissions.MEMORY_READ in granted:
+        return True
+    return permission == Permissions.WORK_WRITE and Permissions.MEMORY_CREATE in granted
+
+
 class Authorizer:
     def __init__(self, db: TenantDb) -> None:
         self.db = db
@@ -78,9 +91,7 @@ class Authorizer:
 
     async def has(self, principal: Principal, permission: str) -> bool:
         perms = await self.effective_permissions(principal)
-        return permission in perms or (Permissions.MEMORY_ADMIN in perms and permission.startswith(
-            "memory:"
-        ))
+        return implies_permission(perms, permission)
 
     async def require(self, principal: Principal, permission: str) -> None:
         if not await self.has(principal, permission):
