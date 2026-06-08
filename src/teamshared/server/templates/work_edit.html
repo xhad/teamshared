@@ -1,129 +1,133 @@
 {% extends "base.html" %}
 {% import "console_macros.html" as cm with context %}
 {% import "work_macros.html" as wm %}
-{% block title %}{% if is_new %}New task{% else %}Task{% endif %}{% endblock %}
+{% block title %}{% if is_new %}New task{% else %}Edit task{% endif %}{% endblock %}
 {% block content %}
   <div class="work-form-shell">
-    <a class="work-form-back" href="/app/work">&larr; Back to tasks</a>
-
-    <h1 style="margin:0 0 .35rem;font-size:1.1rem;color:var(--muted);font-weight:600;">
-      {% if is_new %}Create task{% else %}Edit task{% endif %}
-    </h1>
-
     {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
     {% if flash == 'saved' %}<div class="flash-ok">Task saved.</div>{% endif %}
     {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
     {% if is_new or item %}
-    <form method="post" action="/app/work/save" class="stack-form">
+    <form method="post" action="/app/work/save" id="work-compose-form">
       {{ cm.csrf_field() }}
       {% if item %}<input type="hidden" name="work_id" value="{{ item.id }}" />{% endif %}
+      <input type="hidden" name="assignee_kind" id="work-assignee-kind"
+        value="{% if item and item.assignee_type %}{{ item.assignee_type }}{% endif %}" />
 
-      <div class="work-form-title">
-        <input type="text" name="title" required placeholder="Task name" value="{{ item.title if item else '' }}"
-          aria-label="Task name" autofocus />
+      <div class="work-compose-header">
+        <div style="display:flex;align-items:center;gap:.85rem;min-width:0;">
+          <a class="work-form-back" href="/app/work">&larr; Tasks</a>
+          <h1>{% if is_new %}New task{% else %}Edit task{% endif %}</h1>
+        </div>
+        <div class="work-compose-actions">
+          <a href="/app/work"><button type="button" class="ghost">Cancel</button></a>
+          <button type="submit">{% if is_new %}Create task{% else %}Save changes{% endif %}</button>
+        </div>
       </div>
 
-      <div class="work-form-layout">
-        <div class="work-form-main">
-          <div class="field">
-            <label for="work-description">Description</label>
-            <textarea id="work-description" name="description_md" rows="10"
-              placeholder="Add details, context, or acceptance criteria…">{{ item.description_md if item and item.description_md else '' }}</textarea>
-            <p class="work-form-hint">Markdown supported.</p>
-          </div>
+      <div class="work-compose-card">
+        <div class="work-form-title">
+          <input type="text" name="title" required placeholder="Write a task name"
+            value="{{ item.title if item else '' }}" aria-label="Task name" autofocus />
         </div>
 
-        <aside class="work-form-props">
-          <h3>Details</h3>
-
-          <div class="field">
-            <label for="work-status">Status</label>
-            <select id="work-status" name="work_status">
-              {% for s in ['backlog','todo','in_progress','blocked','done','cancelled'] %}
-              <option value="{{ s }}" {% if item and item.work_status == s %}selected{% elif not item and s == 'todo' %}selected{% endif %}>{{ wm.status_label(s) }}</option>
-              {% endfor %}
-            </select>
+        <div class="work-form-layout">
+          <div class="work-compose-main">
+            <div class="field">
+              <label for="work-description">Description</label>
+              <textarea id="work-description" class="work-compose-desc" name="description_md" rows="12"
+                placeholder="What needs to be done? Add context, links, or acceptance criteria…">{{ item.description_md if item and item.description_md else '' }}</textarea>
+              <p class="work-form-hint">Markdown supported.</p>
+            </div>
           </div>
 
-          <div class="field">
-            <label for="work-priority">Priority</label>
-            <select id="work-priority" name="priority">
-              {% for p in ['urgent','high','normal','low'] %}
-              <option value="{{ p }}" {% if item and item.priority == p %}selected{% elif not item and p == 'normal' %}selected{% endif %}>{{ wm.priority_label(p) }}</option>
-              {% endfor %}
-            </select>
-          </div>
+          <aside class="work-form-props">
+            <h3>Task details</h3>
 
-          <div class="field">
-            <label for="work-assignee-kind">Assign to</label>
-            <select id="work-assignee-kind" name="assignee_kind">
-              <option value="" {% if not item or not item.assignee_type %}selected{% endif %}>Unassigned</option>
-              <option value="user" {% if item and item.assignee_type == 'user' %}selected{% endif %}>Person</option>
-              <option value="agent" {% if item and item.assignee_type == 'agent' %}selected{% endif %}>Agent</option>
-            </select>
-          </div>
+            <div class="work-field-row">
+              <label for="work-assignee-ref">Assignee</label>
+              <select id="work-assignee-ref" name="assignee_ref" aria-label="Assignee">
+                <option value="" data-kind="">No assignee</option>
+                <optgroup label="People">
+                  {% for m in members %}
+                  <option value="{{ m.email }}" data-kind="user"
+                    {% if item and item.assignee_type == 'user' and item.assignee_id|string == m.id %}selected{% endif %}>
+                    {{ m.name }}
+                  </option>
+                  {% endfor %}
+                </optgroup>
+                <optgroup label="Agents">
+                  {% for a in agents %}
+                  <option value="{{ a.name }}" data-kind="agent"
+                    {% if item and item.assignee_type == 'agent' and item.assignee_id|string == a.id %}selected{% endif %}>
+                    {{ a.name }}
+                  </option>
+                  {% endfor %}
+                </optgroup>
+              </select>
+            </div>
 
-          <div class="field">
-            <label for="work-assignee-ref">Assignee</label>
-            <select id="work-assignee-ref" name="assignee_ref">
-              <option value="">Select assignee…</option>
-              <optgroup label="People">
-                {% for m in members %}
-                <option value="{{ m.email }}" data-kind="user"
-                  {% if item and item.assignee_type == 'user' and item.assignee_id|string == m.id %}selected{% endif %}>
-                  {{ m.name }} &lt;{{ m.email }}&gt;
-                </option>
+            <div class="work-field-row">
+              <label for="work-status">Status</label>
+              <select id="work-status" name="work_status">
+                {% for s in ['backlog','todo','in_progress','blocked','done','cancelled'] %}
+                <option value="{{ s }}" {% if item and item.work_status == s %}selected{% elif not item and s == 'todo' %}selected{% endif %}>{{ wm.status_label(s) }}</option>
                 {% endfor %}
-              </optgroup>
-              <optgroup label="Agents">
-                {% for a in agents %}
-                <option value="{{ a.name }}" data-kind="agent"
-                  {% if item and item.assignee_type == 'agent' and item.assignee_id|string == a.id %}selected{% endif %}>
-                  {{ a.name }}
-                </option>
+              </select>
+            </div>
+
+            <div class="work-field-row">
+              <label for="work-priority">Priority</label>
+              <select id="work-priority" name="priority">
+                {% for p in ['urgent','high','normal','low'] %}
+                <option value="{{ p }}" {% if item and item.priority == p %}selected{% elif not item and p == 'normal' %}selected{% endif %}>{{ wm.priority_label(p) }}</option>
                 {% endfor %}
-              </optgroup>
-            </select>
-          </div>
+              </select>
+            </div>
 
-          <div class="field">
-            <label for="work-blocked">Blocked reason</label>
-            <input id="work-blocked" type="text" name="blocked_reason"
-              placeholder="Why is this blocked?"
-              value="{{ item.blocked_reason if item and item.blocked_reason else '' }}" />
-          </div>
+            <div class="work-field-row{% if not item or item.work_status != 'blocked' %} is-hidden{% endif %}" id="work-blocked-row">
+              <label for="work-blocked">Blocked</label>
+              <input id="work-blocked" type="text" name="blocked_reason"
+                placeholder="What is blocking this?"
+                value="{{ item.blocked_reason if item and item.blocked_reason else '' }}" />
+            </div>
 
-          <div class="field">
-            <label for="work-initiative">Initiative</label>
-            <input id="work-initiative" type="text" name="initiative_id"
-              placeholder="Optional initiative UUID"
-              value="{{ item.initiative_id if item and item.initiative_id else '' }}" />
-          </div>
-        </aside>
-      </div>
-
-      <div class="work-form-actions">
-        <button type="submit">{% if is_new %}Create task{% else %}Save changes{% endif %}</button>
-        <a href="/app/work"><button type="button" class="ghost">Cancel</button></a>
+            <details class="work-advanced"{% if item and item.initiative_id %} open{% endif %}>
+              <summary>Advanced</summary>
+              <div class="work-field-row">
+                <label for="work-initiative">Initiative</label>
+                <input id="work-initiative" type="text" name="initiative_id"
+                  placeholder="UUID (optional)"
+                  value="{{ item.initiative_id if item and item.initiative_id else '' }}" />
+              </div>
+            </details>
+          </aside>
+        </div>
       </div>
     </form>
     <script>
       (function () {
         var kind = document.getElementById('work-assignee-kind');
         var ref = document.getElementById('work-assignee-ref');
-        if (!kind || !ref) return;
-        ref.addEventListener('change', function () {
+        var status = document.getElementById('work-status');
+        var blockedRow = document.getElementById('work-blocked-row');
+
+        function syncAssigneeKind() {
+          if (!kind || !ref) return;
           var opt = ref.options[ref.selectedIndex];
-          var k = opt && opt.getAttribute('data-kind');
-          if (k) kind.value = k;
-          else if (!ref.value) kind.value = '';
-        });
-        kind.addEventListener('change', function () {
-          if (!kind.value) {
-            ref.value = '';
-          }
-        });
+          kind.value = (opt && opt.getAttribute('data-kind')) || '';
+        }
+
+        function syncBlockedRow() {
+          if (!status || !blockedRow) return;
+          blockedRow.classList.toggle('is-hidden', status.value !== 'blocked');
+        }
+
+        if (ref) ref.addEventListener('change', syncAssigneeKind);
+        if (status) status.addEventListener('change', syncBlockedRow);
+        syncAssigneeKind();
+        syncBlockedRow();
       })();
     </script>
     {% endif %}

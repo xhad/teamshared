@@ -146,26 +146,54 @@
     .work-empty h3 { margin: 0 0 .35rem; color: #fff; font-size: 1.08rem; font-weight: 600; }
     .work-empty p { margin: 0 0 1.1rem; color: var(--muted); font-size: .9rem; max-width: 22rem; margin-left: auto;
       margin-right: auto; }
-    .work-form-shell { max-width: 54rem; }
-    .work-form-back { font-size: .88rem; margin-bottom: .85rem; display: inline-block; color: var(--muted); }
+    .work-form-shell { max-width: 56rem; margin: 0 auto; }
+    .work-form-back { font-size: .88rem; margin-bottom: 0; display: inline-flex; align-items: center;
+      gap: .35rem; color: var(--muted); }
     .work-form-back:hover { color: var(--indigo-bright); }
-    .work-form-title { margin-bottom: 1.35rem; }
-    .work-form-title input { width: 100%; padding: .65rem 0; border: 0; border-bottom: 2px solid var(--border);
-      border-radius: 0; background: transparent; color: #fff; font-size: 1.5rem; font-weight: 600;
-      letter-spacing: -.02em; font-family: inherit; }
-    .work-form-title input:focus { outline: none; border-bottom-color: var(--indigo-bright); }
+    .work-compose-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      flex-wrap: wrap; margin-bottom: 1.25rem; }
+    .work-compose-header h1 { margin: 0; font-size: 1.35rem; letter-spacing: -.02em; color: #fff; }
+    .work-compose-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    .work-compose-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+      padding: 1.35rem 1.5rem 1.5rem; box-shadow: 0 18px 40px rgba(0,0,0,.22); }
+    .work-form-title { margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+    .work-form-title input { width: 100%; padding: .25rem 0; border: 0; border-radius: 0; background: transparent;
+      color: #fff; font-size: 1.65rem; font-weight: 600; letter-spacing: -.02em; font-family: inherit; line-height: 1.3; }
+    .work-form-title input:focus { outline: none; }
     .work-form-title input::placeholder { color: var(--faint); font-weight: 500; }
-    .work-form-layout { display: grid; grid-template-columns: minmax(0, 1fr) 17.5rem; gap: 1.5rem; align-items: start; }
-    .work-form-main .field textarea { min-height: 14rem; }
-    .work-form-props { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1rem 1.05rem; }
-    .work-form-props h3 { margin: 0 0 .9rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+    .work-form-layout { display: grid; grid-template-columns: minmax(0, 1fr) 16.5rem; gap: 1.75rem; align-items: start; }
+    .work-compose-main .field > label { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em;
       color: var(--faint); font-weight: 600; }
-    .work-form-props .field { margin-bottom: .85rem; }
-    .work-form-props .field:last-child { margin-bottom: 0; }
-    .work-form-props .field > label { font-size: .72rem; }
-    .work-form-actions { margin-top: 1.5rem; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
-      padding-top: 1.15rem; border-top: 1px solid var(--border); }
-    .work-form-hint { font-size: .78rem; color: var(--faint); margin: .35rem 0 0; }
+    .work-compose-desc { width: 100%; min-height: 16rem; padding: .85rem 1rem; border: 1px solid var(--border);
+      border-radius: 12px; background: var(--panel-2); color: var(--text); font-size: .95rem; line-height: 1.55;
+      font-family: inherit; resize: vertical; }
+    .work-compose-desc:focus { outline: none; border-color: var(--indigo-bright);
+      box-shadow: 0 0 0 2px rgba(99,102,241,.22); }
+    .work-compose-desc::placeholder { color: var(--faint); }
+    .work-form-props { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px;
+      padding: .35rem .85rem; }
+    .work-form-props h3 { margin: 0; padding: .65rem 0 .45rem; font-size: .72rem; text-transform: uppercase;
+      letter-spacing: .04em; color: var(--faint); font-weight: 600; border-bottom: 1px solid var(--border); }
+    .work-field-row { display: grid; grid-template-columns: 5.25rem minmax(0, 1fr); gap: .65rem; align-items: center;
+      padding: .62rem 0; border-bottom: 1px solid var(--border); }
+    .work-field-row:last-child { border-bottom: 0; }
+    .work-field-row > label { font-size: .82rem; color: var(--muted); font-weight: 500; margin: 0;
+      text-transform: none; letter-spacing: 0; }
+    .work-field-row select, .work-field-row input { width: 100%; padding: .42rem .55rem;
+      border: 1px solid var(--border); border-radius: 8px; font-size: .86rem; background: var(--panel);
+      color: var(--text); font-family: inherit; }
+    .work-field-row select:focus, .work-field-row input:focus { outline: none; border-color: var(--indigo-bright);
+      box-shadow: 0 0 0 2px rgba(99,102,241,.2); }
+    .work-field-row.is-hidden { display: none; }
+    .work-advanced { margin-top: .65rem; border-top: 1px solid var(--border); padding-top: .55rem; }
+    .work-advanced summary { cursor: pointer; font-size: .78rem; color: var(--muted); font-weight: 600;
+      list-style: none; user-select: none; }
+    .work-advanced summary::-webkit-details-marker { display: none; }
+    .work-advanced summary::before { content: "+ "; color: var(--indigo-bright); }
+    .work-advanced[open] summary::before { content: "− "; }
+    .work-advanced .work-field-row { padding-top: .75rem; }
+    .work-form-hint { font-size: .78rem; color: var(--faint); margin: .45rem 0 0; }
+    .work-form-actions { display: none; }
     .work-detail-shell { max-width: 54rem; }
     .work-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 17.5rem; gap: 1.5rem;
       align-items: start; margin-top: 1rem; }

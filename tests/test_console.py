@@ -524,6 +524,24 @@ def test_work_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
         clear_state()
 
 
+def test_work_new_renders_compose_form(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, services = _build()
+    services.admin.list_agents = AsyncMock(return_value=[{"id": "a1", "name": "cursor"}])
+    services.admin.list_members = AsyncMock(return_value=[{
+        "user_id": "u1", "email": "owner@example.com", "name": "Owner",
+    }])
+    try:
+        _login(client)
+        resp = client.get("/app/work/new")
+        assert resp.status_code == 200
+        assert "work-compose-card" in resp.text
+        assert "Write a task name" in resp.text
+        assert "Create task" in resp.text
+        assert "Description (markdown)" not in resp.text
+    finally:
+        clear_state()
+
+
 def test_work_detail_renders_comments(monkeypatch: pytest.MonkeyPatch) -> None:
     client, services = _build()
     facade = MagicMock()
