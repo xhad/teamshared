@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.3.0
+version: 1.4.0
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.3.0 -->
+<!-- teamshared-rule-version: 1.4.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.3.0`).
+This rule is versioned (`version` in the frontmatter above, currently `1.4.0`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
-1. Early in a session (or whenever the user asks about teamshared versions or
-   updates), call the `version` tool, passing this rule's frontmatter `version`
-   (`1.3.0`) as `installed_rule_version`.
+1. On the **first turn of a chat** (or when the user asks about teamshared
+   versions), call the `version` tool with this rule's frontmatter `version`
+   (`1.4.0`) as `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor:
    `~/.cursor/rules/teamshared.mdc`; the response's `rule_path` is the hint),
@@ -29,12 +29,31 @@ fresh:
 
 Never invent a version; read it from the frontmatter or the `version` tool.
 
+## Every turn checklist
+
+Run these in order on **every** turn (see **Session logging** for setup details):
+
+1. **Ensure session** — recover or open `session_id` (do not open a second
+   session if `conversation/active-session` already has one for this chat).
+2. **`memory_session_append(session_id, "user", ...)`** — the substantive user
+   request (not boilerplate system context).
+3. **`memory_recall(...)`** — for non-trivial tasks (architecture, debugging,
+   past work, "how do we…"). Skip for pure one-liner acknowledgments.
+4. **Do the work** — tools, edits, answers.
+5. **`memory_session_append(session_id, "assistant", ...)`** — a faithful summary
+   of your reply. This should be your **last MCP call** before ending the turn.
+6. **`memory_remember` / `work_*`** — as needed for durable facts or tasks.
+
+After significant tool use, optionally append a one-line `tool` turn summarizing
+what ran and the outcome. Server middleware also logs MCP tool calls to a
+separate autosession; your explicit session holds the NL story.
+
 ## Core workflows
 
 ### Recall first
 
-Before any non-trivial request (architecture, debugging, "how do we…", past work),
-call `memory_recall` with the user's query. Ground answers in hits; cite them.
+Before any non-trivial request, call `memory_recall` with the user's query
+(step 3 above). Ground answers in hits; cite them.
 
 - Omit `scope` to search all pillars (default).
 - `scope=["procedural"]` for "how do we usually…".
@@ -50,12 +69,13 @@ If recall is empty, say so before answering from priors.
 
 ### Code work: resolve `repo` and `github`
 
-When the user is working on code in a git checkout:
+**Always** resolve `repo=` for session logging, state, and code-scoped memory —
+every chat, not only git tasks:
 
-1. **Workspace slug** — run `git rev-parse --show-toplevel` (or use the Cursor
-   workspace root), strip a leading `/`, replace `/` with `-`. Pass as `repo=`
-   on `memory_recall`, `memory_remember`, and `memory_session_open` (same slug
-   as `memory_state`).
+1. **Workspace slug** — run `git rev-parse --show-toplevel` when in a git
+   checkout; otherwise use the Cursor workspace root. Strip a leading `/`,
+   replace `/` with `-`. Pass as `repo=` on `memory_recall`, `memory_remember`,
+   `memory_session_*`, and `memory_state_*`.
 2. **GitHub repo** — when `command -v gh` succeeds, run
    `gh repo view --json nameWithOwner` from the repo root and pass
    `github=<nameWithOwner>` (e.g. `xhad/teamshared`). Stable across machines;
@@ -99,40 +119,44 @@ Agent-created tasks land in `/app/approvals` until a human approves them.
 Human/console-created tasks are active immediately. Optional `initiative_id=`
 links a task to a strategic initiative.
 
-Pair with `memory_recall` for context and `memory_session_*` to log every chat
-to working memory (see below).
-
 ### Session logging (every chat)
 
-Log the full conversation to teamshared on **every** chat via MCP — the agent
-owns capture; there is no client-side transcript hook.
+Log conversation turns to teamshared on **every** chat via MCP — the agent owns
+capture; there is no client-side transcript hook. Session logging via
+`memory_session_*` is agent-initiated and does **not** use the `/sessions/turns`
+consent path (unlike automatic transcript ingest).
 
-Resolve `repo=` (workspace slug) before session/state calls when you know the
-workspace root. Use state key `conversation/active-session`.
+Always resolve `repo=` first (see above). State key: `conversation/active-session`.
+Treat a missing or empty `session_id` in state as no active session.
 
-**New conversation** — when your context has no prior assistant turns in this
-thread (first user message):
+**First turn of a thread** (no prior assistant turns in your context):
 
-1. `memory_state_get(repo=..., key="conversation/active-session")`. If it holds
-   a `session_id`, call `memory_session_close(session_id, distill=true)` to
-   finish the previous chat's session.
-2. `memory_session_open(topic=<first user message, truncated>, repo=..., github=...)`.
-3. `memory_state_set(repo=..., key="conversation/active-session", value={"session_id": "<id>"})`.
+1. `memory_state_get(repo=..., key="conversation/active-session")`.
+2. If `session_id` is present → `memory_session_close(session_id, distill=true)`.
+3. `memory_session_open(topic=<first user message, max ~120 chars>, repo=..., github=...)`.
+4. `memory_state_set(repo=..., key="conversation/active-session", value={"session_id": "<id>"})`.
 
-**Every turn**:
+Do **not** call `memory_session_open` if state already holds a `session_id` for
+this chat.
 
-1. Recover `session_id` from context or step 3 above; if missing, run the new-
-   conversation steps.
-2. `memory_session_append(session_id, "user", <user message>)` before substantive work.
-3. After your reply: `memory_session_append(session_id, "assistant", <your reply>)`.
-
-**When done or pivoting** (task complete, or the user clearly starts a new topic
-mid-thread):
+**Mid-thread pivot** (user clearly starts a new topic — do not wait for a new
+Cursor chat):
 
 1. `memory_session_close(session_id, distill=true)`.
-2. `memory_state_set(repo=..., key="conversation/active-session", value={})`.
+2. `memory_state_set(..., value={})`.
+3. Immediately `memory_session_open` with the new topic and update state — same turn.
 
-Do not store secrets, tokens, or credentials in session turns.
+**When done** (task complete, user says goodbye):
+
+1. `memory_session_close(session_id, distill=true)`.
+2. `memory_state_set(..., value={})`.
+
+**Append failure recovery** — if `memory_session_append` fails (expired or
+unknown `session_id`): open a new session, update state, retry the append once.
+
+Append the substantive user request and a faithful summary of your reply — not
+UI boilerplate. Truncate long tool output. Never append secrets, tokens, or
+credentials.
 
 ### Read vs write scoping
 
@@ -157,13 +181,16 @@ these are human/browser actions, not MCP tools:
   playbooks rendered as a browsable, human-readable knowledge base.
 - **Work** (`/app/work`): org-wide task queue; assign to people or agents.
 - **Manage:** agents, **API keys** (`tsk_…`, the bearer token MCP/agents use),
-  people (add a teammate by email), approvals, and capture consent.
+  people (add a teammate by email), approvals, and capture consent (for automatic
+  `/sessions/turns` ingest — not for agent-driven `memory_session_*` logging).
 
 A fresh self-serve org starts empty and isolated; joining the shared team brain
 is an admin action (People → add member). The public, no-auth status page is at
 `<server>/memory`.
 
 ## Tool reference
+
+Prefer the **Quick chooser** during tasks; use these tables when you need param detail.
 
 ### `health`
 
@@ -211,12 +238,12 @@ For code work, pass `repo=` and/or `github=`; omit both for cross-cutting facts.
 
 ### `memory_session_open` / `memory_session_append` / `memory_session_close`
 
-Working-memory buffer in Redis for the current task.
+Working-memory buffer in Redis — one session per chat (see **Session logging**).
 
 | Tool | Key params |
 |---|---|
-| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo`, `github` (scope distilled memories) → `{session_id, agent}` |
-| `memory_session_append` | `session_id`, `role`, `content` → `{turn_count}` |
+| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo`, `github` → `{session_id, agent}` |
+| `memory_session_append` | `session_id`, `role` (`user` \| `assistant` \| `tool` \| `system`), `content` → `{turn_count}` |
 | `memory_session_close` | `session_id`, `distill=true` (default) queues distillation to durable memory |
 
 ### `memory_episodes_list`
@@ -301,7 +328,7 @@ Token+repo scoped JSON blobs for client bookkeeping (not durable team knowledge)
 |---|---|
 | `repo` | Workspace slug: absolute path, leading `/` removed, `/` → `-` |
 | `key` | Opaque key, e.g. `conversation/active-session`, `continual-learning/index` |
-| `value` | JSON object (`memory_state_set` only) |
+| `value` | JSON object (`memory_state_set` only); `{}` clears active session |
 
 Prefer server state over git for incremental indexes and cadence files when MCP
 is available; fall back to `~/.cursor/hooks/state/...` locally.
@@ -349,3 +376,4 @@ to write to the local rule file. See **Staying current** above.
 - Don't echo raw memory IDs unless the user asks.
 - Don't fabricate hits — if `memory_recall` is empty, say so.
 - Don't store secrets, tokens, or credentials in any memory tool.
+- Don't open a second `memory_session_open` when state already has a `session_id` for this chat.

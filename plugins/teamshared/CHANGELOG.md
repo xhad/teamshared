@@ -8,6 +8,9 @@
 - Removed the Cursor `conversation-capture-stop` transcript hook; NL capture is
   agent-driven through MCP instead of `POST /sessions/turns`.
 - Continual-learning stop hook unchanged.
+- **Rule 1.4.0:** every-turn checklist (ordered steps), mid-thread pivot handling,
+  append-failure recovery, always resolve `repo=`, consent clarification, aligned
+  starter procedures.
 
 ## 0.3.0 — 2026-06-01
 

@@ -32,7 +32,7 @@ MCP tools (`memory_remember`, `memory_recall`, …) live on the separate
 |-------------|------|
 | Save / remember for the team or teamshared | `memory_remember(content, kind=…)` |
 | Search past work or team knowledge | `memory_recall(query)` |
-| Multi-turn task buffer | `memory_session_open` / `_append` / `_close` (every chat) |
+| Log every chat | `memory_session_open` / `_append` / `_close` |
 
 ## Recall first
 
@@ -50,11 +50,10 @@ If recall returns nothing relevant, say so before answering from priors.
 
 ## Code work: workspace + GitHub scope
 
-When working on code in a git checkout:
+Always resolve `repo=` for session logging and code-scoped memory:
 
-1. **Workspace slug (`repo=`)** — `git rev-parse --show-toplevel`, strip leading
-   `/`, replace `/` with `-`. Use on `memory_recall`, `memory_remember`, and
-   `memory_session_open`.
+1. **Workspace slug (`repo=`)** — `git rev-parse --show-toplevel` when in git,
+   otherwise the workspace root; strip leading `/`, replace `/` with `-`.
 2. **GitHub repo (`github=`)** — when `gh` is available,
    `gh repo view --json nameWithOwner` → pass `github=<nameWithOwner>` (e.g.
    `xhad/teamshared`). Portable across machines; stored as `github:<owner>/<repo>`.
@@ -78,20 +77,22 @@ For code-specific facts, pass `repo=` and/or `github=` on `memory_remember`.
 
 ## Session logging (every chat)
 
-Log the full conversation via MCP on every chat:
+Log conversation turns via MCP on every chat:
 
-1. **First turn:** close any prior `session_id` from
-   `memory_state_get(repo=..., key="conversation/active-session")`, then
-   `memory_session_open(topic=..., repo=..., github=...)`, and store the new
-   `session_id` in that state key.
-2. **Every turn:** `memory_session_append(session_id, role, content)` for the
-   user message and your reply.
-3. **When done or pivoting:** `memory_session_close(session_id, distill=true)`
-   and clear the state key.
+1. **Always** resolve `repo=` from workspace root.
+2. **First turn:** close any prior `session_id` in
+   `memory_state_get(repo, "conversation/active-session")`, open a new session,
+   store `session_id`. Do not open a second session if one is already active.
+3. **Every turn (in order):** append user → recall (non-trivial) → work → append
+   assistant summary (last MCP call before ending the turn).
+4. **Pivot:** close → clear state → open new session immediately (same turn).
+5. **Append failure:** reopen session, update state, retry once.
 
-Do not store secrets in session turns.
+Optional: append one-line `tool` turns after significant tool use. Never append
+secrets.
 
 ## Never
 
 - Don't call `memory_forget` without explicit user instruction.
 - Don't fabricate hits — if `memory_recall` is empty, say so.
+- Don't open a second session when state already has a `session_id` for this chat.
