@@ -323,7 +323,7 @@ def _landing_page_html() -> str:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TeamShared — Shared Context for every AI agent on your team</title>
+  <title>TeamShared — Shared context for your agentic workforce</title>
   <meta name="description" content="Multi-pillar agent memory, exposed as an MCP server. Give Cursor, Codex, Claude, and every agent on your team one durable, shared memory." />
   <style>{_LANDING_CSS}</style>
 </head>
@@ -351,7 +351,7 @@ def _landing_page_html() -> str:
       <div class="hero-glow" aria-hidden="true"></div>
       <div class="hero-inner">
         <a class="eyebrow" href="#pillars">Multi-pillar agent memory · MCP-native</a>
-        <h1>Shared Context for<br />every AI agent on your team.</h1>
+        <h1>Shared context for your agentic workforce.</h1>
         <p class="lede">
           TeamShared gives Cursor, Codex, Claude, and every other agent that speaks MCP
           a single durable memory — the facts, decisions, and playbooks your team builds
