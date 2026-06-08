@@ -148,6 +148,33 @@ async def test_approval_decide_work_activate(monkeypatch: pytest.MonkeyPatch) ->
     activate_mock.assert_awaited_once_with(ORG, WORK_ID)
 
 
+async def test_enrich_labels_uses_display_name_not_name() -> None:
+    from teamshared.memory.work import WorkStore
+
+    db = MagicMock()
+    conn = MagicMock()
+    cur = MagicMock()
+    user_id = UUID("22222222-2222-2222-2222-222222222222")
+    cur.fetchall = AsyncMock(return_value=[(str(user_id), "owner@example.com")])
+    conn.execute = AsyncMock(return_value=cur)
+    conn.__aenter__ = AsyncMock(return_value=conn)
+    conn.__aexit__ = AsyncMock(return_value=False)
+    db.org = MagicMock(return_value=conn)
+
+    store = WorkStore(db)
+    items = [{
+        "assignee_type": "user",
+        "assignee_id": user_id,
+        "requester_type": None,
+        "requester_id": None,
+        "initiative_id": None,
+    }]
+    await store.enrich_labels(ORG, items)
+    user_sql = conn.execute.await_args_list[-1].args[0]
+    assert "coalesce(display_name, email)" in user_sql
+    assert items[0]["assignee_label"] == "owner@example.com"
+
+
 async def test_list_items_excludes_closed_by_default() -> None:
     from teamshared.memory.work import WorkStore
 

@@ -385,7 +385,7 @@ class WorkStore:
                     agent_names[r[0]] = r[1]
             if user_ids:
                 cur = await conn.execute(
-                    "SELECT id::text, coalesce(name, email) FROM users WHERE id = ANY(%s::uuid[])",
+                    "SELECT id::text, coalesce(display_name, email) FROM users WHERE id = ANY(%s::uuid[])",
                     (list(user_ids),),
                 )
                 for r in await cur.fetchall():
@@ -478,7 +478,7 @@ class WorkStore:
                     agent_names[r[0]] = r[1]
             if user_ids:
                 cur = await conn.execute(
-                    "SELECT id::text, coalesce(name, email) FROM users WHERE id = ANY(%s::uuid[])",
+                    "SELECT id::text, coalesce(display_name, email) FROM users WHERE id = ANY(%s::uuid[])",
                     (list(user_ids),),
                 )
                 for r in await cur.fetchall():
