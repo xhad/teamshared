@@ -8,7 +8,7 @@ AGENTS.md continual learning, and copy-paste snippets for other clients.
 | `rules/teamshared.mdc` | Recall-first protocol, `repo=` + `github=` code scope, console pointer (`alwaysApply`) |
 | `skills/teamshared/` | Memory tool chooser + session workflow |
 | `skills/continual-learning/` | Orchestrates AGENTS.md updates from transcripts |
-| `hooks/` | Stop hook — cadence gating + teamshared-backed state |
+| `hooks/` | Stop hook — continual-learning cadence + teamshared-backed state |
 | `agents/agents-memory-updater.md` | Mines transcripts and updates `AGENTS.md` |
 | `clients/` | Snippets for Hermes, Claude Desktop, and plain-text protocol |
 
@@ -71,6 +71,9 @@ Do not install the upstream Cursor `continual-learning` marketplace plugin — t
   state keys `continual-learning/cadence` and `continual-learning/index` on
   teamshared (token + repo scoped), with local fallback under
   `~/.cursor/hooks/state/continual-learning/<workspace-slug>/`.
+- **Session logging**: the `teamshared.mdc` rule instructs the agent to open a
+  working-memory session on every chat and append user/assistant turns via
+  `memory_session_*` (no client-side transcript hook).
 
 ## Other clients
 

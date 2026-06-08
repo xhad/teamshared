@@ -32,7 +32,7 @@ MCP tools (`memory_remember`, `memory_recall`, …) live on the separate
 |-------------|------|
 | Save / remember for the team or teamshared | `memory_remember(content, kind=…)` |
 | Search past work or team knowledge | `memory_recall(query)` |
-| Multi-turn task buffer | `memory_session_open` / `_append` / `_close` |
+| Multi-turn task buffer | `memory_session_open` / `_append` / `_close` (every chat) |
 
 ## Recall first
 
@@ -76,13 +76,20 @@ Use `memory_procedure_set` for versioned playbooks (not `memory_remember`).
 
 For code-specific facts, pass `repo=` and/or `github=` on `memory_remember`.
 
-## Sessions for multi-turn work
+## Session logging (every chat)
 
-For tasks spanning more than ~3 turns:
+Log the full conversation via MCP on every chat:
 
-1. `memory_session_open(topic=<short label>, repo=..., github=...)` when in a repo
-2. `memory_session_append(session_id, role, content)` after each turn
-3. `memory_session_close(session_id, distill=true)` when done or pivoting
+1. **First turn:** close any prior `session_id` from
+   `memory_state_get(repo=..., key="conversation/active-session")`, then
+   `memory_session_open(topic=..., repo=..., github=...)`, and store the new
+   `session_id` in that state key.
+2. **Every turn:** `memory_session_append(session_id, role, content)` for the
+   user message and your reply.
+3. **When done or pivoting:** `memory_session_close(session_id, distill=true)`
+   and clear the state key.
+
+Do not store secrets in session turns.
 
 ## Never
 

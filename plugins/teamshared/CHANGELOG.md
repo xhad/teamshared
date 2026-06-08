@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-06-08
+
+- **Rule 1.3.0:** log every chat via `memory_session_*` (open on first turn,
+  append user/assistant each round, close on done/pivot). State key:
+  `conversation/active-session`.
+- Removed the Cursor `conversation-capture-stop` transcript hook; NL capture is
+  agent-driven through MCP instead of `POST /sessions/turns`.
+- Continual-learning stop hook unchanged.
+
 ## 0.3.0 — 2026-06-01
 
 - Rule + skill now point teammates to the **web console** (`/app`) for human

@@ -17,8 +17,10 @@ preferences stored in teamshared.
    `git rev-parse --show-toplevel` → `repo=`; resolve GitHub via
    `gh repo view --json nameWithOwner` when available → `github=`. Pass the
    same values to `memory_recall` for soft boosting.
-4. For work spanning ~3+ turns: `memory_session_open` → append turns →
-   `memory_session_close(distill=true)`.
+4. **Every chat:** `memory_session_open` on the first turn → append user and
+   assistant turns each round → `memory_session_close(distill=true)` when done
+   or pivoting. Persist `session_id` in `memory_state` under
+   `conversation/active-session`.
 5. For repeatable playbooks: `memory_procedure_set` / `memory_procedure_get`.
 
 ## Tool chooser
@@ -27,7 +29,7 @@ preferences stored in teamshared.
 |---|---|
 | Search all pillars | `memory_recall` |
 | Store preference/fact/event/note | `memory_remember` |
-| Multi-turn buffer + distillation | `memory_session_*` |
+| Log every chat + distillation | `memory_session_*` |
 | Versioned how-to | `memory_procedure_set` |
 | Browse timeline | `memory_episodes_list` |
 | Explicit relationships (Neo4j on) | `memory_graph_*` |

@@ -4,12 +4,6 @@ import { join, resolve } from "node:path";
 
 export const CADENCE_KEY = "continual-learning/cadence";
 export const INDEX_KEY = "continual-learning/index";
-export const CONVERSATION_OFFSETS_KEY = "conversation/offsets";
-
-export interface ConversationTurn {
-  role: "user" | "assistant" | "tool" | "system";
-  content: string;
-}
 
 const MCP_SERVER_NAMES = ["teamshared"] as const;
 
@@ -101,24 +95,6 @@ export async function setTeamsharedState(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ repo, key, value }),
-  });
-  return response.ok;
-}
-
-export async function postSessionTurns(
-  config: TeamsharedConfig,
-  turns: ConversationTurn[]
-): Promise<boolean> {
-  if (turns.length === 0) {
-    return true;
-  }
-  const response = await fetch(`${config.baseUrl}/sessions/turns`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ turns }),
   });
   return response.ok;
 }
