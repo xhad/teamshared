@@ -33,6 +33,8 @@ def test_steps_reference_real_tools() -> None:
         "memory_procedure_get",
         "memory_procedure_set",
         "memory_forget",
+        "memory_state_get",
+        "memory_state_set",
     }
     for name, _, steps_md, _ in STARTER_PROCEDURES:
         for line in steps_md.splitlines():

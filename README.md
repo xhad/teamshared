@@ -242,16 +242,14 @@ Two reference topologies live in [`infra/`](infra):
 - **Conversation capture**: every authenticated MCP tool call is auto-recorded
   into a rolling per-agent working session by a server-side FastMCP middleware
   (harness-agnostic; no client hooks needed). Natural-language turns are
-  captured separately: a client adapter reads its harness transcript and pushes
-  turns to `POST /sessions/turns` (bearer-scoped, body `{"turns": [{"role",
-  "content"}]}`), which lands in the same session. The Cursor plugin ships such
-  an adapter as a `stop` hook (`conversation-capture-stop.ts`); Hermes ships one
-  as a `post_llm_call` shell hook (`~/.hermes/agent-hooks/teamshared-capture.py`,
-  wired by the installer — approve once via `hermes --accept-hooks`); other
-  harnesses point their own adapter at the same endpoint. Sessions roll over (close +
-  distill, open new) after `TEAMSHARED_CAPTURE_IDLE_SECONDS` of inactivity or
-  `TEAMSHARED_CAPTURE_MAX_TURNS` turns; set `TEAMSHARED_CAPTURE_ENABLED=false`
-  to disable all capture.
+  captured by the agent via `memory_session_*` per the `teamshared.mdc` rule
+  (Cursor plugin) or a client adapter that pushes to `POST /sessions/turns`
+  (Hermes ships one as a `post_llm_call` shell hook,
+  `~/.hermes/agent-hooks/teamshared-capture.py`, wired by the installer — approve
+  once via `hermes --accept-hooks`). Sessions roll over (close + distill, open
+  new) after `TEAMSHARED_CAPTURE_IDLE_SECONDS` of inactivity or
+  `TEAMSHARED_CAPTURE_MAX_TURNS` turns for middleware/autosession capture; set
+  `TEAMSHARED_CAPTURE_ENABLED=false` to disable server-side tool capture.
 
 - **Memory wiki curation**: a separate `curator` worker process (alongside the
   `distiller`) keeps the wiki readable. When the distiller writes new facts or

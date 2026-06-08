@@ -1,8 +1,8 @@
 {
   "name": "TeamShared",
   "displayName": "TeamShared",
-  "version": "0.3.0",
-  "description": "Shared team memory for Cursor: MCP wiring, recall-first rules, a self-service web console (/app), AGENTS.md continual learning, and client snippets for Hermes and Claude.",
+  "version": "0.4.0",
+  "description": "Shared team memory for Cursor: MCP wiring, recall-first rules with per-chat session logging, a self-service web console (/app), AGENTS.md continual learning, and client snippets for Hermes and Claude.",
   "author": {
     "name": "Sapien"
   },

@@ -1,6 +1,6 @@
 ---
 name: teamshared
-description: Use teamshared MCP memory tools — recall before answering, remember durable facts, and run session workflows for multi-turn tasks.
+description: Use teamshared MCP memory tools — recall before answering, remember durable facts, and log every chat via session workflows.
 ---
 
 # teamshared memory
@@ -10,16 +10,17 @@ preferences stored in teamshared.
 
 ## Workflow
 
-1. `memory_recall(query=...)` early for non-trivial tasks.
-2. Answer using hits; say when recall is empty.
+Follow the **every turn checklist** in `teamshared.mdc`:
+
+1. Ensure session (`conversation/active-session` in `memory_state`).
+2. Append user turn → `memory_recall` (non-trivial) → work → append assistant turn.
 3. `memory_remember(...)` for preferences, facts, events, and notes that should
    still be true next week. For code work: resolve workspace slug via
    `git rev-parse --show-toplevel` → `repo=`; resolve GitHub via
-   `gh repo view --json nameWithOwner` when available → `github=`. Pass the
-   same values to `memory_recall` for soft boosting.
-4. For work spanning ~3+ turns: `memory_session_open` → append turns →
-   `memory_session_close(distill=true)`.
-5. For repeatable playbooks: `memory_procedure_set` / `memory_procedure_get`.
+   `gh repo view --json nameWithOwner` when available → `github=`.
+4. On pivot: close session, open new one, update state — same turn.
+5. On append failure: reopen session, update state, retry once.
+6. For repeatable playbooks: `memory_procedure_set` / `memory_procedure_get`.
 
 ## Tool chooser
 
@@ -27,10 +28,11 @@ preferences stored in teamshared.
 |---|---|
 | Search all pillars | `memory_recall` |
 | Store preference/fact/event/note | `memory_remember` |
-| Multi-turn buffer + distillation | `memory_session_*` |
+| Log every chat + distillation | `memory_session_*` |
 | Versioned how-to | `memory_procedure_set` |
 | Browse timeline | `memory_episodes_list` |
 | Explicit relationships (Neo4j on) | `memory_graph_*` |
+| Active session bookkeeping | `memory_state_get` / `memory_state_set` |
 
 Bearer token sets write attribution; durable reads are shared across agents
 unless you pass `agent=` to narrow recall.
