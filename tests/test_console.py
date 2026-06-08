@@ -485,6 +485,30 @@ def test_approvals_page_lists_pending() -> None:
     assert "pii_detected" in resp.text
 
 
+def test_work_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, services = _build()
+    facade = MagicMock()
+    facade.work_list = AsyncMock(return_value={"count": 1, "items": [{
+        "id": "w1", "title": "Ship work queue", "work_status": "todo",
+        "priority": "normal", "assignee_type": "agent", "assignee_id": "a1",
+        "updated_at": "2026-06-07T12:00:00+00:00",
+    }]})
+    set_state(SimpleNamespace(facade=facade))
+    services.admin.list_agents = AsyncMock(return_value=[{"id": "a1", "name": "cursor"}])
+    services.admin.list_members = AsyncMock(return_value=[{
+        "user_id": "u1", "email": "owner@example.com", "name": "Owner",
+    }])
+    try:
+        _login(client)
+        resp = client.get("/app/work")
+        assert resp.status_code == 200
+        assert "Work" in resp.text
+        assert "Ship work queue" in resp.text
+        assert "/app/work/new" in resp.text
+    finally:
+        clear_state()
+
+
 def test_strategy_page_renders() -> None:
     client, services = _build()
     services.strategic = MagicMock()

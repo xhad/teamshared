@@ -26,6 +26,7 @@ from teamshared.memory.audit import AuditLog
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.strategic import OrgStrategicStore
+from teamshared.memory.work import WorkPriority, WorkStatus, WorkStore
 from teamshared.memory.types import MemoryItemScope, MemoryKind, MemorySource, Visibility
 from teamshared.memory.vectorstore import VectorStore
 
@@ -62,6 +63,14 @@ class StrategicIngestionResult:
     injection: InjectionVerdict | None = None
 
 
+@dataclass
+class WorkIngestionResult:
+    item: dict[str, Any]
+    status: str               # active | pending_approval | quarantined
+    pii: list[PIIFinding] = field(default_factory=list)
+    injection: InjectionVerdict | None = None
+
+
 class IngestionPipeline:
     def __init__(
         self,
@@ -70,12 +79,14 @@ class IngestionPipeline:
         audit: AuditLog,
         procedural: OrgProceduralStore,
         strategic: OrgStrategicStore,
+        work: WorkStore,
     ) -> None:
         self.vector_store = vector_store
         self.approvals = approvals
         self.audit = audit
         self.procedural = procedural
         self.strategic = strategic
+        self.work = work
 
     async def ingest(
         self,
@@ -449,4 +460,93 @@ class IngestionPipeline:
         return StrategicIngestionResult(
             entity=row, entity_type=entity_type, status=status,
             pii=findings, injection=verdict,
+        )
+
+    async def ingest_work_create(
+        self,
+        ctx: RequestContext,
+        *,
+        title: str,
+        description_md: str | None,
+        tags: list[str] | None,
+        work_status: WorkStatus,
+        priority: WorkPriority,
+        requester_type: str | None,
+        requester_id: UUID | None,
+        assignee_type: str | None,
+        assignee_id: UUID | None,
+        initiative_id: UUID | None,
+        due_at: Any,
+        repo: str | None,
+        github: str | None,
+        agent: str,
+        require_approval: bool = True,
+    ) -> WorkIngestionResult:
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        screen_text = f"{title}\n{description_md or ''}"
+        findings = scan_pii(screen_text)
+        if has_hard_secret(findings):
+            await self.audit.record(
+                agent=ctx.principal.attribution,
+                action="work.create.rejected_secret",
+                org_id=ctx.org_id,
+                actor_type=ctx.principal.type,
+                actor_id=ctx.principal.id,
+                resource_type="work",
+                request_id=ctx.request_id,
+                payload={"title": title, "findings": [f.kind for f in findings]},
+            )
+            raise IngestionRejected("content contains a hard secret and was not stored")
+
+        verdict = screen_injection(screen_text)
+        if verdict.quarantine:
+            status = "quarantined"
+        elif require_approval:
+            status = "pending_approval"
+        else:
+            status = "active"
+
+        row = await self.work.create(
+            ctx.org_id,
+            title=title,
+            description_md=description_md,
+            tags=tags,
+            work_status=work_status,
+            priority=priority,
+            requester_type=requester_type,  # type: ignore[arg-type]
+            requester_id=requester_id,
+            assignee_type=assignee_type,  # type: ignore[arg-type]
+            assignee_id=assignee_id,
+            initiative_id=initiative_id,
+            due_at=due_at,
+            repo=repo,
+            github=github,
+            source="agent",
+            agent=agent,
+            status=status,  # type: ignore[arg-type]
+        )
+
+        if status in {"pending_approval", "quarantined"}:
+            reason = "prompt_injection_suspected" if verdict.quarantine else "work_review_required"
+            METRICS.ingestion_quarantined.inc(status=status, reason=reason)
+            await self.approvals.enqueue_work(
+                ctx.org_id,
+                UUID(str(row["id"])),
+                reason=reason,
+                requested_by=ctx.principal.id,
+            )
+
+        await self.audit.record(
+            agent=ctx.principal.attribution,
+            action="work.create",
+            org_id=ctx.org_id,
+            actor_type=ctx.principal.type,
+            actor_id=ctx.principal.id,
+            resource_type="work",
+            target_id=str(row["id"]),
+            request_id=ctx.request_id,
+            after={"title": title, "status": status},
+        )
+        return WorkIngestionResult(
+            item=row, status=status, pii=findings, injection=verdict,
         )

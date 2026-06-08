@@ -230,7 +230,7 @@ def register_tools(mcp: Any) -> None:
         """
         state = get_state()
         principal = await _principal()
-        scopes = scope or ["semantic", "episodic", "procedural", "strategic", "working"]
+        scopes = scope or ["semantic", "episodic", "procedural", "strategic", "work", "working"]
         result = await state.facade.recall(
             principal,
             query=query,
@@ -543,6 +543,150 @@ def register_tools(mcp: Any) -> None:
             objective_id=objective_id,
             key_result_id=key_result_id,
             agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_list(
+        work_status: Annotated[
+            str | None,
+            Field(description="Filter: backlog, todo, in_progress, blocked, done, cancelled"),
+        ] = None,
+        assignee: Annotated[
+            str | None,
+            Field(description="Filter by agent name or user email"),
+        ] = None,
+        mine: Annotated[
+            bool,
+            Field(description="Only items assigned to the caller (human or agent)"),
+        ] = False,
+        initiative_id: Annotated[
+            str | None,
+            Field(description="Filter to tasks linked to a strategic initiative UUID"),
+        ] = None,
+        limit: Annotated[int, Field(ge=1, le=200)] = 50,
+    ) -> dict[str, Any]:
+        """List org work items (shared task queue for humans and agents)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_list(
+            principal,
+            work_status=work_status,
+            assignee=assignee,
+            mine=mine,
+            initiative_id=initiative_id,
+            limit=limit,
+        )
+
+    @mcp.tool()
+    async def work_get(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+    ) -> dict[str, Any] | None:
+        """Fetch one work item by id."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_get(principal, work_id=work_id)
+
+    @mcp.tool()
+    async def work_create(
+        title: Annotated[str, Field(description="Short task title")],
+        description_md: Annotated[str | None, Field(description="Optional markdown body")] = None,
+        tags: Annotated[list[str] | None, Field(description="Optional tags")] = None,
+        work_status: Annotated[
+            str, Field(description="backlog, todo, in_progress, blocked, done, cancelled")
+        ] = "todo",
+        priority: Annotated[str, Field(description="urgent, high, normal, low")] = "normal",
+        assignee_type: Annotated[str | None, Field(description="user or agent")] = None,
+        assignee_id: Annotated[str | None, Field(description="Assignee UUID")] = None,
+        assignee_agent: Annotated[
+            str | None, Field(description="Assign to agent by name (e.g. cursor)")
+        ] = None,
+        assignee_email: Annotated[
+            str | None, Field(description="Assign to org member by email")
+        ] = None,
+        initiative_id: Annotated[
+            str | None, Field(description="Optional strategic initiative UUID")
+        ] = None,
+        due_at: Annotated[datetime | None, Field(description="Optional due datetime")] = None,
+        repo: Annotated[str | None, Field(description="Optional workspace slug tag")] = None,
+        github: Annotated[str | None, Field(description="Optional owner/repo tag")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Create a work item. Agent writes require approval; human console writes are immediate."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_create(
+            principal,
+            title=title,
+            description_md=description_md,
+            tags=tags,
+            work_status=work_status,
+            priority=priority,
+            assignee_type=assignee_type,
+            assignee_id=assignee_id,
+            assignee_agent=assignee_agent,
+            assignee_email=assignee_email,
+            initiative_id=initiative_id,
+            due_at=due_at,
+            repo=repo,
+            github=github,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_update(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+        title: Annotated[str | None, Field(description="New title")] = None,
+        description_md: Annotated[str | None, Field(description="New markdown body")] = None,
+        tags: Annotated[list[str] | None, Field(description="Replace tags")] = None,
+        work_status: Annotated[str | None, Field(description="Workflow status")] = None,
+        priority: Annotated[str | None, Field(description="urgent, high, normal, low")] = None,
+        blocked_reason: Annotated[str | None, Field(description="Why blocked (when status=blocked)")] = None,
+        assignee_type: Annotated[str | None, Field(description="user or agent")] = None,
+        assignee_id: Annotated[str | None, Field(description="Assignee UUID")] = None,
+        assignee_agent: Annotated[str | None, Field(description="Assign to agent by name")] = None,
+        assignee_email: Annotated[str | None, Field(description="Assign to user by email")] = None,
+        initiative_id: Annotated[str | None, Field(description="Strategic initiative UUID")] = None,
+        due_at: Annotated[datetime | None, Field(description="Due datetime")] = None,
+        repo: Annotated[str | None, Field(description="Workspace slug tag")] = None,
+        github: Annotated[str | None, Field(description="owner/repo tag")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any] | None:
+        """Update a work item (status, assignee, priority, etc.). No re-approval required."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_update(
+            principal,
+            work_id=work_id,
+            title=title,
+            description_md=description_md,
+            tags=tags,
+            work_status=work_status,
+            priority=priority,
+            blocked_reason=blocked_reason,
+            assignee_type=assignee_type,
+            assignee_id=assignee_id,
+            assignee_agent=assignee_agent,
+            assignee_email=assignee_email,
+            initiative_id=initiative_id,
+            due_at=due_at,
+            repo=repo,
+            github=github,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_close(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+        work_status: Annotated[
+            str, Field(description="done or cancelled")
+        ] = "done",
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any] | None:
+        """Mark a work item done or cancelled."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_close(
+            principal, work_id=work_id, work_status=work_status, agent_override=agent,
         )
 
     @mcp.tool()

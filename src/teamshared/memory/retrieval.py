@@ -31,6 +31,7 @@ from teamshared.logging import get_logger
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.strategic import OrgStrategicStore
+from teamshared.memory.work import WorkStore
 from teamshared.memory.types import MemoryRecord, MemoryScope, RecallResult, TimeRange
 from teamshared.memory.vectorstore import ScopeFilter, VectorStore
 from teamshared.metrics import METRICS
@@ -38,11 +39,14 @@ from teamshared.telemetry import span
 
 log = get_logger(__name__)
 
-DEFAULT_SCOPE: tuple[MemoryScope, ...] = ("semantic", "episodic", "procedural", "strategic")
+DEFAULT_SCOPE: tuple[MemoryScope, ...] = (
+    "semantic", "episodic", "procedural", "strategic", "work",
+)
 
 PILLAR_WEIGHTS: dict[str, float] = {
     "semantic": 1.0,
     "strategic": 0.95,
+    "work": 0.92,
     "episodic": 0.9,
     "procedural": 0.85,
     "working": 0.7,
@@ -55,10 +59,12 @@ class SecureRetrieval:
         vector_store: VectorStore,
         audit: AuditLog,
         strategic: OrgStrategicStore,
+        work: WorkStore,
     ) -> None:
         self.vector_store = vector_store
         self.audit = audit
         self.strategic = strategic
+        self.work = work
 
     async def search(
         self,
@@ -130,6 +136,15 @@ class SecureRetrieval:
             except Exception as exc:
                 log.warning("retrieval_strategic_failed", error=str(exc))
                 errors["strategic"] = str(exc)
+
+        if want("work"):
+            try:
+                work_hits = await self.work.search(ctx.org_id, query, limit=k)
+                counts["work"] = len(work_hits)
+                records.extend(work_hits)
+            except Exception as exc:
+                log.warning("retrieval_work_failed", error=str(exc))
+                errors["work"] = str(exc)
 
         # (7) rerank.
         ranked = _rerank(records, k=k)

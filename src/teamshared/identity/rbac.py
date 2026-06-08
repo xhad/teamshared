@@ -32,6 +32,8 @@ class Permissions:
     AUDIT_READ = "audit:read"
     BILLING_MANAGE = "billing:manage"
     ORG_ADMIN = "org:admin"
+    WORK_READ = "work:read"
+    WORK_WRITE = "work:write"
 
 
 class PermissionDenied(Exception):  # noqa: N818 - idiomatic name; not an *Error

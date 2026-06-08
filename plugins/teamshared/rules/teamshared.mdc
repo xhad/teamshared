@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.0.0
+version: 1.1.0
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.0.0 -->
+<!-- teamshared-rule-version: 1.1.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.0.0`).
+This rule is versioned (`version` in the frontmatter above, currently `1.1.0`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
 1. Early in a session (or whenever the user asks about teamshared versions or
    updates), call the `version` tool, passing this rule's frontmatter `version`
-   as `installed_rule_version`.
+   (`1.1.0`) as `installed_rule_version`.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor:
    `~/.cursor/rules/teamshared.mdc`; the response's `rule_path` is the hint),
@@ -39,6 +39,7 @@ call `memory_recall` with the user's query. Ground answers in hits; cite them.
 - Omit `scope` to search all pillars (default).
 - `scope=["procedural"]` for "how do we usually…".
 - `scope=["strategic"]` for vision, mission, OKRs, and initiatives.
+- `scope=["work"]` for open tasks, blockers, and assignee-owned work.
 - `scope=["episodic"]` for "what did we do on X?".
 - `scope=["semantic"]` for stable facts and preferences.
 - `scope=["working"]` only when you need the caller's open session turns.
@@ -79,6 +80,25 @@ Optional: `subject`, `tags`. For code/repo-specific memories, pass
 cross-cutting preferences. Do **not** use `memory_remember` for playbooks —
 use `memory_procedure_set`.
 
+### Work queue (tasks for humans and agents)
+
+Use `work_*` for durable, assignable tasks — not `memory_remember`.
+
+1. **Start of task:** `work_list(mine=true)` or `work_list(work_status="todo")`
+   to pick up existing work; otherwise `work_create(title=..., work_status="todo")`.
+2. **Assign:** `assignee_agent="cursor"` or `assignee_email="teammate@..."` on
+   create/update. Humans and agents are first-class assignees.
+3. **Progress:** `work_update(work_id=..., work_status="in_progress")` — no
+   re-approval. Use `work_status="blocked"` with `blocked_reason=` when stuck.
+4. **Finish:** `work_close(work_id=..., work_status="done")` when complete.
+
+Agent-created tasks land in `/app/approvals` until a human approves them.
+Human/console-created tasks are active immediately. Optional `initiative_id=`
+links a task to a strategic initiative.
+
+Pair with `memory_recall` for context and `memory_session_*` for the
+conversation buffer while executing the task.
+
 ### Sessions for multi-turn work
 
 For tasks spanning ~3+ turns:
@@ -111,6 +131,7 @@ these are human/browser actions, not MCP tools:
   between them from the header.
 - **Memory wiki** (`/app/wiki`): semantic facts, the episodic timeline, and
   playbooks rendered as a browsable, human-readable knowledge base.
+- **Work** (`/app/work`): org-wide task queue; assign to people or agents.
 - **Manage:** agents, **API keys** (`tsk_…`, the bearer token MCP/agents use),
   people (add a teammate by email), approvals, and capture consent.
 
@@ -132,12 +153,12 @@ MCP looks down, call `health`, not `echo`.
 
 ### `memory_recall`
 
-Hybrid search across semantic, episodic, procedural, and working pillars.
+Hybrid search across semantic, episodic, procedural, strategic, work, and working pillars.
 
 | Param | Use |
 |---|---|
 | `query` | Natural-language search (required) |
-| `scope` | Subset of pillars; omit = all five |
+| `scope` | Subset of pillars; omit = all (includes work) |
 | `k` | Max records (1–50, default 8) |
 | `time_range` | Optional bounds for episodic/working hits |
 | `agent` | Optional filter to one agent's durable writes |
@@ -218,6 +239,22 @@ Org-wide vision, mission, purpose, and OKR cycles. **Never** use
 All strategic writes return `pending_approval` until a human approves them
 in the console (`/app/approvals`).
 
+### `work_list` / `work_get` / `work_create` / `work_update` / `work_close`
+
+Org-scoped task queue. Assign to **users** (`assignee_email` / `assignee_type=user`)
+or **agents** (`assignee_agent` / `assignee_type=agent`).
+
+| Tool | When |
+|---|---|
+| `work_list` | Backlog views; `mine=true` for caller's assignments; filter `work_status` |
+| `work_get` | One item by `work_id` |
+| `work_create` | New task; agent writes → `pending_approval` |
+| `work_update` | Status, assignee, priority, `blocked_reason` — immediate |
+| `work_close` | `work_status=done` or `cancelled` |
+
+Workflow statuses: `backlog`, `todo`, `in_progress`, `blocked`, `done`, `cancelled`.
+Do **not** store tasks via `memory_remember`.
+
 ### `memory_graph_relate` / `memory_graph_related`
 
 Explicit entity relationships (Neo4j when enabled; otherwise no-op with
@@ -274,6 +311,7 @@ to write to the local rule file. See **Staying current** above.
 | Versioned how-to | `memory_procedure_set` / `memory_procedure_get` |
 | List playbooks | `memory_procedures_list` |
 | Vision / OKRs / mission | `memory_strategic_*` or `scope=["strategic"]` |
+| Tasks / assignees / blockers | `work_*` or `scope=["work"]` |
 | Structured relationships | `memory_graph_*` |
 | Client incremental state | `memory_state_get` / `memory_state_set` |
 | Remove a bad memory | `memory_forget` (user-requested only) |

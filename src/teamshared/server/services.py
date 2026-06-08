@@ -27,6 +27,7 @@ from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.retrieval import SecureRetrieval
 from teamshared.memory.service import MemoryService
 from teamshared.memory.strategic import OrgStrategicStore
+from teamshared.memory.work import WorkStore
 from teamshared.memory.vectorstore import VectorStore
 from teamshared.memory.wiki import WikiStore
 from teamshared.memory.working import WorkingMemory
@@ -45,6 +46,7 @@ class ProductionServices:
     vector_store: VectorStore
     procedural: OrgProceduralStore
     strategic: OrgStrategicStore
+    work: WorkStore
     wiki: WikiStore
     audit: AuditLog
     memory_service: MemoryService
@@ -62,7 +64,7 @@ class ProductionServices:
         return Authorizer(self.tenant_db)
 
     def retrieval(self) -> SecureRetrieval:
-        return SecureRetrieval(self.vector_store, self.audit, self.strategic)
+        return SecureRetrieval(self.vector_store, self.audit, self.strategic, self.work)
 
     def ingestion(self) -> IngestionPipeline:
         return IngestionPipeline(
@@ -71,6 +73,7 @@ class ProductionServices:
             self.audit,
             self.procedural,
             self.strategic,
+            self.work,
         )
 
 
@@ -100,6 +103,7 @@ def make_services(settings: Settings) -> ProductionServices:
         vector_store=vector_store,
         procedural=OrgProceduralStore(tenant_db),
         strategic=OrgStrategicStore(tenant_db),
+        work=WorkStore(tenant_db),
         wiki=WikiStore(tenant_db),
         audit=audit,
         memory_service=memory_service,
@@ -117,6 +121,7 @@ def make_services(settings: Settings) -> ProductionServices:
                 audit,
                 OrgProceduralStore(tenant_db),
                 OrgStrategicStore(tenant_db),
+                WorkStore(tenant_db),
             ),
             audit=audit,
         ),

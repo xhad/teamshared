@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 MemoryKind = Literal["fact", "preference", "event", "note", "procedure"]
-MemoryScope = Literal["working", "semantic", "episodic", "procedural", "strategic", "all"]
+MemoryScope = Literal["working", "semantic", "episodic", "procedural", "strategic", "work", "all"]
 
 StrategicStatementKind = Literal["vision", "mission", "purpose"]
 StrategicEntityType = Literal["statement", "plan", "objective", "key_result", "initiative"]

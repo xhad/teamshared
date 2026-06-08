@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}Work{% endblock %}
+{% block content %}
+  <div class="page-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
+    <div>
+      <h1>Work</h1>
+      <p class="sub">Org-wide task queue for humans and agents. Assign to a person or an agent identity.</p>
+    </div>
+    <a href="/app/work/new"><button type="button">+ New task</button></a>
+  </div>
+
+  {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
+  {% if flash == 'saved' %}<div class="flash-ok">Task updated.</div>{% endif %}
+  {% if flash == 'invalid' %}<div class="unavailable">Title is required.</div>{% endif %}
+  {% if flash == 'error' %}<div class="unavailable">Could not save the task. Please try again.</div>{% endif %}
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  <div class="tabs" style="margin:1rem 0;display:flex;gap:.5rem;">
+    <a href="/app/work?view=all" class="{% if view == 'all' %}active{% endif %}"><button type="button" class="ghost">All</button></a>
+    <a href="/app/work?view=mine" class="{% if view == 'mine' %}active{% endif %}"><button type="button" class="ghost">Mine</button></a>
+    <a href="/app/work?view=blocked" class="{% if view == 'blocked' %}active{% endif %}"><button type="button" class="ghost">Blocked</button></a>
+  </div>
+
+  <div class="panel">
+    {% if items %}
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Priority</th>
+          <th>Assignee</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td><a href="/app/work/{{ item.id }}">{{ item.title }}</a></td>
+          <td>{{ item.work_status }}</td>
+          <td>{{ item.priority }}</td>
+          <td>
+            {% if item.assignee_type and item.assignee_id %}
+              {{ item.assignee_type }}:{{ item.assignee_id }}
+            {% else %}&mdash;{% endif %}
+          </td>
+          <td>{{ item.updated_at[:16] if item.updated_at else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No work items in this view.</p>
+    {% endif %}
+  </div>
+{% endblock %}

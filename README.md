@@ -138,6 +138,11 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | `memory_strategic_objective_set` | Propose an objective under a plan                     |
 | `memory_strategic_key_result_set` | Propose a measurable key result                      |
 | `memory_strategic_initiative_set` | Propose a strategic initiative                       |
+| `work_list`                 | List org work items (filter by status, assignee, mine)       |
+| `work_get`                  | Fetch one work item                                          |
+| `work_create`               | Create a task (agent writes → approval; humans → immediate)  |
+| `work_update`               | Update status, assignee, priority, etc.                      |
+| `work_close`                | Mark done or cancelled                                       |
 | `memory_graph_relate`       | Add an explicit (subject)-[predicate]->(object) edge (Neo4j) |
 | `memory_graph_related`      | Walk the graph from an entity, up to N hops (Neo4j)          |
 | `memory_state_get`          | Read token+repo scoped JSON state (client bookkeeping)         |
@@ -159,6 +164,7 @@ first time you sign in you get your own private org (you're the owner); after th
 you land in the org(s) you belong to. The header has an **org switcher** to move
 between them and a **New org** action to create more.
 
+- **Work** (`/app/work`) — org-wide task queue; assign to people or agent identities.
 - **Strategy** (`/app/strategy`) — vision, mission, purpose, and OKR board.
 - **Memory wiki** (`/app/wiki`) — semantic facts, the episodic timeline, and
   procedural playbooks rendered as a continuously-updating, human-readable knowledge

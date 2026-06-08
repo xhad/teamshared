@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}{% if is_new %}New task{% else %}Task{% endif %}{% endblock %}
+{% block content %}
+  <h1>{% if is_new %}New task{% else %}Edit task{% endif %}</h1>
+  {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
+  {% if flash == 'saved' %}<div class="flash-ok">Task saved.</div>{% endif %}
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if is_new or item %}
+  <form method="post" action="/app/work/save" class="panel" style="max-width:42rem;">
+    {{ cm.csrf_field() }}
+    {% if item %}<input type="hidden" name="work_id" value="{{ item.id }}" />{% endif %}
+
+    <label>Title
+      <input type="text" name="title" required value="{{ item.title if item else '' }}" />
+    </label>
+
+    <label>Description (markdown)
+      <textarea name="description_md" rows="6">{{ item.description_md if item and item.description_md else '' }}</textarea>
+    </label>
+
+    <label>Status
+      <select name="work_status">
+        {% for s in ['backlog','todo','in_progress','blocked','done','cancelled'] %}
+        <option value="{{ s }}" {% if item and item.work_status == s %}selected{% elif not item and s == 'todo' %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>Priority
+      <select name="priority">
+        {% for p in ['urgent','high','normal','low'] %}
+        <option value="{{ p }}" {% if item and item.priority == p %}selected{% elif not item and p == 'normal' %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label>Blocked reason (when status is blocked)
+      <input type="text" name="blocked_reason" value="{{ item.blocked_reason if item and item.blocked_reason else '' }}" />
+    </label>
+
+    <label>Assign to
+      <select name="assignee_kind">
+        <option value="">Unassigned</option>
+        <option value="user">Person (email)</option>
+        <option value="agent">Agent</option>
+      </select>
+    </label>
+
+    <label>Assignee
+      <select name="assignee_ref">
+        <option value="">—</option>
+        <optgroup label="People">
+          {% for m in members %}
+          <option value="{{ m.email }}" data-kind="user">{{ m.name }} &lt;{{ m.email }}&gt;</option>
+          {% endfor %}
+        </optgroup>
+        <optgroup label="Agents">
+          {% for a in agents %}
+          <option value="{{ a.name }}" data-kind="agent">{{ a.name }}</option>
+          {% endfor %}
+        </optgroup>
+      </select>
+    </label>
+
+    <label>Initiative id (optional UUID)
+      <input type="text" name="initiative_id" value="{{ item.initiative_id if item and item.initiative_id else '' }}" />
+    </label>
+
+    <div style="margin-top:1rem;display:flex;gap:.5rem;">
+      <button type="submit">Save</button>
+      <a href="/app/work"><button type="button" class="ghost">Back to list</button></a>
+    </div>
+  </form>
+  <script>
+    (function () {
+      var kind = document.querySelector('select[name="assignee_kind"]');
+      var ref = document.querySelector('select[name="assignee_ref"]');
+      if (!kind || !ref) return;
+      ref.addEventListener('change', function () {
+        var opt = ref.options[ref.selectedIndex];
+        var k = opt && opt.getAttribute('data-kind');
+        if (k) kind.value = k;
+      });
+    })();
+  </script>
+  {% endif %}
+{% endblock %}

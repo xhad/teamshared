@@ -108,6 +108,11 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.forget = AsyncMock(return_value={"memory_id": "m1", "deleted": True})
     facade.state_get = AsyncMock(return_value={"repo": "r", "key": "k", "value": None})
     facade.state_set = AsyncMock(return_value={"repo": "r", "key": "k", "stored": True})
+    facade.work_list = AsyncMock(return_value={"count": 0, "items": []})
+    facade.work_get = AsyncMock(return_value=None)
+    facade.work_create = AsyncMock(return_value={"id": "w1", "title": "t", "approval_status": "active"})
+    facade.work_update = AsyncMock(return_value={"id": "w1", "work_status": "in_progress"})
+    facade.work_close = AsyncMock(return_value={"id": "w1", "work_status": "done"})
 
     settings = MagicMock()
     settings.embed_provider = "openai"
@@ -329,6 +334,17 @@ async def test_memory_strategic_statement_get(
     mcp, state = mcp_with_mocks
     await _call(mcp, "memory_strategic_statement_get", kind="mission")
     state.facade.strategic_statement_get.assert_awaited_once()
+
+
+async def test_work_list_and_create(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "work_list", mine=True, limit=10)
+    state.facade.work_list.assert_awaited_once()
+    created = await _call(mcp, "work_create", title="Test task", work_status="todo")
+    assert created["id"] == "w1"
+    state.facade.work_create.assert_awaited_once()
 
 
 async def test_memory_state_get_and_set(

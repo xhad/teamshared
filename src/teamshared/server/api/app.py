@@ -203,7 +203,9 @@ def build_api_app(
         tr = None
         if isinstance(body.get("time_range"), dict):
             tr = TimeRange(**body["time_range"])
-        scopes = body.get("scope") or ["semantic", "episodic", "procedural", "strategic"]
+        scopes = body.get("scope") or [
+            "semantic", "episodic", "procedural", "strategic", "work",
+        ]
         result = await services.retrieval().search(
             ctx, query, scopes=scopes, k=int(body.get("k", 8)), time_range=tr
         )

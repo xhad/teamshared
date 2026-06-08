@@ -69,6 +69,7 @@ NAV: list[tuple[str, str, str]] = [
     ("/app", "Home", "home"),
     ("/app/wiki", "Wiki", "wiki"),
     ("/app/playbooks", "Playbooks", "playbooks"),
+    ("/app/work", "Work", "work"),
     ("/app/strategy", "Strategy", "strategy"),
     ("/app/memory", "Memory", "memory"),
     ("/app/agents", "Agents", "agents"),
@@ -690,6 +691,168 @@ def register_console_routes(
             return RedirectResponse("/app/playbooks?flash=error", status_code=303)
         return RedirectResponse("/app/playbooks?flash=saved", status_code=303)
 
+    # --- work (org task queue) ------------------------------------------
+
+    async def _work_assignee_options(principal: Principal) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+        agents: list[dict[str, str]] = []
+        members: list[dict[str, str]] = []
+        try:
+            for a in await services.admin.list_agents(_ctx(principal)):
+                agents.append({"id": str(a.get("id")), "name": a.get("name") or ""})
+            for m in await services.admin.list_members(_ctx(principal)):
+                members.append({
+                    "id": str(m.get("user_id")),
+                    "email": m.get("email") or "",
+                    "name": m.get("name") or m.get("email") or "",
+                })
+        except Exception as exc:
+            log.warning("work_assignee_options_failed", error=str(exc))
+        return agents, members
+
+    async def work_page(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "work")
+        view = str(request.query_params.get("view") or "all")
+        items: list[dict[str, Any]] = []
+        note = ""
+        flash = request.query_params.get("flash") or ""
+        try:
+            if view == "mine":
+                data = await get_state().facade.work_list(
+                    principal, work_status=None, assignee=None, mine=True,
+                    initiative_id=None, limit=100,
+                )
+            elif view == "blocked":
+                data = await get_state().facade.work_list(
+                    principal, work_status="blocked", assignee=None, mine=False,
+                    initiative_id=None, limit=100,
+                )
+            else:
+                data = await get_state().facade.work_list(
+                    principal, work_status=None, assignee=None, mine=False,
+                    initiative_id=None, limit=100,
+                )
+            items = data.get("items") or []
+        except Exception as exc:
+            log.warning("work_page_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({"items": items, "view": view, "note": note, "flash": flash})
+        return _TEMPLATES.TemplateResponse(request, "work.html", ctx)
+
+    async def work_new(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "work")
+        agents, members = await _work_assignee_options(principal)
+        ctx.update({
+            "item": None, "is_new": True, "note": "",
+            "agents": agents, "members": members,
+        })
+        return _TEMPLATES.TemplateResponse(request, "work_edit.html", ctx)
+
+    async def work_detail(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "work")
+        work_id = str(request.path_params["work_id"])
+        item: dict[str, Any] | None = None
+        note = ""
+        agents, members = await _work_assignee_options(principal)
+        try:
+            item = await get_state().facade.work_get(principal, work_id=work_id)
+            if item is None:
+                note = "Work item not found."
+        except Exception as exc:
+            log.warning("work_detail_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({
+            "item": item, "is_new": False, "note": note,
+            "agents": agents, "members": members,
+            "flash": request.query_params.get("flash") or "",
+        })
+        return _TEMPLATES.TemplateResponse(request, "work_edit.html", ctx)
+
+    async def work_save(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        title = str(form.get("title") or "").strip()
+        if not title:
+            return RedirectResponse("/app/work?flash=invalid", status_code=303)
+        work_id = str(form.get("work_id") or "").strip()
+        description_md = str(form.get("description_md") or "").strip() or None
+        work_status = str(form.get("work_status") or "todo").strip()
+        priority = str(form.get("priority") or "normal").strip()
+        blocked_reason = str(form.get("blocked_reason") or "").strip() or None
+        initiative_id = str(form.get("initiative_id") or "").strip() or None
+        assignee_kind = str(form.get("assignee_kind") or "").strip()
+        assignee_ref = str(form.get("assignee_ref") or "").strip()
+        assignee_type: str | None = None
+        assignee_agent: str | None = None
+        assignee_email: str | None = None
+        if assignee_kind == "agent" and assignee_ref:
+            assignee_type = "agent"
+            assignee_agent = assignee_ref
+        elif assignee_kind == "user" and assignee_ref:
+            assignee_type = "user"
+            assignee_email = assignee_ref
+        try:
+            if work_id:
+                updated = await get_state().facade.work_update(
+                    principal,
+                    work_id=work_id,
+                    title=title,
+                    description_md=description_md,
+                    tags=None,
+                    work_status=work_status,
+                    priority=priority,
+                    blocked_reason=blocked_reason,
+                    assignee_type=assignee_type,
+                    assignee_id=None,
+                    assignee_agent=assignee_agent,
+                    assignee_email=assignee_email,
+                    initiative_id=initiative_id,
+                    due_at=None,
+                    repo=None,
+                    github=None,
+                    agent_override=None,
+                )
+                if updated is None:
+                    return RedirectResponse("/app/work?flash=error", status_code=303)
+                return RedirectResponse(f"/app/work/{work_id}?flash=saved", status_code=303)
+            created = await get_state().facade.work_create(
+                principal,
+                title=title,
+                description_md=description_md,
+                tags=None,
+                work_status=work_status,
+                priority=priority,
+                assignee_type=assignee_type,
+                assignee_id=None,
+                assignee_agent=assignee_agent,
+                assignee_email=assignee_email,
+                initiative_id=initiative_id,
+                due_at=None,
+                repo=None,
+                github=None,
+                agent_override=None,
+            )
+            new_id = created.get("id")
+            return RedirectResponse(
+                f"/app/work/{new_id}?flash=created" if new_id else "/app/work?flash=created",
+                status_code=303,
+            )
+        except Exception as exc:
+            log.warning("work_save_failed", error=str(exc))
+            return RedirectResponse("/app/work?flash=error", status_code=303)
+
     # --- read screens (Phase 3) -----------------------------------------
 
     def _ctx(principal: Principal) -> RequestContext:
@@ -1116,7 +1279,8 @@ def register_console_routes(
                 {"id": d.get("id"), "created": _dt(d.get("created_at")),
                  "reason": d.get("reason") or "\u2014",
                  "content": d.get("content") or "",
-                 "strategic_type": d.get("strategic_entity_type")}
+                 "strategic_type": d.get("strategic_entity_type"),
+                 "work_item_id": d.get("work_item_id")}
                 for d in data
             ]
         except Exception as exc:
@@ -1258,6 +1422,10 @@ def register_console_routes(
         Route("/app/playbooks/new", playbook_new, methods=["GET"]),
         Route("/app/playbooks/save", playbook_save, methods=["POST"]),
         Route("/app/playbooks/{name}", playbook_edit, methods=["GET"]),
+        Route("/app/work", work_page, methods=["GET"]),
+        Route("/app/work/new", work_new, methods=["GET"]),
+        Route("/app/work/save", work_save, methods=["POST"]),
+        Route("/app/work/{work_id}", work_detail, methods=["GET"]),
         Route("/app/strategy", strategy_home, methods=["GET"]),
         Route("/app/strategy/statement", strategy_statement_propose, methods=["POST"]),
         Route("/app/strategy/plans/{plan_id}", strategy_plan_detail, methods=["GET"]),

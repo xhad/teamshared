@@ -50,7 +50,7 @@ def _strategic_pipeline() -> tuple[IngestionPipeline, AsyncMock, AsyncMock]:
     approvals.enqueue_strategic = AsyncMock(return_value=UUID(int=1))
     audit = MagicMock()
     audit.record = AsyncMock()
-    pipe = IngestionPipeline(MagicMock(), approvals, audit, MagicMock(), strategic)
+    pipe = IngestionPipeline(MagicMock(), approvals, audit, MagicMock(), strategic, MagicMock())
     return pipe, strategic, approvals
 
 
