@@ -1,89 +1,131 @@
 {% extends "base.html" %}
 {% import "console_macros.html" as cm with context %}
+{% import "work_macros.html" as wm %}
 {% block title %}{% if is_new %}New task{% else %}Task{% endif %}{% endblock %}
 {% block content %}
-  <h1>{% if is_new %}New task{% else %}Edit task{% endif %}</h1>
-  {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
-  {% if flash == 'saved' %}<div class="flash-ok">Task saved.</div>{% endif %}
-  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+  <div class="work-form-shell">
+    <a class="work-form-back" href="/app/work">&larr; Back to tasks</a>
 
-  {% if is_new or item %}
-  <form method="post" action="/app/work/save" class="panel" style="max-width:42rem;">
-    {{ cm.csrf_field() }}
-    {% if item %}<input type="hidden" name="work_id" value="{{ item.id }}" />{% endif %}
+    <h1 style="margin:0 0 .35rem;font-size:1.1rem;color:var(--muted);font-weight:600;">
+      {% if is_new %}Create task{% else %}Edit task{% endif %}
+    </h1>
 
-    <label>Title
-      <input type="text" name="title" required value="{{ item.title if item else '' }}" />
-    </label>
+    {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
+    {% if flash == 'saved' %}<div class="flash-ok">Task saved.</div>{% endif %}
+    {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
-    <label>Description (markdown)
-      <textarea name="description_md" rows="6">{{ item.description_md if item and item.description_md else '' }}</textarea>
-    </label>
+    {% if is_new or item %}
+    <form method="post" action="/app/work/save" class="stack-form">
+      {{ cm.csrf_field() }}
+      {% if item %}<input type="hidden" name="work_id" value="{{ item.id }}" />{% endif %}
 
-    <label>Status
-      <select name="work_status">
-        {% for s in ['backlog','todo','in_progress','blocked','done','cancelled'] %}
-        <option value="{{ s }}" {% if item and item.work_status == s %}selected{% elif not item and s == 'todo' %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-      </select>
-    </label>
+      <div class="work-form-title">
+        <input type="text" name="title" required placeholder="Task name" value="{{ item.title if item else '' }}"
+          aria-label="Task name" autofocus />
+      </div>
 
-    <label>Priority
-      <select name="priority">
-        {% for p in ['urgent','high','normal','low'] %}
-        <option value="{{ p }}" {% if item and item.priority == p %}selected{% elif not item and p == 'normal' %}selected{% endif %}>{{ p }}</option>
-        {% endfor %}
-      </select>
-    </label>
+      <div class="work-form-layout">
+        <div class="work-form-main">
+          <div class="field">
+            <label for="work-description">Description</label>
+            <textarea id="work-description" name="description_md" rows="10"
+              placeholder="Add details, context, or acceptance criteria…">{{ item.description_md if item and item.description_md else '' }}</textarea>
+            <p class="work-form-hint">Markdown supported.</p>
+          </div>
+        </div>
 
-    <label>Blocked reason (when status is blocked)
-      <input type="text" name="blocked_reason" value="{{ item.blocked_reason if item and item.blocked_reason else '' }}" />
-    </label>
+        <aside class="work-form-props">
+          <h3>Details</h3>
 
-    <label>Assign to
-      <select name="assignee_kind">
-        <option value="">Unassigned</option>
-        <option value="user">Person (email)</option>
-        <option value="agent">Agent</option>
-      </select>
-    </label>
+          <div class="field">
+            <label for="work-status">Status</label>
+            <select id="work-status" name="work_status">
+              {% for s in ['backlog','todo','in_progress','blocked','done','cancelled'] %}
+              <option value="{{ s }}" {% if item and item.work_status == s %}selected{% elif not item and s == 'todo' %}selected{% endif %}>{{ wm.status_label(s) }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-    <label>Assignee
-      <select name="assignee_ref">
-        <option value="">—</option>
-        <optgroup label="People">
-          {% for m in members %}
-          <option value="{{ m.email }}" data-kind="user">{{ m.name }} &lt;{{ m.email }}&gt;</option>
-          {% endfor %}
-        </optgroup>
-        <optgroup label="Agents">
-          {% for a in agents %}
-          <option value="{{ a.name }}" data-kind="agent">{{ a.name }}</option>
-          {% endfor %}
-        </optgroup>
-      </select>
-    </label>
+          <div class="field">
+            <label for="work-priority">Priority</label>
+            <select id="work-priority" name="priority">
+              {% for p in ['urgent','high','normal','low'] %}
+              <option value="{{ p }}" {% if item and item.priority == p %}selected{% elif not item and p == 'normal' %}selected{% endif %}>{{ wm.priority_label(p) }}</option>
+              {% endfor %}
+            </select>
+          </div>
 
-    <label>Initiative id (optional UUID)
-      <input type="text" name="initiative_id" value="{{ item.initiative_id if item and item.initiative_id else '' }}" />
-    </label>
+          <div class="field">
+            <label for="work-assignee-kind">Assign to</label>
+            <select id="work-assignee-kind" name="assignee_kind">
+              <option value="" {% if not item or not item.assignee_type %}selected{% endif %}>Unassigned</option>
+              <option value="user" {% if item and item.assignee_type == 'user' %}selected{% endif %}>Person</option>
+              <option value="agent" {% if item and item.assignee_type == 'agent' %}selected{% endif %}>Agent</option>
+            </select>
+          </div>
 
-    <div style="margin-top:1rem;display:flex;gap:.5rem;">
-      <button type="submit">Save</button>
-      <a href="/app/work"><button type="button" class="ghost">Back to list</button></a>
-    </div>
-  </form>
-  <script>
-    (function () {
-      var kind = document.querySelector('select[name="assignee_kind"]');
-      var ref = document.querySelector('select[name="assignee_ref"]');
-      if (!kind || !ref) return;
-      ref.addEventListener('change', function () {
-        var opt = ref.options[ref.selectedIndex];
-        var k = opt && opt.getAttribute('data-kind');
-        if (k) kind.value = k;
-      });
-    })();
-  </script>
-  {% endif %}
+          <div class="field">
+            <label for="work-assignee-ref">Assignee</label>
+            <select id="work-assignee-ref" name="assignee_ref">
+              <option value="">Select assignee…</option>
+              <optgroup label="People">
+                {% for m in members %}
+                <option value="{{ m.email }}" data-kind="user"
+                  {% if item and item.assignee_type == 'user' and item.assignee_id|string == m.id %}selected{% endif %}>
+                  {{ m.name }} &lt;{{ m.email }}&gt;
+                </option>
+                {% endfor %}
+              </optgroup>
+              <optgroup label="Agents">
+                {% for a in agents %}
+                <option value="{{ a.name }}" data-kind="agent"
+                  {% if item and item.assignee_type == 'agent' and item.assignee_id|string == a.id %}selected{% endif %}>
+                  {{ a.name }}
+                </option>
+                {% endfor %}
+              </optgroup>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="work-blocked">Blocked reason</label>
+            <input id="work-blocked" type="text" name="blocked_reason"
+              placeholder="Why is this blocked?"
+              value="{{ item.blocked_reason if item and item.blocked_reason else '' }}" />
+          </div>
+
+          <div class="field">
+            <label for="work-initiative">Initiative</label>
+            <input id="work-initiative" type="text" name="initiative_id"
+              placeholder="Optional initiative UUID"
+              value="{{ item.initiative_id if item and item.initiative_id else '' }}" />
+          </div>
+        </aside>
+      </div>
+
+      <div class="work-form-actions">
+        <button type="submit">{% if is_new %}Create task{% else %}Save changes{% endif %}</button>
+        <a href="/app/work"><button type="button" class="ghost">Cancel</button></a>
+      </div>
+    </form>
+    <script>
+      (function () {
+        var kind = document.getElementById('work-assignee-kind');
+        var ref = document.getElementById('work-assignee-ref');
+        if (!kind || !ref) return;
+        ref.addEventListener('change', function () {
+          var opt = ref.options[ref.selectedIndex];
+          var k = opt && opt.getAttribute('data-kind');
+          if (k) kind.value = k;
+          else if (!ref.value) kind.value = '';
+        });
+        kind.addEventListener('change', function () {
+          if (!kind.value) {
+            ref.value = '';
+          }
+        });
+      })();
+    </script>
+    {% endif %}
+  </div>
 {% endblock %}
