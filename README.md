@@ -126,6 +126,7 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | `health`                    | Liveness + dependency check                                  |
 | `memory_recall`             | Hybrid search (`repo=` / `github=` softly boost scoped tags) |
 | `memory_remember`           | Write a fact / preference / event / note (`repo=` / `github=` scope tags) |
+| `memory_assemble_context`   | One parallel, token-budgeted, cited context pack across all pillars + graph |
 | `memory_session_open`       | Start a working-memory session                               |
 | `memory_session_append`     | Append a turn                                                |
 | `memory_session_close`      | Close + enqueue for distillation                             |

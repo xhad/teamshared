@@ -19,6 +19,12 @@ log = get_logger(__name__)
 _REPO_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*(?:/[a-z][a-z0-9_-]*)*$")
 
+# Idle expiry for state keys: refreshed on every read/write, so only state
+# untouched for this long is dropped. Bounds otherwise-unbounded keyspace growth.
+STATE_DEFAULT_TTL_SECONDS = 180 * 24 * 3600
+# Hard cap on one serialized value; state is bookkeeping, not bulk storage.
+STATE_MAX_VALUE_BYTES = 64 * 1024
+
 # Durable memories are scoped to a workspace/repo by carrying a normalized tag
 # of the form ``repo:<slug>``. This rides the existing free-form ``tags``
 # plumbing (no schema change) and lets recall boost the caller's current repo.
@@ -83,15 +89,27 @@ class AgentStateStore:
     always passes it so client state is isolated per tenant.
     """
 
-    def __init__(self, client: redis.Redis) -> None:
+    def __init__(
+        self,
+        client: redis.Redis,
+        *,
+        ttl_seconds: int = STATE_DEFAULT_TTL_SECONDS,
+        max_value_bytes: int = STATE_MAX_VALUE_BYTES,
+    ) -> None:
         self._client = client
+        self._ttl_seconds = ttl_seconds
+        self._max_value_bytes = max_value_bytes
 
     async def get(
         self, state_id: str, repo: str, key: str, *, org: str | None = None
     ) -> dict[str, Any] | None:
-        raw = await self._client.get(storage_key(state_id, repo, key, org=org))
+        redis_key = storage_key(state_id, repo, key, org=org)
+        raw = await self._client.get(redis_key)
         if raw is None:
             return None
+        if self._ttl_seconds > 0:
+            # Reading is activity: keep live state alive (idle-expiry semantics).
+            await self._client.expire(redis_key, self._ttl_seconds)
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
             raise ValueError("stored agent state must be a JSON object")
@@ -102,8 +120,15 @@ class AgentStateStore:
     ) -> None:
         if not isinstance(value, dict):
             raise ValueError("value must be a JSON object")
+        payload = json.dumps(value, separators=(",", ":"))
+        if len(payload.encode("utf-8")) > self._max_value_bytes:
+            raise ValueError(
+                f"state value too large (> {self._max_value_bytes} bytes); "
+                "store bulk data elsewhere and keep a pointer here"
+            )
         redis_key = storage_key(state_id, repo, key, org=org)
-        await self._client.set(redis_key, json.dumps(value, separators=(",", ":")))
+        ex = self._ttl_seconds if self._ttl_seconds > 0 else None
+        await self._client.set(redis_key, payload, ex=ex)
         log.info("agent_state_set", state_id=state_id, repo=repo, key=key, org=org)
 
     async def delete(

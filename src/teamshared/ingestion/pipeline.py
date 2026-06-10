@@ -21,14 +21,14 @@ from teamshared.ingestion.approvals import ApprovalQueue
 from teamshared.ingestion.injection import InjectionVerdict, screen_injection
 from teamshared.ingestion.pii import PIIFinding, has_hard_secret, redact_pii, scan_pii
 from teamshared.logging import get_logger
-from teamshared.metrics import METRICS
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.strategic import OrgStrategicStore
-from teamshared.memory.work import WorkPriority, WorkStatus, WorkStore
 from teamshared.memory.types import MemoryItemScope, MemoryKind, MemorySource, Visibility
 from teamshared.memory.vectorstore import VectorStore
+from teamshared.memory.work import WorkPriority, WorkStatus, WorkStore
+from teamshared.metrics import METRICS
 
 log = get_logger(__name__)
 

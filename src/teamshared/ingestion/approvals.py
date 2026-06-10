@@ -6,8 +6,8 @@ from typing import Any
 from uuid import UUID
 
 from teamshared.memory.strategic import OrgStrategicStore
-from teamshared.memory.work import WorkStore
 from teamshared.memory.types import StrategicEntityType
+from teamshared.memory.work import WorkStore
 from teamshared.tenancy.context import TenantDb
 
 
@@ -124,7 +124,7 @@ class ApprovalQueue:
                 content = preview or f"work item {work_item_id}"
             elif entity_type and entity_id and not content:
                 preview = await strategic.preview_entity(
-                    org_id, entity_type, UUID(str(entity_id))  # type: ignore[arg-type]
+                    org_id, entity_type, UUID(str(entity_id))
                 )
                 content = preview or f"strategic {entity_type} {entity_id}"
             out.append(
@@ -171,7 +171,7 @@ class ApprovalQueue:
                     await work.reject(org_id, wid)
                 return None
             if entity_type and entity_id:
-                etype: StrategicEntityType = entity_type  # type: ignore[assignment]
+                etype: StrategicEntityType = entity_type
                 eid = UUID(str(entity_id))
                 if approved:
                     await strategic.activate(org_id, etype, eid)
@@ -190,4 +190,4 @@ class ApprovalQueue:
                 "UPDATE memory_items SET status = %s, updated_at = now() WHERE id = %s",
                 (new_item_status, str(memory_id)),
             )
-        return memory_id
+        return UUID(str(memory_id)) if memory_id is not None else None

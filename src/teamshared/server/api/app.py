@@ -8,6 +8,7 @@ checks, and audit happen uniformly. Connector routes are attached by
 
 from __future__ import annotations
 
+import secrets
 from typing import Any
 from uuid import UUID
 
@@ -17,18 +18,18 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from teamshared.admin.exceptions import ErasureNotConfirmed
+from teamshared.admin.exceptions import ErasureNotConfirmedError
 from teamshared.identity.provisioning import signup_org
 from teamshared.identity.rbac import Permissions
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.types import TimeRange
 from teamshared.server.api.errors import ApiError, error_response, map_exception
-from teamshared.server.rate_limit import enforce_admin_export, enforce_admin_purge
 from teamshared.server.api.middleware import (
     IdempotencyMiddleware,
     PrincipalAuthMiddleware,
     RateLimitMiddleware,
 )
+from teamshared.server.rate_limit import enforce_admin_export, enforce_admin_purge
 from teamshared.server.services import ProductionServices
 
 _PUBLIC = frozenset({"/v1/healthz", "/v1/orgs"})
@@ -74,7 +75,8 @@ def build_api_app(
         return JSONResponse({"status": "ok", "api": "v1"})
 
     async def create_org(request: Request) -> JSONResponse:
-        if not admin_secret or request.headers.get("x-teamshared-admin-secret") != admin_secret:
+        supplied = request.headers.get("x-teamshared-admin-secret", "")
+        if not admin_secret or not secrets.compare_digest(supplied, admin_secret):
             return error_response(request, 403, "forbidden", "admin secret required")
         body = await _json(request)
         slug = body.get("org_slug")
@@ -377,7 +379,7 @@ def build_api_app(
             if isinstance(body, dict):
                 confirmed = body.get("confirm") is True
         if not confirmed:
-            raise ErasureNotConfirmed()
+            raise ErasureNotConfirmedError()
         deleted = await services.admin.purge_user_memory(
             ctx, UUID(request.path_params["user_id"])
         )

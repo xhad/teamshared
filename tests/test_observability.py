@@ -7,7 +7,6 @@ import pytest
 
 from teamshared.config import Settings
 from teamshared.memory.working import (
-    CURATE_DEAD_LETTER_KEY,
     CURATE_QUEUE_KEY,
     DISTILL_DEAD_LETTER_KEY,
     DISTILL_QUEUE_KEY,

@@ -383,7 +383,7 @@ class OrgStrategicStore:
         if entity_type == "statement":
             return f"{row[0]} v{row[2]}: {(row[1] or '')[:200]}"
         if entity_type == "plan":
-            return f"Plan {row[0]} ({row[1]} – {row[2]})"
+            return f"Plan {row[0]} ({row[1]} to {row[2]})"
         if entity_type == "objective":
             return f"Objective: {row[0]} — {(row[1] or '')[:160]}"
         if entity_type == "key_result":

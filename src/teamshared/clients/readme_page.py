@@ -60,7 +60,7 @@ def render_readme_html() -> str:
     body = markdown.markdown(
         load_readme_md(),
         extensions=["fenced_code", "tables", "toc"],
-        output_format="html5",
+        output_format="html",
     )
     return f"""<style>{_README_CSS}</style>
 <section class="readme" id="about-teamshared">

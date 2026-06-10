@@ -19,6 +19,7 @@ echo "Validating teamshared plugin at $PLUGIN"
 check "$PLUGIN/.cursor-plugin/plugin.json"
 check "$ROOT/.cursor-plugin/marketplace.json"
 check "$PLUGIN/rules/teamshared.mdc"
+check "$ROOT/.cursor/rules/teamshared.mdc"
 check "$PLUGIN/skills/teamshared/SKILL.md"
 check "$PLUGIN/skills/continual-learning/SKILL.md"
 check "$PLUGIN/agents/agents-memory-updater.md"
@@ -40,6 +41,18 @@ for path in sys.argv[1:]:
 PY
 else
   echo "skip JSON parse (python3 not found)"
+fi
+
+if [[ "$FAIL" -ne 0 ]]; then
+  echo "Validation failed."
+  exit 1
+fi
+
+if ! diff -q "$PLUGIN/rules/teamshared.mdc" "$ROOT/.cursor/rules/teamshared.mdc" >/dev/null; then
+  echo "MISMATCH  .cursor/rules/teamshared.mdc vs plugins/teamshared/rules/teamshared.mdc"
+  FAIL=1
+else
+  echo "ok  .cursor/rules/teamshared.mdc matches plugin rule"
 fi
 
 if [[ "$FAIL" -ne 0 ]]; then

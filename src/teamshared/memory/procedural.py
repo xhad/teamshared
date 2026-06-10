@@ -306,7 +306,7 @@ class OrgProceduralStore:
             inserted = await cur.fetchone()
         if inserted is None:
             raise RuntimeError("INSERT did not return a row")
-        fields = self._FIELDS + ("status",)
+        fields = (*self._FIELDS, "status")
         return dict(zip(fields, inserted, strict=False))
 
     async def get_procedure(
@@ -328,7 +328,7 @@ class OrgProceduralStore:
             row = await cur.fetchone()
         if row is None:
             return None
-        fields = self._FIELDS + ("status",)
+        fields = (*self._FIELDS, "status")
         return dict(zip(fields, row, strict=False))
 
     async def list_procedures(
@@ -349,7 +349,7 @@ class OrgProceduralStore:
                     (limit,),
                 )
             rows = await cur.fetchall()
-        fields = self._FIELDS + ("status",)
+        fields = (*self._FIELDS, "status")
         return [dict(zip(fields, r, strict=False)) for r in rows]
 
     async def stats(self, org_id: UUID) -> dict[str, Any]:

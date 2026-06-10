@@ -37,12 +37,16 @@ from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.metrics import METRICS
 from teamshared.server.api import build_api_app
-from teamshared.server.capture import ToolCallCaptureMiddleware, ingest_turns
+from teamshared.server.capture import (
+    MAX_TURNS_PER_REQUEST,
+    ToolCallCaptureMiddleware,
+    ingest_turns,
+)
 from teamshared.server.console import register_console_routes
 from teamshared.server.console_csrf import ConsoleCsrfCookieMiddleware
-from teamshared.server.mcp_path import McpSlashMiddleware
 from teamshared.server.dashboard import handle_memory_dashboard
 from teamshared.server.health import check_components
+from teamshared.server.idempotency import RedisIdempotencyGuard
 from teamshared.server.install_api import (
     handle_install_asset,
     handle_install_index,
@@ -50,7 +54,7 @@ from teamshared.server.install_api import (
     handle_plugin_bundle,
     handle_uninstall_sh,
 )
-from teamshared.server.idempotency import RedisIdempotencyGuard
+from teamshared.server.mcp_path import McpSlashMiddleware
 from teamshared.server.rate_limit import HttpRateLimitMiddleware, RateLimitLimits, RedisRateLimiter
 from teamshared.server.services import ProductionServices, make_services
 from teamshared.server.state import ServerState, clear_state, set_state
@@ -110,14 +114,15 @@ async def _init_state(
     agent_state = AgentStateStore(working.client)
     audit = services.audit
 
-    graph: GraphStore | None = GraphStore(
+    graph: GraphStore | None = None
+    graph_candidate = GraphStore(
         settings.neo4j_url, settings.neo4j_user, settings.neo4j_password
     )
     try:
-        await graph.connect()
+        await graph_candidate.connect()
+        graph = graph_candidate
     except Exception as exc:
         log.warning("graph_store_connect_failed", error=str(exc))
-        graph = None
 
     facade = MemoryFacade(
         services=services,
@@ -332,6 +337,11 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             return JSONResponse(
                 {"error": "turns must be a non-empty array"}, status_code=400
             )
+        if len(turns) > MAX_TURNS_PER_REQUEST:
+            return JSONResponse(
+                {"error": f"too many turns (max {MAX_TURNS_PER_REQUEST} per request)"},
+                status_code=413,
+            )
         identity = request.state.agent
         principal = getattr(request.state, "principal", None)
         org_id = principal.org_id if principal else settings.default_org_id
@@ -396,10 +406,8 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
                     await refresh_queue_metrics(state.working)
                 except Exception as exc:
                     log.warning("observability_poll_failed", error=str(exc))
-                try:
+                with suppress(TimeoutError):
                     await asyncio.wait_for(stop_poll.wait(), timeout=interval)
-                except TimeoutError:
-                    pass
 
         poll_task = asyncio.create_task(_queue_metrics_poll())
         log.info("teamshared_server_started", host=settings.host, port=settings.port)

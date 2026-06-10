@@ -20,6 +20,7 @@ from teamshared.memory import working as working_mod
 from teamshared.memory.working import WorkingMemory
 from teamshared.server import capture as capture_mod
 from teamshared.server.capture import (
+    MAX_TURN_CONTENT_CHARS,
     ToolCallCaptureMiddleware,
     _build_turn,
     _summarize_arguments,
@@ -215,6 +216,22 @@ async def test_ingest_turns_records_valid_turns(memory: WorkingMemory) -> None:
     sessions = await memory.list_open_sessions(ORG, "cursor", limit=5)
     turns = await memory.get_turns(ORG, sessions[0]["session_id"])
     assert [t["role"] for t in turns] == ["user", "assistant"]
+
+
+async def test_ingest_turns_truncates_oversized_content(memory: WorkingMemory) -> None:
+    recorded = await ingest_turns(
+        memory,
+        ORG,
+        "cursor",
+        [{"role": "user", "content": "x" * (MAX_TURN_CONTENT_CHARS * 2)}],
+        idle_seconds=1800,
+        max_turns=200,
+    )
+    assert recorded == 1
+    sessions = await memory.list_open_sessions(ORG, "cursor", limit=5)
+    turns = await memory.get_turns(ORG, sessions[0]["session_id"])
+    assert len(turns[0]["content"]) == MAX_TURN_CONTENT_CHARS
+    assert turns[0]["content"].endswith("\u2026")
 
 
 async def test_ingest_turns_skips_invalid(memory: WorkingMemory) -> None:

@@ -7,8 +7,8 @@ import json
 import pytest
 
 from teamshared.queue.job_sign import (
-    JobSignError,
     SIGNATURE_VERSION,
+    JobSignError,
     compute_signature,
     decode_job,
     encode_job,

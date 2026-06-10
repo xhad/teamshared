@@ -25,8 +25,8 @@ from fastmcp.tools import ToolResult
 from teamshared.auth import current_agent, current_principal
 from teamshared.config import get_settings
 from teamshared.logging import get_logger
-from teamshared.metrics import METRICS
 from teamshared.memory.working import WorkingMemory
+from teamshared.metrics import METRICS
 from teamshared.server.state import get_state
 
 log = get_logger(__name__)
@@ -35,6 +35,11 @@ log = get_logger(__name__)
 _SKIP_TOOLS = frozenset({"health"})
 
 _INGEST_ROLES = frozenset({"user", "assistant", "tool", "system"})
+
+# Boundary caps for POST /sessions/turns: any bearer holder can call it, so
+# bound both the batch size and each turn's stored length.
+MAX_TURNS_PER_REQUEST = 200
+MAX_TURN_CONTENT_CHARS = 8000
 
 
 async def ingest_turns(
@@ -63,6 +68,8 @@ async def ingest_turns(
             continue
         if not isinstance(content, str) or not content.strip():
             continue
+        if len(content) > MAX_TURN_CONTENT_CHARS:
+            content = content[: MAX_TURN_CONTENT_CHARS - 1] + "\u2026"
         await working.record_turn(
             org_id, agent, role, content, idle_seconds=idle_seconds, max_turns=max_turns
         )

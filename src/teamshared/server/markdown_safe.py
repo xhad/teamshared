@@ -87,6 +87,6 @@ def sanitize_html(html: str) -> str:
 def render_markdown_safe(text: str) -> str:
     """Markdown -> sanitized HTML fragment safe to render in the console."""
     raw = _markdown.markdown(
-        text or "", extensions=["fenced_code", "tables"], output_format="html5"
+        text or "", extensions=["fenced_code", "tables"], output_format="html"
     )
     return sanitize_html(raw)

@@ -8,7 +8,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from teamshared.admin.exceptions import ExportTooLarge, SelfErasureBlocked, UserNotInOrg
+from teamshared.admin.exceptions import (
+    ExportTooLargeError,
+    SelfErasureBlockedError,
+    UserNotInOrgError,
+)
 from teamshared.admin.service import AdminService
 from teamshared.identity.roles import RoleStore
 
@@ -79,7 +83,7 @@ def _admin(conn: _Conn, *, export_max_items: int = 50_000) -> AdminService:
 def test_export_raises_when_over_cap() -> None:
     conn = _Conn([_Cur(one=(100_001,))])
     admin = _admin(conn, export_max_items=100_000)
-    with pytest.raises(ExportTooLarge):
+    with pytest.raises(ExportTooLargeError):
         asyncio.run(admin.export_memory(_Ctx()))  # type: ignore[arg-type]
 
 
@@ -116,11 +120,11 @@ def test_purge_soft_deletes_and_requires_member() -> None:
 def test_purge_rejects_unknown_member() -> None:
     conn = _Conn([_Cur(one=None)])
     admin = _admin(conn)
-    with pytest.raises(UserNotInOrg):
+    with pytest.raises(UserNotInOrgError):
         asyncio.run(admin.purge_user_memory(_Ctx(), TARGET))  # type: ignore[arg-type]
 
 
 def test_purge_blocks_self() -> None:
     admin = _admin(_Conn([]))
-    with pytest.raises(SelfErasureBlocked):
+    with pytest.raises(SelfErasureBlockedError):
         asyncio.run(admin.purge_user_memory(_Ctx(actor_id=ACTOR), ACTOR))  # type: ignore[arg-type]

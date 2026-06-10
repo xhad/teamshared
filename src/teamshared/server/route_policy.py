@@ -8,14 +8,14 @@ or are intentionally public.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from starlette.applications import Starlette
-from starlette.routing import Mount, Route
+from starlette.routing import BaseRoute, Mount, Route
 from starlette.types import ASGIApp
 
 
-class RouteClass(str, Enum):
+class RouteClass(StrEnum):
     PUBLIC_UNAUTH = "public_unauthenticated"
     PUBLIC_MINT = "public_mint"
     HEALTH_METRICS = "health_metrics"
@@ -96,7 +96,7 @@ def iter_http_paths(app: ASGIApp) -> list[str]:
     return []
 
 
-def _paths_from_route(route: Mount | Route, parent: str) -> list[str]:
+def _paths_from_route(route: BaseRoute, parent: str) -> list[str]:
     if isinstance(route, Mount):
         prefix = parent + route.path.rstrip("/")
         child_paths: list[str] = [prefix or "/"]

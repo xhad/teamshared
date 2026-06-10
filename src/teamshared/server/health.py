@@ -93,7 +93,7 @@ async def check_components(state: ServerState) -> dict[str, Any]:
     else:
         components["ollama"] = "disabled"
 
-    queues: dict[str, object] = {}
+    queues: dict[str, Any] = {}
     try:
         stats = await refresh_queue_metrics(state.working)
         alerts = evaluate_queue_alerts(stats, settings)
@@ -110,7 +110,8 @@ async def check_components(state: ServerState) -> dict[str, Any]:
             raw = await fetch_queue_stats(state.working)
             queues = raw.as_dict()
 
-    queue_alerts = queues.get("alerts", []) if isinstance(queues.get("alerts"), list) else []
+    alerts_value = queues.get("alerts")
+    queue_alerts: list[dict[str, Any]] = alerts_value if isinstance(alerts_value, list) else []
     overall = "ok" if all(_is_healthy(v) for v in components.values()) else "degraded"
     if queues_degraded(queue_alerts):
         overall = "degraded"

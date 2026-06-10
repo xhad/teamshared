@@ -17,7 +17,7 @@ from dataclasses import dataclass
 import redis.asyncio as redis
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
 from teamshared.identity.principal import Principal
@@ -124,7 +124,7 @@ class RedisRateLimiter:
 
     async def check_mint(self, request: Request) -> RateLimitResult:
         ip = client_ip(request)
-        invite = request.path_params.get("invite", "")
+        invite = request.path_params.get("invite", "") or request.query_params.get("invite", "")
         suffix = f":{invite}" if invite else ""
         return await self.allow(
             f"mint:ip:{ip}{suffix}",
@@ -190,8 +190,21 @@ def rate_limit_response(
     )
 
 
+def _is_invite_redemption(path: str, request: Request) -> bool:
+    """True for public GET paths that redeem an invite into a bearer token.
+
+    ``GET /?invite=`` and ``GET /get-token[/...]`` mint real ``tsk_*`` tokens
+    but are classified ``PUBLIC_UNAUTH``, so they need the same per-IP mint
+    budget as ``POST /tokens/mint`` (otherwise redemption spam is free).
+    """
+    if path in {"/", "/get-token"}:
+        return bool(request.query_params.get("invite", "").strip())
+    return path.startswith("/get-token/")
+
+
 class HttpRateLimitMiddleware(BaseHTTPMiddleware):
-    """Edge rate limits for mint and MCP/bearer paths (OTP uses handler helpers)."""
+    """Edge rate limits for mint, invite-redemption GETs, and MCP/bearer paths
+    (OTP uses handler helpers)."""
 
     def __init__(self, app: ASGIApp) -> None:
         super().__init__(app)
@@ -209,6 +222,17 @@ class HttpRateLimitMiddleware(BaseHTTPMiddleware):
         method = request.method.upper()
 
         if route_class == RouteClass.PUBLIC_MINT and method == "POST":
+            result = await limiter.check_mint(request)
+            if not result.allowed:
+                return rate_limit_response(
+                    result, request_id=getattr(request.state, "request_id", None)
+                )
+
+        if (
+            route_class == RouteClass.PUBLIC_UNAUTH
+            and method == "GET"
+            and _is_invite_redemption(path, request)
+        ):
             result = await limiter.check_mint(request)
             if not result.allowed:
                 return rate_limit_response(

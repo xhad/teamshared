@@ -168,7 +168,7 @@ class DistillWorker:
                 continue
             await ingestion.ingest(
                 ctx, content, kind="fact", pillar="semantic", scope="org",
-                subject=topic, tags=["decision"] + scope_tags, source="agent",
+                subject=topic, tags=["decision", *scope_tags], source="agent",
                 source_ref={"session_id": session_id, "rationale": decision.get("rationale")},
             )
 

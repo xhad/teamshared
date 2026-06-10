@@ -1,3 +1,9 @@
+> **Status (2026-06):** living roadmap. Stages 1–4 (multi-tenant orgs, RLS,
+> secure retrieval, guarded ingestion, rate limits, signed queue jobs, queue
+> observability) are **shipped** — see the "Done" markers near the end. The
+> later enterprise phases remain aspirational. For what the system *is* today,
+> read `README.md` and `AGENTS.md`; this file is direction, not description.
+
 You are a senior staff engineer and product-minded systems architect. Help me plan and implement the production-readiness roadmap for **TeamShared**, an agent memory and shared-context system for teams and organizations.
 
 ## Context

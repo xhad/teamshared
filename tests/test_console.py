@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import re
 import uuid
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -543,7 +542,7 @@ def test_work_new_renders_compose_form(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_work_detail_renders_comments(monkeypatch: pytest.MonkeyPatch) -> None:
-    client, services = _build()
+    client, _services = _build()
     facade = MagicMock()
     facade.work_get = AsyncMock(return_value={
         "id": "w1", "title": "Ship work queue", "work_status": "todo",

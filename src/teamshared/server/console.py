@@ -27,6 +27,7 @@ from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 
 from teamshared import __version__
+from teamshared.admin.service import AdminService
 from teamshared.config import Settings
 from teamshared.identity.principal import Principal
 from teamshared.identity.provisioning import signup_org
@@ -34,9 +35,9 @@ from teamshared.identity.rbac import Permissions
 from teamshared.identity.sessions import issue_session, verify_session
 from teamshared.ingestion.consent import BASELINE_PROFILE, LOCKED_RULES, MODES, SCOPES
 from teamshared.logging import get_logger
-from teamshared.metrics import METRICS
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.wiki import slugify
+from teamshared.metrics import METRICS
 from teamshared.server import mailer
 from teamshared.server.console_csrf import (
     cookie_secure,
@@ -45,14 +46,13 @@ from teamshared.server.console_csrf import (
     verify_console_csrf,
 )
 from teamshared.server.health import check_components
-from teamshared.admin.service import AdminService
+from teamshared.server.markdown_safe import render_markdown_safe
 from teamshared.server.rate_limit import (
     enforce_admin_export,
     enforce_admin_purge,
     enforce_otp_send,
     enforce_otp_verify,
 )
-from teamshared.server.markdown_safe import render_markdown_safe
 from teamshared.server.services import ProductionServices
 from teamshared.server.state import get_state
 
@@ -141,7 +141,7 @@ async def _settings_context(
 
 async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
     """Gather live stats for the console home, degrading on per-store failure."""
-    working, pillar, proc, strat, work, events = await asyncio.gather(
+    results = await asyncio.gather(
         state.working.stats(org_id),
         state.services.vector_store.pillar_stats(org_id),
         state.procedural.stats(org_id),
@@ -150,12 +150,12 @@ async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
         state.services.audit.list_events(org_id, limit=8),
         return_exceptions=True,
     )
-    working = _safe(working, {})
-    pillar = _safe(pillar, {})
-    proc = _safe(proc, {})
-    strat = _safe(strat, {})
-    work = _safe(work, {})
-    events = _safe(events, [])
+    working = _safe(results[0], {})
+    pillar = _safe(results[1], {})
+    proc = _safe(results[2], {})
+    strat = _safe(results[3], {})
+    work = _safe(results[4], {})
+    events = _safe(results[5], [])
 
     by_agent = sorted(
         (pillar.get("by_agent") or {}).items(), key=lambda kv: kv[1], reverse=True

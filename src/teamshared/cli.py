@@ -15,6 +15,7 @@ Subcommands:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -30,8 +31,8 @@ from teamshared.config_validate import validate_settings
 from teamshared.identity.agent_tokens import AgentTokenMinter
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.invite import InviteStore
-from teamshared.server.services import make_services
 from teamshared.logging import configure_logging
+from teamshared.server.services import make_services
 from teamshared.server.token_api import get_token_path, invite_redeem_curl, invite_redeem_url
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="teamshared memory CLI")
@@ -209,7 +210,11 @@ def migrate(
         console.print(f"[yellow]No migrations found in {migrations_dir}[/yellow]")
         raise typer.Exit(code=1)
 
-    with psycopg.connect(settings.pg_dsn, autocommit=True) as conn, conn.cursor() as cur:
+    # Each migration runs in its own transaction: a failure rolls the file back
+    # and aborts the run instead of leaving a partially-applied schema. A sha256
+    # checksum is recorded per file so edits to an already-applied migration are
+    # detected and rejected (add a new migration instead).
+    with psycopg.connect(settings.pg_dsn) as conn, conn.cursor() as cur:
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS teamshared_migrations (
@@ -218,16 +223,48 @@ def migrate(
             )
             """
         )
-        cur.execute("SELECT name FROM teamshared_migrations")
-        applied = {row[0] for row in cur.fetchall()}
+        cur.execute("ALTER TABLE teamshared_migrations ADD COLUMN IF NOT EXISTS checksum TEXT")
+        conn.commit()
+        cur.execute("SELECT name, checksum FROM teamshared_migrations")
+        applied: dict[str, str | None] = {row[0]: row[1] for row in cur.fetchall()}
         for path in files:
+            sql_text = path.read_text()
+            digest = hashlib.sha256(sql_text.encode("utf-8")).hexdigest()
             if path.name in applied:
-                console.print(f"  [dim]skip[/dim] {path.name}")
+                stored = applied[path.name]
+                if stored is None:
+                    # Applied before checksums existed: backfill from disk.
+                    cur.execute(
+                        "UPDATE teamshared_migrations SET checksum = %s WHERE name = %s",
+                        (digest, path.name),
+                    )
+                    conn.commit()
+                    console.print(f"  [dim]skip[/dim] {path.name} [dim](checksum recorded)[/dim]")
+                elif stored != digest:
+                    console.print(
+                        f"  [bold red]checksum mismatch[/bold red] {path.name}: the file "
+                        "changed after it was applied. Never edit an applied migration; "
+                        "add a new one."
+                    )
+                    raise typer.Exit(code=1)
+                else:
+                    console.print(f"  [dim]skip[/dim] {path.name}")
                 continue
-            sql = path.read_text()
             console.print(f"  [green]apply[/green] {path.name}")
-            cur.execute(sql)
-            cur.execute("INSERT INTO teamshared_migrations (name) VALUES (%s)", (path.name,))
+            try:
+                cur.execute(sql_text)
+                cur.execute(
+                    "INSERT INTO teamshared_migrations (name, checksum) VALUES (%s, %s)",
+                    (path.name, digest),
+                )
+            except Exception as exc:
+                conn.rollback()
+                console.print(
+                    f"  [bold red]failed[/bold red] {path.name}: {exc}\n"
+                    "  Rolled back; no partial schema was left behind."
+                )
+                raise typer.Exit(code=1) from exc
+            conn.commit()
     console.print("[bold green]Migrations complete.[/bold green]")
 
 
