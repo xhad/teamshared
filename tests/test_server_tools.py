@@ -20,6 +20,7 @@ import pytest
 from fastmcp import Client, FastMCP
 
 from teamshared.identity.principal import Principal
+from teamshared.memory.context_assembler import ContextPack
 from teamshared.memory.types import RecallResult
 from teamshared.server.state import ServerState, clear_state, set_state
 from teamshared.server.tools import register_tools
@@ -76,6 +77,15 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
         return_value=RecallResult(query="q", records=[], counts_by_pillar={"semantic": 0})
     )
     facade.episodes_list = AsyncMock(return_value={"count": 0, "episodes": []})
+    facade.assemble_context = AsyncMock(
+        return_value=ContextPack(
+            task="t",
+            rendered="# Context for: t\n\n## Semantic\n- a fact\n",
+            tokens_used=3,
+            token_budget=1500,
+            counts_by_pillar={"semantic_episodic": 1},
+        )
+    )
     facade.session_open = AsyncMock(return_value={"session_id": "sess_abc", "agent": "anonymous"})
     facade.session_append = AsyncMock(return_value={"turn_count": 1})
     facade.session_close = AsyncMock(
@@ -264,6 +274,29 @@ async def test_memory_recall_returns_result_shape(
     assert data["query"] == "q"
     assert data["records"] == []
     assert "semantic" in data["counts_by_pillar"]
+
+
+async def test_memory_assemble_context_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    data = await _call(
+        mcp,
+        "memory_assemble_context",
+        task="fix the retrieval bug",
+        repo="home-chad-code-teamshared",
+        github="xhad/teamshared",
+        open_files=["src/teamshared/memory/retrieval.py"],
+    )
+    assert data["rendered"].startswith("# Context for:")
+    assert data["token_budget"] == 1500
+    state.facade.assemble_context.assert_awaited_once()
+    kwargs = state.facade.assemble_context.await_args.kwargs
+    assert kwargs["task"] == "fix the retrieval bug"
+    assert kwargs["repo"] == "home-chad-code-teamshared"
+    assert kwargs["github"] == "xhad/teamshared"
+    assert kwargs["open_files"] == ["src/teamshared/memory/retrieval.py"]
+    assert "caller_agent" in kwargs
 
 
 async def test_memory_recall_is_unscoped_by_default(

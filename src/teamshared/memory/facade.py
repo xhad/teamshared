@@ -22,6 +22,11 @@ from teamshared.ingestion.pii import has_hard_secret, scan_pii
 from teamshared.ingestion.pipeline import IngestionRejected
 from teamshared.logging import get_logger
 from teamshared.memory.agent_state import AgentStateStore, github_tag, repo_tag
+from teamshared.memory.context_assembler import (
+    DEFAULT_TOKEN_BUDGET,
+    ContextAssembler,
+    ContextPack,
+)
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
@@ -204,6 +209,38 @@ class MemoryFacade:
         ranked = _rerank(records, k=k, repo=repo, github=github)
         return RecallResult(
             query=query, records=ranked, counts_by_pillar=counts, errors_by_pillar=errors
+        )
+
+    async def assemble_context(
+        self,
+        principal: Principal,
+        *,
+        task: str,
+        repo: str | None = None,
+        github: str | None = None,
+        open_files: list[str] | None = None,
+        k_per_pillar: int = 8,
+        token_budget: int = DEFAULT_TOKEN_BUDGET,
+        caller_agent: str | None = None,
+    ) -> ContextPack:
+        """Assemble a token-budgeted context pack for ``task``.
+
+        Fans recall out across the durable pillars (via the secure
+        :meth:`recall` path) and the optional graph in parallel, then packs the
+        merged, ranked records into a single sectioned, cited bundle. One call
+        gives an agent its whole starting context instead of issuing serial
+        recall/procedure_get/graph lookups.
+        """
+        assembler = ContextAssembler(self)
+        return await assembler.assemble(
+            principal,
+            task=task,
+            repo=repo,
+            github=github,
+            open_files=open_files,
+            k_per_pillar=k_per_pillar,
+            token_budget=token_budget,
+            caller_agent=caller_agent,
         )
 
     async def episodes_list(

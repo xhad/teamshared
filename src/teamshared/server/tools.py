@@ -245,6 +245,70 @@ def register_tools(mcp: Any) -> None:
         return result.model_dump(mode="json")
 
     @mcp.tool()
+    async def memory_assemble_context(
+        task: Annotated[
+            str,
+            Field(description="What you are about to do (the task/question driving recall)"),
+        ],
+        repo: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Workspace slug of your current repo. Boosts repo-scoped "
+                    "memories in the pack; pass it for code/repo-specific work."
+                ),
+            ),
+        ] = None,
+        github: Annotated[
+            str | None,
+            Field(description="GitHub repository as owner/repo (boosts github-tagged memories)"),
+        ] = None,
+        open_files: Annotated[
+            list[str] | None,
+            Field(
+                description=(
+                    "Paths of files currently open/relevant; their names seed the "
+                    "graph-relationship lookup."
+                ),
+            ),
+        ] = None,
+        k_per_pillar: Annotated[
+            int, Field(ge=1, le=50, description="Max records to recall per pillar")
+        ] = 8,
+        token_budget: Annotated[
+            int,
+            Field(
+                ge=100,
+                le=32000,
+                description="Approx token budget for the rendered pack (default 1500)",
+            ),
+        ] = 1500,
+    ) -> dict[str, Any]:
+        """Assemble one token-budgeted, cited context pack for a task.
+
+        Fans recall across the durable pillars (semantic, episodic, procedural,
+        strategic, work, working) and the optional graph in parallel through the
+        secure retrieval path, then ranks and packs the result into a single
+        sectioned markdown bundle. Use this once at the start of a task instead
+        of issuing serial ``memory_recall`` / ``memory_procedure_get`` /
+        ``memory_graph_related`` calls. Returns ``rendered`` (the pack),
+        ``tokens_used``, ``counts_by_pillar``, and the kept ``records``.
+        """
+        state = get_state()
+        principal = await _principal()
+        pack = await state.facade.assemble_context(
+            principal,
+            task=task,
+            repo=repo,
+            github=github,
+            open_files=open_files,
+            k_per_pillar=k_per_pillar,
+            token_budget=token_budget,
+            caller_agent=_caller_agent(),
+        )
+        return pack.model_dump(mode="json")
+
+    @mcp.tool()
     async def memory_session_open(
         topic: Annotated[
             str | None,

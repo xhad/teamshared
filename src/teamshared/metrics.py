@@ -161,6 +161,15 @@ class Metrics:
             "teamshared_admin_purge_total",
             "Per-user memory erasure operations",
         )
+        self.context_pack_built = _Counter(
+            "teamshared_context_pack_built_total",
+            "Context packs assembled via memory_assemble_context",
+        )
+        self.context_pack_tokens = _Histogram(
+            "teamshared_context_pack_tokens",
+            "Estimated tokens used per assembled context pack",
+            buckets=(50, 100, 250, 500, 1000, 2000, 4000, 8000),
+        )
 
     def render(self) -> str:
         with self._lock:
@@ -173,6 +182,7 @@ class Metrics:
                 self.otp_failed, self.consent_denied_capture, self.ingestion_quarantined,
                 self.rate_limited, self.job_signature_invalid,
                 self.admin_export_total, self.admin_purge_total,
+                self.context_pack_built, self.context_pack_tokens,
             ):
                 lines.extend(metric.render())
             return "\n".join(lines) + "\n"
