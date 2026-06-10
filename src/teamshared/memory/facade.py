@@ -18,8 +18,8 @@ from uuid import UUID
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.identity.principal import Principal
 from teamshared.identity.rbac import Permissions
-from teamshared.ingestion.pipeline import IngestionRejected
 from teamshared.ingestion.pii import has_hard_secret, scan_pii
+from teamshared.ingestion.pipeline import IngestionRejected
 from teamshared.logging import get_logger
 from teamshared.memory.agent_state import AgentStateStore, github_tag, repo_tag
 from teamshared.memory.graph import GraphStore

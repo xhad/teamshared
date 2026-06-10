@@ -1,5 +1,9 @@
 # Memory Wiki + Consent-First Capture — Design
 
+> **Archived (2026-06):** this design shipped — the `/app` console, wiki
+> curator, and consent-gated capture are live. Kept for historical context;
+> see `README.md` and `AGENTS.md` for the current architecture.
+
 Status: proposal / design. Builds on `plan.md` (memory architecture) and
 `prod-plan.md` (multi-tenant production stack). This document captures the
 redesign of the teamshared **web app** and the **capture → curate → wiki**

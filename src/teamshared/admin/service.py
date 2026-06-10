@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from datetime import UTC, datetime
-
 from teamshared.admin.exceptions import (
-    ExportTooLarge,
-    SelfErasureBlocked,
-    UserNotInOrg,
+    ExportTooLargeError,
+    SelfErasureBlockedError,
+    UserNotInOrgError,
 )
 from teamshared.identity.principal import PrincipalType
 from teamshared.identity.rbac import Permissions
@@ -260,7 +259,7 @@ class AdminService:
             )
             row = await cur.fetchone()
         if row is None:
-            raise UserNotInOrg(user_id)
+            raise UserNotInOrgError(user_id)
 
     async def export_memory(self, ctx: RequestContext) -> dict[str, Any]:
         """GDPR/portability: dump active semantic/episodic items and procedures."""
@@ -272,7 +271,7 @@ class AdminService:
             count_row = await cur.fetchone()
             total = int(count_row[0]) if count_row else 0
             if total > self.export_max_items:
-                raise ExportTooLarge(total, self.export_max_items)
+                raise ExportTooLargeError(total, self.export_max_items)
             cur = await conn.execute(
                 "SELECT id, pillar, kind, scope, visibility, content, subject, tags, "
                 "source, owner_type, owner_id, created_at, updated_at "
@@ -330,7 +329,7 @@ class AdminService:
         """GDPR erasure: soft-delete memory owned by or scoped to a user."""
         await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_ADMIN)
         if ctx.principal.type == "user" and ctx.principal.id == user_id:
-            raise SelfErasureBlocked()
+            raise SelfErasureBlockedError()
         await self._assert_org_member(ctx.org_id, user_id)
         uid = str(user_id)
         async with self.db.org(ctx.org_id) as conn:

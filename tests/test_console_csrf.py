@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import re
 import uuid
-
 from unittest.mock import AsyncMock
 
 import jwt
-import pytest
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse

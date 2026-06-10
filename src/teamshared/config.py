@@ -8,10 +8,10 @@ from typing import Literal
 from urllib.parse import unquote, urlparse
 from uuid import UUID
 
-DEFAULT_ORG_ID = UUID("00000000-0000-0000-0000-000000000001")
-
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_ORG_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 EmbedProvider = Literal["openai", "ollama"]
 LLMProvider = Literal["openai", "ollama"]

@@ -82,6 +82,46 @@ def test_mint_middleware_returns_429(limiter: RedisRateLimiter) -> None:
     assert "Retry-After" in resp.headers
 
 
+def _redemption_app(limiter: RedisRateLimiter) -> Starlette:
+    async def root(_: Request) -> JSONResponse:
+        return JSONResponse({"ok": True})
+
+    app = Starlette(
+        routes=[
+            Route("/", root, methods=["GET"]),
+            Route("/get-token", root, methods=["GET"]),
+            Route("/get-token/{invite}", root, methods=["GET"]),
+            Route("/get-token/{invite}/{agent}", root, methods=["GET"]),
+        ],
+        middleware=[Middleware(HttpRateLimitMiddleware)],
+    )
+    app.state.rate_limiter = limiter
+    return app
+
+
+def test_root_invite_redemption_returns_429(limiter: RedisRateLimiter) -> None:
+    client = TestClient(_redemption_app(limiter))
+    assert client.get("/?invite=abc&agent=cursor").status_code == 200
+    assert client.get("/?invite=abc&agent=cursor").status_code == 200
+    resp = client.get("/?invite=abc&agent=cursor")
+    assert resp.status_code == 429
+    assert resp.json()["error"] == "rate_limited"
+
+
+def test_get_token_path_redemption_returns_429(limiter: RedisRateLimiter) -> None:
+    client = TestClient(_redemption_app(limiter))
+    assert client.get("/get-token/abc/cursor").status_code == 200
+    assert client.get("/get-token/abc/cursor").status_code == 200
+    assert client.get("/get-token/abc/cursor").status_code == 429
+
+
+def test_plain_landing_and_form_pages_not_throttled(limiter: RedisRateLimiter) -> None:
+    client = TestClient(_redemption_app(limiter))
+    for _ in range(5):
+        assert client.get("/").status_code == 200
+        assert client.get("/get-token").status_code == 200
+
+
 def _mcp_app(limiter: RedisRateLimiter) -> Starlette:
     async def ping(request: Request) -> JSONResponse:
         principal = getattr(request.state, "principal", None)

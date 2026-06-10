@@ -29,7 +29,7 @@ import redis.asyncio as redis
 from teamshared.logging import get_logger
 from teamshared.memory.types import MemoryRecord
 from teamshared.metrics import METRICS
-from teamshared.queue.job_sign import JobSignError, encode_job, decode_job, peek_job
+from teamshared.queue.job_sign import JobSignError, decode_job, encode_job, peek_job
 
 log = get_logger(__name__)
 
@@ -43,6 +43,8 @@ MAX_DISTILL_ATTEMPTS = 3
 # CuratorWorker drains it.
 CURATE_QUEUE_KEY = "working:curate:queue"
 CURATE_DEAD_LETTER_KEY = "working:curate:dead"
+# Dead-letter lists keep only the newest N failed jobs (bounded growth).
+DEAD_LETTER_MAX_LEN = 1000
 CURATE_PENDING_KEY = "working:curate:pending"
 MAX_CURATE_ATTEMPTS = 3
 
@@ -598,4 +600,9 @@ class WorkingMemory:
         self, dead_letter_key: str, raw_payload: str, *, reason: str
     ) -> None:
         entry = json.dumps({"reason": reason, "raw": raw_payload}, separators=(",", ":"))
-        await self.client.rpush(dead_letter_key, entry)
+        pipe = self.client.pipeline()
+        pipe.rpush(dead_letter_key, entry)
+        # Keep only the newest entries so a stuck consumer can't grow Redis
+        # without bound; depth alerts fire well before the cap (queue_stats).
+        pipe.ltrim(dead_letter_key, -DEAD_LETTER_MAX_LEN, -1)
+        await pipe.execute()

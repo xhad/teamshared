@@ -10,7 +10,6 @@ import pytest
 from teamshared.identity.agent_tokens import AgentTokenMinter
 from teamshared.identity.api_keys import MintedKey
 from teamshared.identity.legacy_bridge import PrincipalResolver
-from teamshared.identity.principal import Principal
 
 DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
 AGENT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")

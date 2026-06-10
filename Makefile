@@ -23,4 +23,11 @@ health :; curl -fsS http://localhost:8077/health | jq
 smoke-all :; python scripts/smoke_all_tools.py
 smoke-cross-agent :; python scripts/smoke_cross_agent.py
 
-.PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed token-mint invite-create health smoke-all smoke-cross-agent
+# Quality gates (same commands CI runs). `make check` is the pre-push gate.
+test :; python -m pytest
+test-integration :; python -m pytest -m integration
+lint :; python -m ruff check src tests scripts eval
+typecheck :; python -m mypy src
+check : lint typecheck test
+
+.PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed token-mint invite-create health smoke-all smoke-cross-agent test test-integration lint typecheck check

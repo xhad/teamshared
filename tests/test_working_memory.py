@@ -20,6 +20,7 @@ from teamshared.memory.working import (
     WorkingMemory,
     _auto_session_key,
 )
+
 # Every working-memory key is org-namespaced post-G2; tests pin one org.
 ORG = "00000000-0000-0000-0000-000000000001"
 
@@ -343,6 +344,17 @@ async def test_unsigned_distill_job_rejected_when_signing_enabled(
     await signed_memory.client.rpush(DISTILL_QUEUE_KEY, plain)
     assert await signed_memory.pop_distill_job(timeout=1) is None
     assert int(await signed_memory.client.llen(DISTILL_DEAD_LETTER_KEY)) == 1
+
+
+async def test_dead_letter_list_is_capped(signed_memory: WorkingMemory) -> None:
+    for i in range(working_mod.DEAD_LETTER_MAX_LEN + 25):
+        await signed_memory._push_dead_letter(
+            DISTILL_DEAD_LETTER_KEY, f"payload-{i}", reason="test"
+        )
+    depth = int(await signed_memory.client.llen(DISTILL_DEAD_LETTER_KEY))
+    assert depth == working_mod.DEAD_LETTER_MAX_LEN
+    newest = json.loads(await signed_memory.client.lindex(DISTILL_DEAD_LETTER_KEY, -1))
+    assert newest["raw"] == f"payload-{working_mod.DEAD_LETTER_MAX_LEN + 24}"
 
 
 async def test_invalid_curate_job_clears_pending(signed_memory: WorkingMemory) -> None:

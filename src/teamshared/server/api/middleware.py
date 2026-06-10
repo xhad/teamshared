@@ -23,7 +23,7 @@ from teamshared.identity.sessions import verify_session
 from teamshared.logging import get_logger
 from teamshared.metrics import METRICS
 from teamshared.server.idempotency import RedisIdempotencyGuard
-from teamshared.server.rate_limit import RedisRateLimiter
+from teamshared.server.rate_limit import RateLimitResult, RedisRateLimiter
 
 log = get_logger(__name__)
 
@@ -71,7 +71,7 @@ class PrincipalAuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-def _v1_rate_limit_response(result, request: Request) -> JSONResponse:
+def _v1_rate_limit_response(result: RateLimitResult, request: Request) -> JSONResponse:
     METRICS.rate_limited.inc()
     return JSONResponse(
         {

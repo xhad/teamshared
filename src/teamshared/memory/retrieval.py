@@ -31,9 +31,9 @@ from teamshared.logging import get_logger
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.strategic import OrgStrategicStore
-from teamshared.memory.work import WorkStore
 from teamshared.memory.types import MemoryRecord, MemoryScope, RecallResult, TimeRange
 from teamshared.memory.vectorstore import ScopeFilter, VectorStore
+from teamshared.memory.work import WorkStore
 from teamshared.metrics import METRICS
 from teamshared.telemetry import span
 

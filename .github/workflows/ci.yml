@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, typecheck, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e '.[dev]'
+      - name: Ruff
+        run: python -m ruff check src tests scripts eval
+      - name: Mypy (strict)
+        run: python -m mypy src
+      - name: Unit tests with coverage
+        run: python -m pytest -q --cov=src/teamshared --cov-report=term
+
+  integration:
+    name: Integration tests (Postgres + Redis)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: teamshared
+          POSTGRES_PASSWORD: teamshared
+          POSTGRES_DB: teamshared
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U teamshared"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEAMSHARED_PG_HOST: localhost
+      TEAMSHARED_PG_PORT: "5432"
+      TEAMSHARED_PG_USER: teamshared
+      TEAMSHARED_PG_PASSWORD: teamshared
+      TEAMSHARED_PG_DB: teamshared
+      TEAMSHARED_PG_APP_USER: teamshared_app
+      TEAMSHARED_PG_APP_PASSWORD: teamshared-app-ci-password
+      TEAMSHARED_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e '.[dev]'
+      - name: Migrate
+        run: teamshared migrate
+      - name: Provision RLS app role
+        run: teamshared provision-app-role
+      - name: Verify RLS
+        run: teamshared verify-rls
+      - name: Integration tests
+        run: python -m pytest -q -m integration

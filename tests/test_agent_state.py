@@ -42,6 +42,30 @@ async def test_agent_state_delete(store: AgentStateStore) -> None:
     assert await store.delete("tok_a", "repo-one", "continual-learning/cadence") is False
 
 
+async def test_agent_state_keys_get_idle_ttl() -> None:
+    import fakeredis.aioredis
+
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = AgentStateStore(client, ttl_seconds=3600)
+    await store.set("tok_a", "repo-one", "continual-learning/cadence", {"turns": 1})
+    key = "agent-state:tok_a:repo-one:continual-learning/cadence"
+    ttl = await client.ttl(key)
+    assert 0 < ttl <= 3600
+    # Reads refresh the idle expiry.
+    await client.expire(key, 10)
+    await store.get("tok_a", "repo-one", "continual-learning/cadence")
+    assert await client.ttl(key) > 10
+
+
+async def test_agent_state_rejects_oversized_value() -> None:
+    import fakeredis.aioredis
+
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = AgentStateStore(client, max_value_bytes=128)
+    with pytest.raises(ValueError, match="too large"):
+        await store.set("tok_a", "repo-one", "continual-learning/index", {"blob": "x" * 200})
+
+
 def test_validate_repo_rejects_empty() -> None:
     with pytest.raises(ValueError):
         validate_repo("")

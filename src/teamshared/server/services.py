@@ -27,9 +27,9 @@ from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.retrieval import SecureRetrieval
 from teamshared.memory.service import MemoryService
 from teamshared.memory.strategic import OrgStrategicStore
-from teamshared.memory.work import WorkStore
 from teamshared.memory.vectorstore import VectorStore
 from teamshared.memory.wiki import WikiStore
+from teamshared.memory.work import WorkStore
 from teamshared.memory.working import WorkingMemory
 from teamshared.tenancy.context import TenantDb
 from teamshared.tenancy.repository import TenancyRepository
