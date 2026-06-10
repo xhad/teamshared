@@ -162,6 +162,37 @@ def curator() -> None:
     curator_main()
 
 
+@app.command(name="worker-health")
+def worker_health(
+    component: str = typer.Argument(
+        ..., help="Heartbeat component to probe, e.g. 'distiller' or 'curator'."
+    ),
+) -> None:
+    """Exit 0 if ``component`` has a fresh Redis heartbeat, else 1.
+
+    Docker healthcheck for the worker containers. They run ``teamshared worker``
+    / ``curator`` and never bind the HTTP port the image's default HEALTHCHECK
+    curls, so this probes the same short-TTL heartbeat the ``/health`` route
+    reads (``working:heartbeat:<component>``).
+    """
+    from teamshared.memory.working import WorkingMemory
+
+    settings = get_settings()
+
+    async def _probe() -> bool:
+        working = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl)
+        await working.connect()
+        try:
+            return await working.last_heartbeat(component) is not None
+        finally:
+            await working.close()
+
+    if not asyncio.run(_probe()):
+        console.print(f"[red]no recent heartbeat for {component}[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"[green]{component} heartbeat ok[/green]")
+
+
 @app.command()
 def migrate(
     migrations_dir: Path = typer.Option(

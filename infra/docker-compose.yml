@@ -146,6 +146,14 @@ services:
     volumes:
       - teamshareddata:/data
     command: ["teamshared", "worker"]
+    # The shared image's HEALTHCHECK curls :8077, which workers don't serve.
+    # Probe the Redis heartbeat the worker writes instead.
+    healthcheck:
+      test: ["CMD", "teamshared", "worker-health", "distiller"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   curator:
     build:
@@ -178,6 +186,14 @@ services:
     volumes:
       - teamshareddata:/data
     command: ["teamshared", "curator"]
+    # The shared image's HEALTHCHECK curls :8077, which workers don't serve.
+    # Probe the Redis heartbeat the worker writes instead.
+    healthcheck:
+      test: ["CMD", "teamshared", "worker-health", "curator"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   # Relationship graph (always on). Use a password >= 8 chars; Neo4j 5 rejects
   # the factory default "neo4j".
