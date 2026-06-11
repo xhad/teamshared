@@ -13,7 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_ORG_ID = UUID("00000000-0000-0000-0000-000000000001")
 
-EmbedProvider = Literal["openai", "ollama"]
+EmbedProvider = Literal["openai", "ollama", "local"]
 LLMProvider = Literal["openai", "ollama"]
 DeploymentEnv = Literal["development", "production"]
 
@@ -246,6 +246,25 @@ class Settings(BaseSettings):
     embed_provider: EmbedProvider = "openai"
     embed_model: str = "text-embedding-3-small"
     embed_dims: int = 1536
+    embed_local_model: str = Field(
+        default="BAAI/bge-small-en-v1.5",
+        description=(
+            "fastembed (ONNX) model used when embed_provider='local'. Native "
+            "vectors are zero-padded up to embed_dims for the vector column."
+        ),
+    )
+    embed_cache_dir: str | None = Field(
+        default=None,
+        description="Directory where local embedding model weights are cached.",
+    )
+    hnsw_cache_enabled: bool = Field(
+        default=True,
+        description=(
+            "Serve vector recall candidates from an in-memory per-org HNSW "
+            "index (hydrated from Postgres, write-through). Set false to "
+            "always use the pgvector SQL path."
+        ),
+    )
 
     llm_provider: LLMProvider = "openai"
     llm_model: str = "gpt-4o-mini"

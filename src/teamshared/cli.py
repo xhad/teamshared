@@ -428,6 +428,69 @@ def backfill_mem0(
     asyncio.run(_run())
 
 
+@app.command("reembed")
+def reembed(
+    limit: int = typer.Option(0, "--limit", help="Max chunks to re-embed (0 = all)."),
+    batch: int = typer.Option(64, "--batch", help="Chunks embedded per batch."),
+) -> None:
+    """Re-embed memory chunks with the active embedder.
+
+    Vector distances are only comparable within one embedding model, so
+    ``VectorStore.search`` filters on ``memory_embeddings.model``. After
+    switching ``TEAMSHARED_EMBED_PROVIDER`` / model (e.g. to ``local``), run
+    this once so existing rows become visible to the new recall path. Rows
+    already at the active model are skipped; safe to re-run.
+    """
+
+    async def _run() -> None:
+        from teamshared.memory.embeddings import build_embedder
+        from teamshared.memory.vectorstore import _vec_literal
+        from teamshared.tenancy.context import TenantDb
+
+        settings = get_settings()
+        embedder = build_embedder(settings)
+        model = getattr(embedder, "model", "hash")
+
+        # Operator command: crosses orgs, so it uses the admin DSN (RLS bypass
+        # is intentional here, same as `migrate`).
+        db = TenantDb(settings.pg_dsn)
+        await db.connect()
+        try:
+            async with db.admin() as conn:
+                sql_text = (
+                    "SELECT me.chunk_id, mc.content FROM memory_embeddings me "
+                    "JOIN memory_chunks mc ON mc.id = me.chunk_id "
+                    "WHERE me.model != %s ORDER BY me.chunk_id"
+                )
+                params: list[Any] = [model]
+                if limit > 0:
+                    sql_text += " LIMIT %s"
+                    params.append(limit)
+                cur = await conn.execute(sql_text, params)
+                rows = await cur.fetchall()
+
+            done = 0
+            for start in range(0, len(rows), max(batch, 1)):
+                chunk_rows = rows[start : start + max(batch, 1)]
+                vectors = await embedder.embed([r[1] or "" for r in chunk_rows])
+                async with db.admin() as conn:
+                    for (chunk_id, _content), vec in zip(chunk_rows, vectors, strict=True):
+                        await conn.execute(
+                            "UPDATE memory_embeddings SET model = %s, "
+                            "embedding = %s::vector WHERE chunk_id = %s",
+                            (model, _vec_literal(vec), str(chunk_id)),
+                        )
+                done += len(chunk_rows)
+                console.print(f"  re-embedded {done}/{len(rows)}")
+        finally:
+            await db.close()
+        console.print(
+            f"[bold green]Reembed complete[/bold green]: {len(rows)} chunks now on '{model}'"
+        )
+
+    asyncio.run(_run())
+
+
 @app.command("provision-default-org")
 def provision_default_org(
     email: str | None = typer.Option(

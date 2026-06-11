@@ -29,6 +29,8 @@ dependencies = [
 
 [project.optional-dependencies]
 neo4j = ["neo4j>=5.20.0"]
+local-embed = ["fastembed>=0.3.0"]
+hnsw = ["hnswlib>=0.8.0", "numpy>=1.26"]
 otel = [
     "opentelemetry-api>=1.27.0",
     "opentelemetry-sdk>=1.27.0",
@@ -45,6 +47,9 @@ dev = [
     "types-Markdown>=3.6",
     "fakeredis>=2.23.0",
     "httpx>=0.27.0",
+    "hnswlib>=0.8.0",
+    "types-hnswlib",
+    "numpy>=1.26",
 ]
 
 [project.scripts]

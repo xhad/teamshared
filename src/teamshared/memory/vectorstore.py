@@ -17,7 +17,9 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from teamshared.logging import get_logger
 from teamshared.memory.embeddings import Embedder
+from teamshared.memory.hnsw_cache import HnswCache
 from teamshared.memory.types import (
     MemoryItem,
     MemoryItemScope,
@@ -27,6 +29,8 @@ from teamshared.memory.types import (
     Visibility,
 )
 from teamshared.tenancy.context import TenantDb
+
+log = get_logger(__name__)
 
 
 @dataclass
@@ -80,9 +84,12 @@ def _vec_literal(embedding: list[float]) -> str:
 
 
 class VectorStore:
-    def __init__(self, db: TenantDb, embedder: Embedder) -> None:
+    def __init__(
+        self, db: TenantDb, embedder: Embedder, cache: HnswCache | None = None
+    ) -> None:
         self.db = db
         self.embedder = embedder
+        self.cache = cache
 
     async def add(
         self,
@@ -145,6 +152,8 @@ class VectorStore:
                 "VALUES (%s,%s,%s,%s::vector)",
                 (str(org_id), str(chunk_id), self.embedder_model, _vec_literal(embedding)),
             )
+        if self.cache is not None and status == "active":
+            self.cache.add(str(org_id), str(memory_id), embedding)
         return memory_id
 
     @property
@@ -174,9 +183,24 @@ class VectorStore:
         author_agent_id: UUID | None = None,
     ) -> list[MemoryRecord]:
         [q_emb] = await self.embedder.embed([query])
+        candidates = await self._cache_candidates(org_id, q_emb, k)
+        if candidates is not None:
+            return await self._search_from_candidates(
+                org_id=org_id,
+                candidates=candidates,
+                scope_filter=scope_filter,
+                k=k,
+                pillar=pillar,
+                time_range=time_range,
+                author_agent_id=author_agent_id,
+            )
         scope_sql, scope_params = scope_filter.where("mi")
-        where = ["mi.status = 'active'", scope_sql]
-        params: list[Any] = list(scope_params)
+        # Only score vectors produced by the active embedder: distances across
+        # different embedding models are not comparable, so mixed rows (e.g.
+        # pre-reembed OpenAI vectors next to local ONNX vectors) must never be
+        # ranked together. `teamshared reembed` migrates old rows.
+        where = ["mi.status = 'active'", "me.model = %s", scope_sql]
+        params: list[Any] = [self.embedder_model, *scope_params]
         if pillar:
             where.append("mi.pillar = %s")
             params.append(pillar)
@@ -211,6 +235,83 @@ class VectorStore:
             rows = await cur.fetchall()
         records = [_row_to_record(r, org_id) for r in rows]
         records.sort(key=lambda r: r.score or 0.0, reverse=True)
+        return records[:k]
+
+    async def _cache_candidates(
+        self, org_id: UUID, q_emb: list[float], k: int
+    ) -> list[tuple[str, float]] | None:
+        """ANN candidates from the in-memory HNSW cache, or None to use SQL.
+
+        Over-fetches (8x ``k``, min 64) because the scope/visibility filter is
+        applied afterwards in SQL: candidates the caller may not read are
+        dropped there, never returned. Any cache failure degrades to the
+        pgvector path rather than failing recall.
+        """
+        if self.cache is None or not self.cache.available:
+            return None
+        try:
+            await self.cache.ensure_hydrated(str(org_id), self.db, self.embedder_model)
+            return self.cache.search(str(org_id), q_emb, max(k * 8, 64))
+        except Exception:
+            log.warning("hnsw_cache_search_failed", org_id=str(org_id), exc_info=True)
+            return None
+
+    async def _search_from_candidates(
+        self,
+        *,
+        org_id: UUID,
+        candidates: list[tuple[str, float]],
+        scope_filter: ScopeFilter,
+        k: int,
+        pillar: str | None,
+        time_range: tuple[datetime | None, datetime | None] | None,
+        author_agent_id: UUID | None,
+    ) -> list[MemoryRecord]:
+        """Re-filter ANN candidate ids through RLS + scope SQL and hydrate rows.
+
+        Authorization stays in Postgres: the candidate list only narrows the
+        search space, the WHERE clause decides what the caller may see.
+        """
+        if not candidates:
+            return []
+        distance_by_id = {mid: dist for mid, dist in candidates}
+        scope_sql, scope_params = scope_filter.where("mi")
+        where = ["mi.status = 'active'", "mi.id = ANY(%s)", scope_sql]
+        params: list[Any] = [list(distance_by_id.keys()), *scope_params]
+        if pillar:
+            where.append("mi.pillar = %s")
+            params.append(pillar)
+        if author_agent_id is not None:
+            where.append("(mi.owner_type = 'agent' AND mi.owner_id = %s)")
+            params.append(str(author_agent_id))
+        if time_range:
+            since, until = time_range
+            if since:
+                where.append("mi.created_at >= %s")
+                params.append(since)
+            if until:
+                where.append("mi.created_at <= %s")
+                params.append(until)
+        where_sql = " AND ".join(where)
+        sql = f"""
+            SELECT mi.id, mi.pillar, mi.kind, mi.content, mi.subject, mi.tags,
+                   mi.scope, mi.scope_ref_id, mi.visibility, mi.source, mi.confidence,
+                   mi.importance, mi.version, mi.status, mi.created_at, a.name AS agent,
+                   NULL AS score
+            FROM memory_items mi
+            LEFT JOIN agents a ON a.id = mi.owner_id AND mi.owner_type = 'agent'
+            WHERE {where_sql}
+        """
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(sql, params)
+            rows = await cur.fetchall()
+        records: list[MemoryRecord] = []
+        for r in rows:
+            rec = _row_to_record(r, org_id, score_is_distance=False)
+            dist = distance_by_id.get(str(rec.id))
+            rec.score = (1.0 - dist) if dist is not None else None
+            records.append(rec)
+        records.sort(key=lambda rec: rec.score or 0.0, reverse=True)
         return records[:k]
 
     async def keyword_search(
@@ -274,7 +375,10 @@ class VectorStore:
                 "updated_at = now() WHERE id = %s AND status != 'soft_deleted'",
                 (str(memory_id),),
             )
-            return cur.rowcount > 0
+            deleted = cur.rowcount > 0
+        if deleted and self.cache is not None:
+            self.cache.remove(str(org_id), str(memory_id))
+        return deleted
 
     async def update_content(
         self, org_id: UUID, memory_id: UUID, *, content: str, editor_id: UUID | None = None
@@ -320,6 +424,8 @@ class VectorStore:
                     "VALUES (%s,%s,%s,%s::vector)",
                     (str(org_id), str(chunk_id), self.embedder_model, _vec_literal(embedding)),
                 )
+        if self.cache is not None:
+            self.cache.add(str(org_id), str(memory_id), embedding)
         return True
 
     async def set_status(self, org_id: UUID, memory_id: UUID, status: str) -> bool:
@@ -328,7 +434,15 @@ class VectorStore:
                 "UPDATE memory_items SET status = %s, updated_at = now() WHERE id = %s",
                 (status, str(memory_id)),
             )
-            return cur.rowcount > 0
+            changed = cur.rowcount > 0
+        if changed and self.cache is not None:
+            if status == "active":
+                # Re-activation needs the vector back; cheapest correct move is
+                # to rehydrate the whole org on the next search.
+                self.cache.invalidate(str(org_id))
+            else:
+                self.cache.remove(str(org_id), str(memory_id))
+        return changed
 
     async def list_episodes(
         self,

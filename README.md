@@ -73,6 +73,18 @@ make build         # TEAMSHARED_OLLAMA_BASE_URL=http://host.docker.internal:1143
 **Bundled Ollama (optional, CPU-only on macOS):** `make build-bundled-ollama` and
 `TEAMSHARED_OLLAMA_BASE_URL=http://ollama:11434`.
 
+**In-process embeddings (lowest recall latency):** set
+`TEAMSHARED_EMBED_PROVIDER=local` (requires `pip install 'teamshared[local-embed]'`)
+to embed with a fastembed/ONNX model (default `BAAI/bge-small-en-v1.5`,
+~3ms/query on CPU) directly inside the server — no network hop. Native vectors
+are zero-padded to `TEAMSHARED_EMBED_DIMS` and rows are tagged with the model;
+after switching providers run `teamshared reembed` once so existing memories
+are re-embedded (search only ranks vectors from the active model). Recall
+candidates are additionally served from an in-memory per-org HNSW index
+(`teamshared[hnsw]`, write-through, hydrated from Postgres; disable with
+`TEAMSHARED_HNSW_CACHE_ENABLED=false`); scope/RLS filtering still happens in
+Postgres. Benchmark with `python scripts/bench_recall.py`.
+
 ## Connect your agents
 
 ### One-command install (curl)

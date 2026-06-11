@@ -1,9 +1,14 @@
 """Embedding generation, decoupled from any single vector backend.
 
-Three implementations:
+Four implementations:
 
 * :class:`OpenAIEmbedder` -- production default.
-* :class:`OllamaEmbedder` -- self-hosted models.
+* :class:`OllamaEmbedder` -- self-hosted models over HTTP.
+* :class:`LocalEmbedder` -- in-process ONNX models via ``fastembed``. No
+  network hop: ~5-15ms per query on CPU. Native model vectors (e.g. 384 dims
+  for bge-small) are zero-padded up to ``settings.embed_dims`` so they drop
+  into the existing ``vector(1536)`` column; zero-padding preserves cosine
+  ranking because the extra components contribute nothing to the dot product.
 * :class:`HashEmbedder` -- deterministic, offline, dependency-free. Used by
   tests and air-gapped dev so the memory layer is exercisable without an API
   key. It is NOT semantically meaningful; never use it in production.
@@ -14,10 +19,11 @@ straight into the ``vector(1536)`` column.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import os
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 from openai import AsyncOpenAI
@@ -25,6 +31,11 @@ from openai import AsyncOpenAI
 from teamshared.config import Settings
 from teamshared.logging import get_logger
 from teamshared.metrics import METRICS
+
+try:  # Optional extra: pip install 'teamshared[local-embed]'
+    from fastembed import TextEmbedding
+except ImportError:  # pragma: no cover - exercised via build_embedder fallback
+    TextEmbedding = None  # type: ignore[assignment,misc]
 
 log = get_logger(__name__)
 
@@ -94,12 +105,83 @@ class OllamaEmbedder:
         return out
 
 
+class LocalEmbedder:
+    """In-process ONNX embeddings via fastembed (no network on the hot path).
+
+    ``model`` is reported as ``local:<model_name>`` so ``memory_embeddings.model``
+    distinguishes these rows from API-produced vectors. The underlying model is
+    loaded once at construction (first run downloads to ``cache_dir``); the
+    blocking encode runs in the default thread executor.
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        dims: int,
+        cache_dir: str | None = None,
+        _engine: Any | None = None,
+    ) -> None:
+        self.model_name = model_name
+        self.model = f"local:{model_name}"
+        self.dims = dims
+        if _engine is not None:
+            self._engine = _engine
+        else:
+            if TextEmbedding is None:
+                raise RuntimeError(
+                    "fastembed is not installed; install 'teamshared[local-embed]' "
+                    "to use TEAMSHARED_EMBED_PROVIDER=local"
+                )
+            kwargs: dict[str, Any] = {"model_name": model_name}
+            if cache_dir:
+                kwargs["cache_dir"] = cache_dir
+            self._engine = TextEmbedding(**kwargs)
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        loop = asyncio.get_running_loop()
+        raw = await loop.run_in_executor(None, self._encode, texts)
+        METRICS.embed_calls.inc(provider="local")
+        METRICS.embed_texts.inc(len(texts), provider="local")
+        return [self._fit(vec) for vec in raw]
+
+    def _encode(self, texts: list[str]) -> list[list[float]]:
+        return [list(map(float, v)) for v in self._engine.embed(texts)]
+
+    def _fit(self, vec: list[float]) -> list[float]:
+        if len(vec) > self.dims:
+            raise ValueError(
+                f"model {self.model_name} produced {len(vec)} dims, exceeding "
+                f"the configured embed_dims={self.dims}"
+            )
+        if len(vec) < self.dims:
+            vec = vec + [0.0] * (self.dims - len(vec))
+        return vec
+
+
 def build_embedder(settings: Settings, *, allow_hash_fallback: bool = True) -> Embedder:
     """Pick an embedder from settings, falling back to :class:`HashEmbedder`.
 
     The fallback triggers for the OpenAI provider when no API key is present
-    so local/test runs do not hard-fail. Production should always have a key.
+    (and for the local provider when fastembed is missing) so local/test runs
+    do not hard-fail. Production should always have a real backend.
     """
+    if settings.embed_provider == "local":
+        if TextEmbedding is None:
+            if allow_hash_fallback:
+                log.warning(
+                    "embedder_hash_fallback",
+                    reason="fastembed not installed; using HashEmbedder",
+                )
+                return HashEmbedder(settings.embed_dims)
+            raise RuntimeError(
+                "TEAMSHARED_EMBED_PROVIDER=local requires the 'local-embed' extra "
+                "(pip install 'teamshared[local-embed]')"
+            )
+        return LocalEmbedder(
+            settings.embed_local_model,
+            settings.embed_dims,
+            cache_dir=settings.embed_cache_dir,
+        )
     if settings.embed_provider == "ollama":
         return OllamaEmbedder(settings.embed_model, settings.embed_dims, settings.ollama_base_url)
     api_key = os.environ.get("OPENAI_API_KEY")

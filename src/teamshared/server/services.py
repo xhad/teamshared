@@ -23,6 +23,7 @@ from teamshared.ingestion.pipeline import IngestionPipeline
 from teamshared.logging import get_logger
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.embeddings import Embedder, build_embedder
+from teamshared.memory.hnsw_cache import HnswCache
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.retrieval import SecureRetrieval
 from teamshared.memory.service import MemoryService
@@ -86,7 +87,8 @@ def make_services(settings: Settings) -> ProductionServices:
     """
     tenant_db = TenantDb(settings.pg_app_dsn)
     embedder = build_embedder(settings)
-    vector_store = VectorStore(tenant_db, embedder)
+    hnsw_cache = HnswCache(settings.embed_dims, enabled=settings.hnsw_cache_enabled)
+    vector_store = VectorStore(tenant_db, embedder, cache=hnsw_cache)
     audit = AuditLog(tenant_db)
     memory_service = MemoryService(vector_store, audit)
     approvals = ApprovalQueue(tenant_db)
