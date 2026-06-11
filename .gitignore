@@ -40,3 +40,4 @@ infra/data/
 .cursor/hooks/state/
 
 agent-tools/
+eval/agentic/results/

@@ -1,0 +1,59 @@
+# Agentic A/B evaluation tasks.
+#
+# Each task is run N times per arm ("memory" = teamshared MCP attached,
+# "baseline" = no memory) by eval/agentic/runner.py. Success is judged by
+# `expect` groups: every group must have at least one case-insensitive
+# substring match in the agent's combined answer text.
+#
+# Design notes:
+# - Tasks target *tribal knowledge* that lives in teamshared memory (seeded
+#   from real sessions). The baseline agent can still dig answers out of the
+#   repo, so the interesting deltas are turns, tool calls, and wall time --
+#   not just success rate.
+# - `control: true` tasks are ones memory should NOT help with. If the memory
+#   arm wins those too, the harness is biased; treat results with suspicion.
+
+tasks:
+  - name: integration-tests
+    prompt: >-
+      How do I run this repo's integration tests on this machine, exactly?
+      Be specific about ports, env files, and any host-specific overrides.
+    expect:
+      - ["5433"]
+      - ["--env-file", "make"]
+      - ["integration"]
+
+  - name: mem0-kwarg-contract
+    prompt: >-
+      I'm about to call Memory.search() and Memory.get_all() from Mem0 in this
+      codebase. What argument mistakes must I avoid, and what do I pass instead?
+    expect:
+      - ["filters"]
+      - ["top_k"]
+      - ["user_id"]
+
+  - name: recall-score-flip
+    prompt: >-
+      Semantic recall in this repo sometimes silently drops the closest
+      matches. Why does that happen and how does the codebase work around it?
+    expect:
+      - ["distance"]
+      - ["threshold"]
+      - ["1 - ", "1-", "flip", "convert"]
+
+  - name: shared-brain-regression
+    prompt: >-
+      In memory_recall, why must the agent filter and the caller identity stay
+      separate parameters? What regression does collapsing them cause?
+    expect:
+      - ["cross-agent", "shared brain", "other agent"]
+      - ["working", "caller"]
+
+  - name: control-string-kata
+    control: true
+    prompt: >-
+      Without editing any files, write a Python function that returns the
+      longest palindromic substring of its input, plus three test cases.
+    expect:
+      - ["def "]
+      - ["palindrom"]

@@ -30,6 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 neo4j = ["neo4j>=5.20.0"]
 local-embed = ["fastembed>=0.3.0"]
+eval-agentic = ["cursor-sdk>=0.1.7"]
 hnsw = ["hnswlib>=0.8.0", "numpy>=1.26"]
 otel = [
     "opentelemetry-api>=1.27.0",
