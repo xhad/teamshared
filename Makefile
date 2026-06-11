@@ -15,6 +15,9 @@ provision-app-role :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-dep
 # Assert tenant isolation: zero rows visible with no org context set.
 verify-rls :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared verify-rls
 seed :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared seed
+# Re-embed all memory chunks with the active embedder (run once after switching
+# TEAMSHARED_EMBED_PROVIDER/model; search only ranks vectors from the active model).
+reembed :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared reembed
 token-mint :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared token mint cursor
 invite-create :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared token invite-create --agent cursor
 # Paste the printed token into ~/.cursor/mcp.json using src/teamshared/clients/cursor.mcp.json as the template
@@ -30,4 +33,4 @@ lint :; python -m ruff check src tests scripts eval
 typecheck :; python -m mypy src
 check : lint typecheck test
 
-.PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed token-mint invite-create health smoke-all smoke-cross-agent test test-integration lint typecheck check
+.PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed reembed token-mint invite-create health smoke-all smoke-cross-agent test test-integration lint typecheck check

@@ -17,7 +17,12 @@ COPY plugins/teamshared ./plugins/teamshared
 COPY install_assets ./install_assets
 
 RUN pip install --upgrade pip \
- && pip install '.[neo4j]'
+ && pip install '.[neo4j,local-embed,hnsw]'
+
+# Pre-bake the default local embedding model so containers don't stall on a
+# HuggingFace download at first recall (TEAMSHARED_EMBED_PROVIDER=local).
+ENV TEAMSHARED_EMBED_CACHE_DIR=/app/.fastembed
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5', cache_dir='/app/.fastembed')"
 
 ENV TEAMSHARED_HOST=0.0.0.0 \
     TEAMSHARED_PORT=8077
