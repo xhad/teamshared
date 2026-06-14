@@ -1,22 +1,44 @@
 # Deploying teamshared on Railway
 
-Compose stack →  four Railway services in one project. No Tailscale, no
-self-hosted TLS, no Caddy. Bearer-token auth in [`teamshared.auth`](../src/teamshared/auth.py)
-is what protects the public endpoint, so don't disable it.
+Compose stack → five Railway services in one project (pgvector, Redis,
+server, distiller, curator). No Tailscale, no self-hosted TLS, no Caddy.
+Bearer-token auth in [`teamshared.auth`](../src/teamshared/auth.py) is what
+protects the public endpoint, so don't disable it.
 
 ```
-┌────────────────┐  ┌──────────┐  ┌──────────────┐  ┌────────────┐
-│ pgvector       │  │ Redis    │  │ teamshared-server  │  │ teamshared-      │
-│ (template)     │  │ (template│  │ (Dockerfile) │  │ distiller  │
-│                │  │  )       │  │  public ✓    │  │ (Dockerfile│
-│  DATABASE_URL  │  │ REDIS_URL│  │  /data vol   │  │   command  │
-│                │  │          │  │  pre-deploy  │  │   override)│
-│                │  │          │  │  teamshared migrate│  │            │
-└────────┬───────┘  └─────┬────┘  └──────┬───────┘  └─────┬──────┘
-         │                │              │                │
-         └────────────────┴──────────────┴────────────────┘
+┌──────────┐ ┌────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐
+│ pgvector │ │ Redis  │ │ teamshared-│ │ teamshared-│ │ teamshared-│
+│ (image)  │ │(templ.)│ │ server     │ │ distiller  │ │ curator    │
+│ + volume │ │        │ │  public ✓  │ │ (worker)   │ │ (curator)  │
+│          │ │        │ │  /data vol │ │            │ │            │
+│          │ │        │ │  predeploy │ │            │ │            │
+│          │ │        │ │  migrate   │ │            │ │            │
+└────┬─────┘ └───┬────┘ └─────┬──────┘ └─────┬──────┘ └─────┬──────┘
+     │           │            │              │              │
+     └───────────┴────────────┴──────────────┴──────────────┘
               private networking (*.railway.internal)
 ```
+
+Neo4j (the graph pillar) is optional and omitted here; `memory_graph_*`
+degrades to a no-op and `/health` reports `graph: down`. Add a Neo4j service
+and `TEAMSHARED_NEO4J_*` vars later if you want it.
+
+> The three app services share one Dockerfile and differ only by start
+> command. Each ships a config file: [`railway.server.toml`](railway.server.toml),
+> [`railway.distiller.toml`](railway.distiller.toml), and
+> [`railway.curator.toml`](railway.curator.toml).
+
+## CLI-driven deploy (alternative to the dashboard)
+
+The whole stack can be stood up with the `railway` CLI. Because the CLI cannot
+set a service's *custom config file path*, deploy each app service with
+`railway up` from the repo root using a temporary root `railway.toml` (copy the
+matching `infra/railway.*.toml` contents into `./railway.toml`, run
+`railway up --service <svc> --detach`, then repeat for the next service). The
+pgvector image does **not** auto-emit `DATABASE_URL`, so construct the DSN from
+the Postgres service's private domain (see the variables table below). Pin the
+server's port with `PORT=8077` and `railway domain --port 8077` so Railway's
+proxy targets the same port the Dockerfile's `TEAMSHARED_PORT=8077` binds.
 
 ## 1. Provision the data services
 
@@ -47,36 +69,83 @@ is what protects the public endpoint, so don't disable it.
 
    | Var | Value |
    |---|---|
-   | `TEAMSHARED_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
+   | `TEAMSHARED_DEPLOYMENT_ENV` | `production` *(runs the startup safety checks in [`config_validate.py`](../src/teamshared/config_validate.py))* |
+   | `TEAMSHARED_PG_DSN` | `postgresql://teamshared:${{postgres.POSTGRES_PASSWORD}}@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/teamshared` |
    | `TEAMSHARED_REDIS_URL` | `${{Redis.REDIS_URL}}` |
-   | `TEAMSHARED_INVITES_FILE` | `/data/invites.json` |
+   | `TEAMSHARED_PG_APP_USER` | `teamshared_app` *(RLS role; see step 5b)* |
+   | `TEAMSHARED_PG_APP_PASSWORD` | *(long random string)* |
+   | `TEAMSHARED_SESSION_SECRET` | *(long random string; console sign-in)* |
+   | `TEAMSHARED_JOB_SIGNING_SECRET` | *(long random string; MUST match distiller + curator)* |
+   | `TEAMSHARED_CONNECTOR_ENCRYPTION_KEY` | *(base64/hex 32-byte key)* |
    | `TEAMSHARED_MINT_SECRET` | *(long random string; enables `POST /tokens/mint` for teammates)* |
+   | `TEAMSHARED_INVITES_FILE` | `/data/invites.json` |
+   | `TEAMSHARED_PUBLIC_URL` | *(your public domain, e.g. `https://teamshared-server-production.up.railway.app`)* |
+   | `PORT` / `TEAMSHARED_PORT` | `8077` *(pin both; the Dockerfile binds 8077)* |
    | `OPENAI_API_KEY` | *(your key)* |
-   | `TEAMSHARED_EMBED_MODEL` | `text-embedding-3-small` *(default; only override if you want a different embedding model)* |
+   | `TEAMSHARED_EMBED_MODEL` | `text-embedding-3-small` *(default)* |
    | `TEAMSHARED_LLM_MODEL` | `gpt-4o-mini` *(default)* |
 
-   `PORT` is injected by Railway automatically; `Settings.port` reads it as
-   a fallback so you don't need `TEAMSHARED_PORT`.
+   The pgvector *image* (unlike Railway's managed Postgres template) does not
+   emit `DATABASE_URL`, so the DSN above is built from the Postgres service's
+   private domain. For console OTP delivery in production also set the
+   `TEAMSHARED_SMTP_*` vars (without them the sign-in code can't be emailed).
 
 6. Deploy. The pre-deploy hook applies migrations idempotently; the main
    process is `teamshared serve --transport http`.
 
-## 3. Deploy `teamshared-distiller`
+### 2b. Bootstrap the RLS app role
 
-1. New service → same GitHub repo.
-2. **Settings → Source**: custom config file path
-   `/infra/railway.distiller.toml`. (Different toml because the start
-   command is `teamshared worker`, no public port, no healthcheck.)
-3. **Variables**: same as the server (the distiller does not mint tokens):
+`TEAMSHARED_PG_APP_USER` makes the app connect as a `NOSUPERUSER NOBYPASSRLS`
+role so Row-Level Security is actually enforced. That role must be created
+once, **after** migrations, by an admin connection. Railway's `preDeployCommand`
+is a single, non-shell command, so it can't chain `migrate && provision-app-role`
+— run the provisioning out-of-band the first time (the role then persists in the
+Postgres volume):
+
+```bash
+# register an SSH key with Railway once, then write an OpenSSH config block
+railway ssh keys add --key ~/.ssh/id_rsa.pub
+railway ssh config --service teamshared-server -i ~/.ssh/id_rsa
+
+# create the role and verify tenant isolation inside the running container
+ssh -o StrictHostKeyChecking=accept-new railway-teamshared-server \
+  "teamshared provision-app-role && teamshared verify-rls"
+```
+
+`verify-rls` should print `RLS verification passed.` (every table returns zero
+rows without an org context). If `railway ssh` is unavailable, run the same SQL
+as the Postgres superuser via `psql` against the `postgres` service.
+
+## 3. Deploy `teamshared-distiller` and `teamshared-curator`
+
+Both are worker services from the same GitHub repo with no public port and no
+healthcheck — only their start command differs.
+
+1. New service → same GitHub repo. **Settings → Source**: custom config file
+   path `/infra/railway.distiller.toml` (start command `teamshared worker`).
+2. Repeat for a second service with `/infra/railway.curator.toml` (start
+   command `teamshared curator`).
+3. **Variables** on each (workers don't mint tokens or serve HTTP, but they DO
+   need the RLS role and a matching job-signing secret):
 
    | Var | Value |
    |---|---|
-   | `TEAMSHARED_PG_DSN` | `${{Postgres.DATABASE_URL}}` |
+   | `TEAMSHARED_DEPLOYMENT_ENV` | `production` |
+   | `TEAMSHARED_PG_DSN` | `postgresql://teamshared:${{postgres.POSTGRES_PASSWORD}}@${{postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/teamshared` |
    | `TEAMSHARED_REDIS_URL` | `${{Redis.REDIS_URL}}` |
+   | `TEAMSHARED_PG_APP_USER` / `TEAMSHARED_PG_APP_PASSWORD` | same as the server |
+   | `TEAMSHARED_JOB_SIGNING_SECRET` | same value as the server |
+   | `TEAMSHARED_CONNECTOR_ENCRYPTION_KEY` | same value as the server |
    | `OPENAI_API_KEY` | *(your key)* |
 
 4. Deploy. The distiller polls the `working:distill:queue` Redis list and
-   summarizes closed sessions.
+   summarizes closed sessions; the curator consumes the debounced curate queue
+   and (re)writes wiki pages. Their heartbeats show up in the server's `/health`.
+
+> Note: over Railway's private network the workers' idle blocking `BLPOP` polls
+> can log periodic `distill_pop_failed`/`curate_pop_failed` "Timeout reading
+> from redis" warnings. These are cosmetic — real jobs are popped immediately
+> when enqueued, and the heartbeat writes still succeed (`/health` stays `ok`).
 
 ## 4. Mint tokens
 
@@ -138,7 +207,7 @@ A subsequent `memory_remember` settles it.
 - **Rotating tokens**: mint a new key via console `/app/keys` or
   `teamshared token mint <agent>` over `railway run`, update MCP configs, then
   revoke the old API key in the console.
-- **Costs**: a single-replica server + distiller + pgvector + Redis on
-  Railway's Hobby plan runs around $5–15/mo depending on Mem0 churn.
+- **Costs**: a single-replica server + distiller + curator + pgvector + Redis
+  on Railway's Hobby plan runs around $5–20/mo depending on Mem0 churn.
   Embedding API calls dominate once you have a few teammates writing
   daily.
