@@ -1,0 +1,430 @@
+{
+  "meta": {
+    "generated": "2026-06-05T17:45:00Z",
+    "sourceCount": 5,
+    "sourceTypes": ["prd", "memo", "research", "doc"],
+    "health": "thin",
+    "notes": [
+      "All five sources are internal-author product intent (plans, design memos, architecture docs). Zero user-research artifacts (no interviews, tickets, or support threads). Source-type diversity is effectively one: 'what the team intends', not 'what users said'.",
+      "None of the source files carry YAML frontmatter; types were inferred: prod-plan.md=prd/memo, plan.md=research+memo, memory-wiki-plan.md=design memo, teamshared-readme.md=doc, teamshared-agents.md=doc. Add `type:` frontmatter to make this explicit.",
+      "Because the corpus is intent-only, most product claims are Assumption nodes by construction. This is the correct, honest result for a thin/internal corpus — not a defect."
+    ]
+  },
+  "nodes": [
+    {
+      "id": "segment-multi-tenant-orgs",
+      "type": "Segment",
+      "label": "Multi-tenant organizations / teams",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "The system should allow teams, companies, and agentic workflows to share structured and unstructured memory across users, agents, projects, and tools." }
+      ]
+    },
+    {
+      "id": "segment-enterprise",
+      "type": "Segment",
+      "label": "Enterprise buyers",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Enterprise security baseline" },
+        { "source": "prod-plan.md", "quote": "SSO/SAML/OIDC" }
+      ]
+    },
+    {
+      "id": "segment-agents",
+      "type": "Segment",
+      "label": "Agents / agentic workflows (first-class identities)",
+      "provenance": [
+        { "source": "plan.md", "quote": "Agents and API keys must be first-class identities with scoped permissions." }
+      ]
+    },
+    {
+      "id": "need-shared-context",
+      "type": "Need",
+      "label": "Share memory across users, agents, projects, and tools",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Think of TeamShared as infrastructure for \u201cshared agent context\u201d across an organization." }
+      ]
+    },
+    {
+      "id": "need-recall-without-overwhelm",
+      "type": "Need",
+      "label": "Persistent recall without overwhelming the context window",
+      "provenance": [
+        { "source": "plan.md", "quote": "give agents persistent, personalized recall without overwhelming their context windows" }
+      ]
+    },
+    {
+      "id": "need-no-cross-tenant-leak",
+      "type": "Need",
+      "label": "No cross-tenant memory leakage",
+      "provenance": [
+        { "source": "plan.md", "quote": "The system must prevent cross-tenant memory leakage by design, not only by convention." }
+      ]
+    },
+    {
+      "id": "pain-context-rot",
+      "type": "Pain",
+      "label": "Context rot from stuffing full history into the window",
+      "provenance": [
+        { "source": "plan.md", "quote": "keeping the entire chat history in the model's context window (which leads to \"context rot\")" }
+      ]
+    },
+    {
+      "id": "feature-multi-tenant",
+      "type": "Feature",
+      "label": "Multi-tenant org architecture",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Multi-tenant organizations" },
+        { "source": "plan.md", "quote": "Every table containing customer data must include `org_id` or be clearly tenant-owned through a parent relation." }
+      ]
+    },
+    {
+      "id": "feature-memory-scopes",
+      "type": "Feature",
+      "label": "Org/team/project/user/agent memory scopes",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Org-level, team-level, project-level, user-level, and agent-level memory scopes" }
+      ]
+    },
+    {
+      "id": "feature-rbac",
+      "type": "Feature",
+      "label": "Role-based access control + per-read permission checks",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Role-based access control" },
+        { "source": "prod-plan.md", "quote": "Fine-grained permission checks before retrieval" }
+      ]
+    },
+    {
+      "id": "feature-audit-logs",
+      "type": "Feature",
+      "label": "Audit logs for all memory and permission events",
+      "provenance": [
+        { "source": "plan.md", "quote": "Audit logging for every memory read/write/delete/share event" }
+      ]
+    },
+    {
+      "id": "feature-connectors",
+      "type": "Feature",
+      "label": "Connectors (Slack, GitHub, Notion, Google Drive, Linear, MCP)",
+      "provenance": [
+        { "source": "plan.md", "quote": "Connector architecture for Slack, GitHub, Notion, Google Drive, Linear, and MCP servers" }
+      ]
+    },
+    {
+      "id": "feature-consent-capture",
+      "type": "Feature",
+      "label": "Consent-first, client-sanitized capture",
+      "provenance": [
+        { "source": "memory-wiki-plan.md", "quote": "No data is captured or pulled without explicit human approval, and the client sanitizes it before it ever leaves the machine." }
+      ]
+    },
+    {
+      "id": "feature-wiki",
+      "type": "Feature",
+      "label": "Human console + continuously-updating memory wiki",
+      "provenance": [
+        { "source": "memory-wiki-plan.md", "quote": "One server-rendered web app \u2014 the **team mind** \u2014 where a human signs in to:" }
+      ]
+    },
+    {
+      "id": "feature-curator",
+      "type": "Feature",
+      "label": "LLM distillation + curator synthesizing wiki pages",
+      "provenance": [
+        { "source": "memory-wiki-plan.md", "quote": "a `CuratorWorker` synthesizes all facts + recent episodes + relations for a subject into one canonical markdown article" }
+      ]
+    },
+    {
+      "id": "feature-mcp-native",
+      "type": "Feature",
+      "label": "MCP-native agent memory interface",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "MCP-native interface" }
+      ]
+    },
+    {
+      "id": "comp-pinecone",
+      "type": "Competitor",
+      "label": "Pinecone (vector DB) / pgvector category",
+      "provenance": [
+        { "source": "plan.md", "quote": "Powered by vector databases (e.g., Pinecone) and knowledge graphs to provide rich, structured recall." }
+      ]
+    },
+    {
+      "id": "comp-neo4j",
+      "type": "Competitor",
+      "label": "Neo4j context/knowledge graphs",
+      "provenance": [
+        { "source": "plan.md", "quote": "Neo4j is frequently used to build context graphs that track complex relationships between user entities and past actions." }
+      ]
+    },
+    {
+      "id": "comp-langchain",
+      "type": "Competitor",
+      "label": "LangChain / LlamaIndex memory modules",
+      "provenance": [
+        { "source": "plan.md", "quote": "LangChain and LlamaIndex offer built-in modules for both short-term conversational buffers and long-term memory RAG components." }
+      ]
+    },
+    {
+      "id": "comp-cloudflare",
+      "type": "Competitor",
+      "label": "Cloudflare Agent Memory (managed memory primitives)",
+      "provenance": [
+        { "source": "plan.md", "quote": "Solutions like Cloudflare Agent Memory provide developers with built-in primitives that extract, store, and manage user details across multi-session interactions automatically." }
+      ]
+    },
+    {
+      "id": "comp-hindsight",
+      "type": "Competitor",
+      "label": "Hindsight-style distillation sub-agents",
+      "provenance": [
+        { "source": "plan.md", "quote": "Advanced architectures (like Hindsight) use specialized sub-agents to summarize past interactions into distilled facts and preferences" }
+      ]
+    },
+    {
+      "id": "insight-four-pillars",
+      "type": "Insight",
+      "label": "Agent memory splits into four pillars (working/semantic/episodic/procedural)",
+      "provenance": [
+        { "source": "plan.md", "quote": "Modern agent memory is typically divided into four distinct architectures" }
+      ]
+    },
+    {
+      "id": "insight-jit-retrieval",
+      "type": "Insight",
+      "label": "Just-in-time retrieval beats keeping full history in-context",
+      "provenance": [
+        { "source": "plan.md", "quote": "agents use pre-inference retrieval to surface only the most relevant episodic or semantic memories right when they are needed" }
+      ]
+    },
+    {
+      "id": "outcome-production-ready",
+      "type": "Outcome",
+      "label": "Evolve TeamShared from PoC to production for multi-tenant org customers",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Create a detailed technical plan to evolve TeamShared from PoC to production for multi-tenant org customers." }
+      ]
+    },
+    {
+      "id": "assumption-teams-want-shared-memory",
+      "type": "Assumption",
+      "label": "Teams actually want cross-agent shared memory",
+      "risk": "The entire product thesis. If teams don't want a shared agent brain (vs. per-agent or per-user memory), every roadmap phase is built on sand.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-buyers-pay-for-memory-infra",
+      "type": "Assumption",
+      "label": "Orgs will pay for 'shared agent context' as infrastructure",
+      "risk": "Pricing and GTM viability. No willingness-to-pay evidence exists in the corpus; the business model is assumed.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-consent-is-adoption-gate",
+      "type": "Assumption",
+      "label": "Consent-first capture friction is what gates adoption",
+      "risk": "A whole implementation phase. Consent-first is declared a 'hard constraint' / locked decision, but no user or buyer is on record demanding it.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-connectors-drive-adoption",
+      "type": "Assumption",
+      "label": "Slack/GitHub/Notion/etc. connectors are the adoption lever",
+      "risk": "Connector roadmap sequencing. The integration list is asserted; no evidence says these are what makes a team adopt.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-enterprise-security-gates-deals",
+      "type": "Assumption",
+      "label": "SSO/SAML/SOC2 gate the deals worth chasing",
+      "risk": "Phase 3 enterprise investment. If early design partners don't gate on enterprise security, this is sequenced too early.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-shared-brain-default-desired",
+      "type": "Assumption",
+      "label": "Default cross-agent visibility (shared brain) is what users want",
+      "risk": "The core read-path default. If users expect isolation-by-default, an open 'shared brain' is a trust and security liability, not a feature.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-humans-engage-wiki",
+      "type": "Assumption",
+      "label": "Humans will actually browse the memory wiki/console",
+      "risk": "The console + curator + wiki build (a full phase). If humans never visit /app, that's a large investment with no audience.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-distill-quality",
+      "type": "Assumption",
+      "label": "LLM distillation yields durable, low-noise memory worth recalling",
+      "risk": "Recall quality — the product's core value. If distilled/curated memory is noisy or wrong, retrieval degrades and trust collapses.",
+      "provenance": []
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-orgs-need-shared",
+      "type": "experiences",
+      "from": "segment-multi-tenant-orgs",
+      "to": "need-shared-context",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "The system should allow teams, companies, and agentic workflows to share structured and unstructured memory across users, agents, projects, and tools." }
+      ]
+    },
+    {
+      "id": "e-agents-context-rot",
+      "type": "experiences",
+      "from": "segment-agents",
+      "to": "pain-context-rot",
+      "provenance": [
+        { "source": "plan.md", "quote": "keeping the entire chat history in the model's context window (which leads to \"context rot\")" }
+      ]
+    },
+    {
+      "id": "e-orgs-request-multitenant",
+      "type": "requests",
+      "from": "segment-multi-tenant-orgs",
+      "to": "feature-multi-tenant",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Multi-tenant organizations" }
+      ]
+    },
+    {
+      "id": "e-enterprise-request-rbac",
+      "type": "requests",
+      "from": "segment-enterprise",
+      "to": "feature-rbac",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Advanced RBAC/ABAC" }
+      ]
+    },
+    {
+      "id": "e-enterprise-request-audit",
+      "type": "requests",
+      "from": "segment-enterprise",
+      "to": "feature-audit-logs",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Advanced audit logs" }
+      ]
+    },
+    {
+      "id": "e-jit-supports-recall",
+      "type": "supports",
+      "from": "insight-jit-retrieval",
+      "to": "need-recall-without-overwhelm",
+      "provenance": [
+        { "source": "plan.md", "quote": "agents use pre-inference retrieval to surface only the most relevant episodic or semantic memories right when they are needed" }
+      ]
+    },
+    {
+      "id": "e-fourpillars-supports-shared",
+      "type": "supports",
+      "from": "insight-four-pillars",
+      "to": "need-shared-context",
+      "provenance": [
+        { "source": "plan.md", "quote": "Semantic Memory (Long-Term): Stores facts, user profiles, preferences, and organizational knowledge." }
+      ]
+    },
+    {
+      "id": "e-cloudflare-competes-curator",
+      "type": "competes-with",
+      "from": "comp-cloudflare",
+      "to": "feature-curator",
+      "provenance": [
+        { "source": "plan.md", "quote": "built-in primitives that extract, store, and manage user details across multi-session interactions automatically" }
+      ]
+    },
+    {
+      "id": "e-hindsight-competes-curator",
+      "type": "competes-with",
+      "from": "comp-hindsight",
+      "to": "feature-curator",
+      "provenance": [
+        { "source": "plan.md", "quote": "use specialized sub-agents to summarize past interactions into distilled facts and preferences" }
+      ]
+    },
+    {
+      "id": "e-leak-blocks-production",
+      "type": "blocks",
+      "from": "need-no-cross-tenant-leak",
+      "to": "outcome-production-ready",
+      "provenance": [
+        { "source": "plan.md", "quote": "The system must prevent cross-tenant memory leakage by design, not only by convention." }
+      ]
+    },
+    {
+      "id": "a-outcome-assumes-want",
+      "type": "assumes",
+      "from": "outcome-production-ready",
+      "to": "assumption-teams-want-shared-memory",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "TeamShared is currently a proof of concept for shared agent memory." }
+      ]
+    },
+    {
+      "id": "a-outcome-assumes-pay",
+      "type": "assumes",
+      "from": "outcome-production-ready",
+      "to": "assumption-buyers-pay-for-memory-infra",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "make it production ready for multi-tenant organization customers" }
+      ]
+    },
+    {
+      "id": "a-consent-assumes-gate",
+      "type": "assumes",
+      "from": "feature-consent-capture",
+      "to": "assumption-consent-is-adoption-gate",
+      "provenance": [
+        { "source": "memory-wiki-plan.md", "quote": "Capture | **Consent-first, client-sanitized, push-only** (see \u00a76)" }
+      ]
+    },
+    {
+      "id": "a-connectors-assumes-adoption",
+      "type": "assumes",
+      "from": "feature-connectors",
+      "to": "assumption-connectors-drive-adoption",
+      "provenance": [
+        { "source": "plan.md", "quote": "Connector architecture for Slack, GitHub, Notion, Google Drive, Linear, and MCP servers" }
+      ]
+    },
+    {
+      "id": "a-rbac-assumes-enterprise",
+      "type": "assumes",
+      "from": "feature-rbac",
+      "to": "assumption-enterprise-security-gates-deals",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Enterprise security baseline" }
+      ]
+    },
+    {
+      "id": "a-shared-assumes-default",
+      "type": "assumes",
+      "from": "need-shared-context",
+      "to": "assumption-shared-brain-default-desired",
+      "provenance": [
+        { "source": "prod-plan.md", "quote": "Shared memories across teams and agents" }
+      ]
+    },
+    {
+      "id": "a-wiki-assumes-engage",
+      "type": "assumes",
+      "from": "feature-wiki",
+      "to": "assumption-humans-engage-wiki",
+      "provenance": [
+        { "source": "memory-wiki-plan.md", "quote": "browse the data** as a human-readable, continuously updating **wiki**" }
+      ]
+    },
+    {
+      "id": "a-curator-assumes-quality",
+      "type": "assumes",
+      "from": "feature-curator",
+      "to": "assumption-distill-quality",
+      "provenance": [
+        { "source": "memory-wiki-plan.md", "quote": "Distill prompt extracts only durable knowledge; curator compacts further" }
+      ]
+    }
+  ]
+}
