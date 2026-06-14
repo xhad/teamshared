@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}Projects{% endblock %}
+{% block content %}
+  <div class="page-head">
+    <div>
+      <h1>Projects</h1>
+      <p class="sub">Group tasks into projects with sections, owners, and a board view.</p>
+    </div>
+  </div>
+
+  {% if flash == 'created' %}<div class="flash-ok">Project created.</div>{% endif %}
+  {% if flash == 'invalid' %}<div class="unavailable">Project name is required.</div>{% endif %}
+  {% if flash == 'error' %}<div class="unavailable">Could not create the project. Please try again.</div>{% endif %}
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  <form method="post" action="/app/projects/create" class="stack-form project-create-form">
+    {{ cm.csrf_field() }}
+    <div class="field">
+      <label for="project-name">New project</label>
+      <input id="project-name" name="name" type="text" required placeholder="e.g. Q3 Launch" />
+    </div>
+    <div class="field">
+      <label for="project-desc">Description (optional)</label>
+      <textarea id="project-desc" name="description_md" rows="2"
+        placeholder="What is this project about?"></textarea>
+    </div>
+    <div class="field">
+      <label for="project-view">Default view</label>
+      <select id="project-view" name="default_view">
+        <option value="board" selected>Board</option>
+        <option value="list">List</option>
+        <option value="timeline">Timeline</option>
+        <option value="calendar">Calendar</option>
+      </select>
+    </div>
+    <button type="submit">+ Create project</button>
+  </form>
+
+  {% if projects %}
+  <div class="project-grid">
+    {% for p in projects %}
+    <a class="project-card" href="/app/projects/{{ p.id }}">
+      <h3>{{ p.name }}</h3>
+      {% if p.description_md %}<p class="muted">{{ p.description_md[:140] }}</p>{% endif %}
+      <div class="project-card-meta">
+        <span class="work-status-pill">{{ p.default_view | title }}</span>
+        {% if p.project_status == 'archived' %}<span class="muted">Archived</span>{% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="work-empty">
+    <div class="work-empty-icon" aria-hidden="true">&#128193;</div>
+    <h3>No projects yet</h3>
+    <p>Create your first project above to organize tasks into a board.</p>
+  </div>
+  {% endif %}
+{% endblock %}

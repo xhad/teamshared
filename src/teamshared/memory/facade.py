@@ -637,6 +637,11 @@ class MemoryFacade:
         repo: str | None,
         github: str | None,
         agent_override: str | None,
+        project_id: str | None = None,
+        section_id: str | None = None,
+        parent_id: str | None = None,
+        start_at: datetime | None = None,
+        item_type: str = "task",
     ) -> dict[str, Any]:
         caller_ctx = self._ctx(principal)
         writer = await self._write_principal(
@@ -673,6 +678,11 @@ class MemoryFacade:
                 github=github,
                 agent=writer.display or writer.attribution,
                 require_approval=True,
+                project_id=UUID(project_id) if project_id else None,
+                section_id=UUID(section_id) if section_id else None,
+                parent_id=UUID(parent_id) if parent_id else None,
+                start_at=start_at,
+                item_type=item_type,
             )
             out = _serialize_work(result.item)
             out["approval_status"] = result.status
@@ -696,7 +706,17 @@ class MemoryFacade:
             source="human",
             agent=writer.display or writer.attribution,
             status="active",
+            parent_id=UUID(parent_id) if parent_id else None,
+            start_at=start_at,
+            item_type=item_type,  # type: ignore[arg-type]
         )
+        if project_id:
+            await self.services.work.add_to_project(
+                principal.org_id,
+                UUID(str(row["id"])),
+                UUID(project_id),
+                section_id=UUID(section_id) if section_id else None,
+            )
         await self.services.audit.record(
             agent=writer.attribution,
             action="work.create",
@@ -900,6 +920,320 @@ class MemoryFacade:
             "count": len(rows),
             "comments": [_serialize_work(r) for r in rows],
         }
+
+    # -- projects ---------------------------------------------------------
+
+    async def project_create(
+        self,
+        principal: Principal,
+        *,
+        name: str,
+        description_md: str | None,
+        team_id: str | None,
+        default_view: str,
+        color: str | None,
+        owner_email: str | None,
+        initiative_id: str | None,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="project_create",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
+        await ctx.authorizer.require(ctx.principal, Permissions.PROJECT_WRITE)
+        owner_id: UUID | None = None
+        if owner_email:
+            owner_id = await self.services.work.resolve_user_id_by_email(
+                principal.org_id, owner_email,
+            )
+        row = await self.services.projects.create(
+            principal.org_id,
+            name=name,
+            description_md=description_md,
+            team_id=UUID(team_id) if team_id else None,
+            default_view=default_view,  # type: ignore[arg-type]
+            color=color,
+            owner_id=owner_id,
+            initiative_id=UUID(initiative_id) if initiative_id else None,
+            created_by=writer.display or writer.attribution,
+        )
+        await self.services.audit.record(
+            agent=writer.attribution,
+            action="project.create",
+            org_id=principal.org_id,
+            actor_type=writer.type,
+            actor_id=writer.id,
+            resource_type="project",
+            target_id=str(row["id"]),
+            request_id=ctx.request_id,
+            after={"name": name},
+        )
+        return _serialize_work(row)
+
+    async def project_list(
+        self,
+        principal: Principal,
+        *,
+        team_id: str | None,
+        initiative_id: str | None,
+        include_archived: bool,
+        limit: int,
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.PROJECT_READ)
+        rows = await self.services.projects.list_projects(
+            principal.org_id,
+            team_id=UUID(team_id) if team_id else None,
+            initiative_id=UUID(initiative_id) if initiative_id else None,
+            include_archived=include_archived,
+            limit=limit,
+        )
+        return {"count": len(rows), "projects": [_serialize_work(r) for r in rows]}
+
+    async def project_get(
+        self, principal: Principal, *, project_id: str, include_items: bool
+    ) -> dict[str, Any] | None:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.PROJECT_READ)
+        pid = UUID(project_id)
+        row = await self.services.projects.get(principal.org_id, pid)
+        if row is None:
+            return None
+        out = _serialize_work(row)
+        out["sections"] = [
+            _serialize_work(s)
+            for s in await self.services.projects.list_sections(principal.org_id, pid)
+        ]
+        status = await self.services.projects.latest_status(principal.org_id, pid)
+        out["latest_status"] = _serialize_work(status) if status else None
+        if include_items:
+            items = await self.services.work.list_project_items(principal.org_id, pid)
+            out["items"] = [_serialize_work(i) for i in items]
+        return out
+
+    async def project_update(
+        self,
+        principal: Principal,
+        *,
+        project_id: str,
+        fields: dict[str, Any],
+        agent_override: str | None,
+    ) -> dict[str, Any] | None:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.PROJECT_WRITE)
+        row = await self.services.projects.update(
+            principal.org_id, UUID(project_id), fields=fields,
+        )
+        return _serialize_work(row) if row else None
+
+    async def project_archive(
+        self, principal: Principal, *, project_id: str, archived: bool
+    ) -> dict[str, Any] | None:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.PROJECT_WRITE)
+        row = await self.services.projects.archive(
+            principal.org_id, UUID(project_id), archived=archived,
+        )
+        return _serialize_work(row) if row else None
+
+    async def project_section_add(
+        self, principal: Principal, *, project_id: str, name: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.PROJECT_WRITE)
+        row = await self.services.projects.add_section(
+            principal.org_id, UUID(project_id), name=name,
+        )
+        return _serialize_work(row)
+
+    async def project_section_list(
+        self, principal: Principal, *, project_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.PROJECT_READ)
+        rows = await self.services.projects.list_sections(
+            principal.org_id, UUID(project_id),
+        )
+        return {"count": len(rows), "sections": [_serialize_work(r) for r in rows]}
+
+    async def project_status_post(
+        self,
+        principal: Principal,
+        *,
+        project_id: str,
+        state: str,
+        body_md: str | None,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="project_status_post",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        await ctx.authorizer.require(ctx.principal, Permissions.PROJECT_WRITE)
+        author_type = writer.type if writer.type in {"user", "agent"} else "agent"
+        row = await self.services.projects.post_status(
+            principal.org_id,
+            UUID(project_id),
+            state=state,  # type: ignore[arg-type]
+            body_md=body_md,
+            author_type=author_type,  # type: ignore[arg-type]
+            author_id=writer.id,
+        )
+        return _serialize_work(row)
+
+    # -- task membership, hierarchy, dependencies, followers --------------
+
+    async def work_add_to_project(
+        self,
+        principal: Principal,
+        *,
+        work_id: str,
+        project_id: str,
+        section_id: str | None,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        row = await self.services.work.add_to_project(
+            principal.org_id,
+            UUID(work_id),
+            UUID(project_id),
+            section_id=UUID(section_id) if section_id else None,
+        )
+        return _serialize_work(row)
+
+    async def work_remove_from_project(
+        self, principal: Principal, *, work_id: str, project_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        await self.services.work.remove_from_project(
+            principal.org_id, UUID(work_id), UUID(project_id),
+        )
+        return {"work_id": work_id, "project_id": project_id, "removed": True}
+
+    async def work_move(
+        self,
+        principal: Principal,
+        *,
+        work_id: str,
+        project_id: str,
+        section_id: str | None,
+        sort_order: float,
+        agent_override: str | None,
+    ) -> dict[str, Any] | None:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        row = await self.services.work.move(
+            principal.org_id,
+            UUID(work_id),
+            UUID(project_id),
+            section_id=UUID(section_id) if section_id else None,
+            sort_order=sort_order,
+        )
+        return _serialize_work(row) if row else None
+
+    async def work_subtasks_list(
+        self, principal: Principal, *, work_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_READ)
+        rows = await self.services.work.list_subtasks(principal.org_id, UUID(work_id))
+        return {"count": len(rows), "subtasks": [_serialize_work(r) for r in rows]}
+
+    async def work_dependency_add(
+        self,
+        principal: Principal,
+        *,
+        blocker_id: str,
+        blocked_id: str,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        row = await self.services.work.add_dependency(
+            principal.org_id, blocker_id=UUID(blocker_id), blocked_id=UUID(blocked_id),
+        )
+        return _serialize_work(row)
+
+    async def work_dependency_remove(
+        self, principal: Principal, *, blocker_id: str, blocked_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        await self.services.work.remove_dependency(
+            principal.org_id, blocker_id=UUID(blocker_id), blocked_id=UUID(blocked_id),
+        )
+        return {"blocker_id": blocker_id, "blocked_id": blocked_id, "removed": True}
+
+    async def work_dependencies_list(
+        self, principal: Principal, *, work_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_READ)
+        return await self.services.work.list_dependencies(principal.org_id, UUID(work_id))
+
+    async def work_follower_add(
+        self,
+        principal: Principal,
+        *,
+        work_id: str,
+        follower_agent: str | None,
+        follower_email: str | None,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        ftype, fid = await self._resolve_assignee(
+            principal.org_id,
+            assignee_type=None,
+            assignee_id=None,
+            assignee_agent=follower_agent,
+            assignee_email=follower_email,
+        )
+        if ftype is None or fid is None:
+            raise ValueError("could not resolve follower")
+        row = await self.services.work.add_follower(
+            principal.org_id, UUID(work_id), follower_type=ftype, follower_id=fid,  # type: ignore[arg-type]
+        )
+        return _serialize_work(row)
+
+    async def work_follower_remove(
+        self,
+        principal: Principal,
+        *,
+        work_id: str,
+        follower_agent: str | None,
+        follower_email: str | None,
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        ftype, fid = await self._resolve_assignee(
+            principal.org_id,
+            assignee_type=None,
+            assignee_id=None,
+            assignee_agent=follower_agent,
+            assignee_email=follower_email,
+        )
+        if ftype is None or fid is None:
+            raise ValueError("could not resolve follower")
+        await self.services.work.remove_follower(
+            principal.org_id, UUID(work_id), follower_type=ftype, follower_id=fid,  # type: ignore[arg-type]
+        )
+        return {"work_id": work_id, "removed": True}
+
+    async def work_followers_list(
+        self, principal: Principal, *, work_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORK_READ)
+        rows = await self.services.work.list_followers(principal.org_id, UUID(work_id))
+        return {"count": len(rows), "followers": [_serialize_work(r) for r in rows]}
 
     async def _emit_work_close_episode(
         self,

@@ -25,6 +25,7 @@ from teamshared.memory.audit import AuditLog
 from teamshared.memory.embeddings import Embedder, build_embedder
 from teamshared.memory.hnsw_cache import HnswCache
 from teamshared.memory.procedural import OrgProceduralStore
+from teamshared.memory.projects import ProjectStore
 from teamshared.memory.retrieval import SecureRetrieval
 from teamshared.memory.service import MemoryService
 from teamshared.memory.strategic import OrgStrategicStore
@@ -48,6 +49,7 @@ class ProductionServices:
     procedural: OrgProceduralStore
     strategic: OrgStrategicStore
     work: WorkStore
+    projects: ProjectStore
     wiki: WikiStore
     audit: AuditLog
     memory_service: MemoryService
@@ -106,6 +108,7 @@ def make_services(settings: Settings) -> ProductionServices:
         procedural=OrgProceduralStore(tenant_db),
         strategic=OrgStrategicStore(tenant_db),
         work=WorkStore(tenant_db),
+        projects=ProjectStore(tenant_db),
         wiki=WikiStore(tenant_db),
         audit=audit,
         memory_service=memory_service,

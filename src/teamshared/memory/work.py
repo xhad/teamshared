@@ -14,6 +14,7 @@ log = get_logger(__name__)
 
 WorkStatus = Literal["backlog", "todo", "in_progress", "blocked", "done", "cancelled"]
 WorkPriority = Literal["urgent", "high", "normal", "low"]
+WorkItemType = Literal["task", "milestone", "approval"]
 WorkApprovalStatus = Literal["active", "pending_approval", "rejected", "closed"]
 WorkSort = Literal["updated_at", "priority", "work_status", "created_at"]
 WorkSortDir = Literal["asc", "desc"]
@@ -52,6 +53,9 @@ class WorkStore:
         agent: str,
         status: WorkApprovalStatus = "active",
         blocked_reason: str | None = None,
+        parent_id: UUID | None = None,
+        start_at: datetime | None = None,
+        item_type: WorkItemType = "task",
     ) -> dict[str, Any]:
         now = datetime.now(UTC)
         async with self.db.org(org_id) as conn:
@@ -62,21 +66,24 @@ class WorkStore:
                     work_status, priority, blocked_reason,
                     requester_type, requester_id, assignee_type, assignee_id,
                     due_at, repo, github, source, status, created_by,
-                    created_at, updated_at
+                    created_at, updated_at,
+                    parent_id, start_at, item_type
                 )
                 VALUES (
                     %s, %s, %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s,
-                    %s, %s
+                    %s, %s,
+                    %s, %s, %s
                 )
                 RETURNING
                     id, org_id, initiative_id, title, description_md, tags,
                     work_status, priority, blocked_reason,
                     requester_type, requester_id, assignee_type, assignee_id,
                     due_at, repo, github, source, status, created_by,
-                    created_at, updated_at, closed_at
+                    created_at, updated_at, closed_at,
+                    parent_id, start_at, item_type
                 """,
                 (
                     str(org_id),
@@ -99,6 +106,9 @@ class WorkStore:
                     agent,
                     now,
                     now,
+                    str(parent_id) if parent_id else None,
+                    start_at,
+                    item_type,
                 ),
             )
             row = await cur.fetchone()
@@ -115,7 +125,8 @@ class WorkStore:
                     work_status, priority, blocked_reason,
                     requester_type, requester_id, assignee_type, assignee_id,
                     due_at, repo, github, source, status, created_by,
-                    created_at, updated_at, closed_at
+                    created_at, updated_at, closed_at,
+                    parent_id, start_at, item_type
                 FROM work_items WHERE id = %s
                 """,
                 (str(work_id),),
@@ -170,7 +181,8 @@ class WorkStore:
                     work_status, priority, blocked_reason,
                     requester_type, requester_id, assignee_type, assignee_id,
                     due_at, repo, github, source, status, created_by,
-                    created_at, updated_at, closed_at
+                    created_at, updated_at, closed_at,
+                    parent_id, start_at, item_type
                 FROM work_items
                 WHERE {where}
                 ORDER BY {order}
@@ -195,6 +207,7 @@ class WorkStore:
             "blocked_reason", "assignee_type", "assignee_id",
             "requester_type", "requester_id", "initiative_id",
             "due_at", "repo", "github",
+            "parent_id", "start_at", "item_type",
         }
         updates: list[str] = []
         params: list[Any] = []
@@ -205,7 +218,10 @@ class WorkStore:
                 continue
             if key == "priority" and val not in _PRIORITIES:
                 continue
-            if key in {"assignee_id", "requester_id", "initiative_id"} and val is not None:
+            if (
+                key in {"assignee_id", "requester_id", "initiative_id", "parent_id"}
+                and val is not None
+            ):
                 val = str(val)
             updates.append(f"{key} = %s")
             params.append(val)
@@ -224,7 +240,8 @@ class WorkStore:
                     work_status, priority, blocked_reason,
                     requester_type, requester_id, assignee_type, assignee_id,
                     due_at, repo, github, source, status, created_by,
-                    created_at, updated_at, closed_at
+                    created_at, updated_at, closed_at,
+                    parent_id, start_at, item_type
                 """,
                 tuple(params),
             )
@@ -252,7 +269,8 @@ class WorkStore:
                     work_status, priority, blocked_reason,
                     requester_type, requester_id, assignee_type, assignee_id,
                     due_at, repo, github, source, status, created_by,
-                    created_at, updated_at, closed_at
+                    created_at, updated_at, closed_at,
+                    parent_id, start_at, item_type
                 """,
                 (work_status, now, now, str(work_id)),
             )
@@ -488,6 +506,345 @@ class WorkStore:
                 c.get("author_type"), c.get("author_id"), agent_names, user_labels,
             )
 
+    # -- project membership (multi-project, Asana-style) ------------------
+
+    async def add_to_project(
+        self,
+        org_id: UUID,
+        work_id: UUID,
+        project_id: UUID,
+        *,
+        section_id: UUID | None = None,
+        sort_order: float | None = None,
+    ) -> dict[str, Any]:
+        async with self.db.org(org_id) as conn:
+            if sort_order is None:
+                cur = await conn.execute(
+                    """
+                    SELECT coalesce(max(sort_order), 0) + 1
+                    FROM work_item_projects
+                    WHERE project_id = %s
+                      AND section_id IS NOT DISTINCT FROM %s
+                    """,
+                    (str(project_id), str(section_id) if section_id else None),
+                )
+                row = await cur.fetchone()
+                sort_order = float(row[0]) if row else 0.0
+            cur = await conn.execute(
+                """
+                INSERT INTO work_item_projects
+                    (org_id, work_item_id, project_id, section_id, sort_order)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (org_id, work_item_id, project_id)
+                DO UPDATE SET section_id = EXCLUDED.section_id,
+                              sort_order = EXCLUDED.sort_order
+                RETURNING id, org_id, work_item_id, project_id, section_id,
+                          sort_order, created_at
+                """,
+                (
+                    str(org_id), str(work_id), str(project_id),
+                    str(section_id) if section_id else None, sort_order,
+                ),
+            )
+            row = await cur.fetchone()
+        assert row is not None
+        return _membership_row(row)
+
+    async def remove_from_project(
+        self, org_id: UUID, work_id: UUID, project_id: UUID
+    ) -> None:
+        async with self.db.org(org_id) as conn:
+            await conn.execute(
+                "DELETE FROM work_item_projects "
+                "WHERE work_item_id = %s AND project_id = %s",
+                (str(work_id), str(project_id)),
+            )
+
+    async def move(
+        self,
+        org_id: UUID,
+        work_id: UUID,
+        project_id: UUID,
+        *,
+        section_id: UUID | None,
+        sort_order: float,
+    ) -> dict[str, Any] | None:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                UPDATE work_item_projects
+                SET section_id = %s, sort_order = %s
+                WHERE work_item_id = %s AND project_id = %s
+                RETURNING id, org_id, work_item_id, project_id, section_id,
+                          sort_order, created_at
+                """,
+                (
+                    str(section_id) if section_id else None, sort_order,
+                    str(work_id), str(project_id),
+                ),
+            )
+            row = await cur.fetchone()
+        return _membership_row(row) if row else None
+
+    async def list_project_items(
+        self,
+        org_id: UUID,
+        project_id: UUID,
+        *,
+        exclude_closed: bool = True,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Tasks in a project, ordered by section then rank (board/list view)."""
+        clause = (
+            "AND wi.work_status NOT IN ('done', 'cancelled')" if exclude_closed else ""
+        )
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                f"""
+                SELECT
+                    wi.id, wi.org_id, wi.initiative_id, wi.title, wi.description_md,
+                    wi.tags, wi.work_status, wi.priority, wi.blocked_reason,
+                    wi.requester_type, wi.requester_id, wi.assignee_type, wi.assignee_id,
+                    wi.due_at, wi.repo, wi.github, wi.source, wi.status, wi.created_by,
+                    wi.created_at, wi.updated_at, wi.closed_at,
+                    wi.parent_id, wi.start_at, wi.item_type,
+                    wip.section_id, wip.sort_order
+                FROM work_item_projects wip
+                JOIN work_items wi ON wi.id = wip.work_item_id
+                WHERE wip.project_id = %s
+                  AND wi.status = 'active'
+                  AND wi.parent_id IS NULL
+                  {clause}
+                ORDER BY wip.section_id NULLS FIRST, wip.sort_order ASC, wi.created_at ASC
+                LIMIT %s
+                """,
+                (str(project_id), limit),
+            )
+            rows = await cur.fetchall()
+        items: list[dict[str, Any]] = []
+        for r in rows:
+            item = _row(r[:25])
+            item["section_id"] = r[25]
+            item["sort_order"] = r[26]
+            items.append(item)
+        await self.enrich_labels(org_id, items)
+        return items
+
+    async def list_item_projects(
+        self, org_id: UUID, work_id: UUID
+    ) -> list[dict[str, Any]]:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT wip.id, wip.org_id, wip.work_item_id, wip.project_id,
+                       wip.section_id, wip.sort_order, wip.created_at, p.name
+                FROM work_item_projects wip
+                JOIN projects p ON p.id = wip.project_id
+                WHERE wip.work_item_id = %s
+                ORDER BY wip.created_at ASC
+                """,
+                (str(work_id),),
+            )
+            rows = await cur.fetchall()
+        out = []
+        for r in rows:
+            m = _membership_row(r[:7])
+            m["project_name"] = r[7]
+            out.append(m)
+        return out
+
+    # -- subtasks ---------------------------------------------------------
+
+    async def list_subtasks(self, org_id: UUID, parent_id: UUID) -> list[dict[str, Any]]:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT
+                    id, org_id, initiative_id, title, description_md, tags,
+                    work_status, priority, blocked_reason,
+                    requester_type, requester_id, assignee_type, assignee_id,
+                    due_at, repo, github, source, status, created_by,
+                    created_at, updated_at, closed_at,
+                    parent_id, start_at, item_type
+                FROM work_items
+                WHERE parent_id = %s AND status = 'active'
+                ORDER BY created_at ASC
+                """,
+                (str(parent_id),),
+            )
+            rows = await cur.fetchall()
+        items = [_row(r) for r in rows]
+        await self.enrich_labels(org_id, items)
+        return items
+
+    # -- dependencies -----------------------------------------------------
+
+    async def add_dependency(
+        self, org_id: UUID, *, blocker_id: UUID, blocked_id: UUID
+    ) -> dict[str, Any]:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                INSERT INTO work_dependencies (org_id, blocker_id, blocked_id)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (org_id, blocker_id, blocked_id) DO NOTHING
+                RETURNING id, org_id, blocker_id, blocked_id, created_at
+                """,
+                (str(org_id), str(blocker_id), str(blocked_id)),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            return {"blocker_id": str(blocker_id), "blocked_id": str(blocked_id),
+                    "already_exists": True}
+        return {
+            "id": row[0], "org_id": row[1], "blocker_id": row[2],
+            "blocked_id": row[3], "created_at": row[4], "already_exists": False,
+        }
+
+    async def remove_dependency(
+        self, org_id: UUID, *, blocker_id: UUID, blocked_id: UUID
+    ) -> None:
+        async with self.db.org(org_id) as conn:
+            await conn.execute(
+                "DELETE FROM work_dependencies "
+                "WHERE blocker_id = %s AND blocked_id = %s",
+                (str(blocker_id), str(blocked_id)),
+            )
+
+    async def list_dependencies(
+        self, org_id: UUID, work_id: UUID
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Return tasks this item is blocked by and tasks it blocks."""
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT b.id::text, b.title, b.work_status
+                FROM work_dependencies d
+                JOIN work_items b ON b.id = d.blocker_id
+                WHERE d.blocked_id = %s
+                """,
+                (str(work_id),),
+            )
+            blocked_by = [
+                {"id": r[0], "title": r[1], "work_status": r[2]}
+                for r in await cur.fetchall()
+            ]
+            cur = await conn.execute(
+                """
+                SELECT b.id::text, b.title, b.work_status
+                FROM work_dependencies d
+                JOIN work_items b ON b.id = d.blocked_id
+                WHERE d.blocker_id = %s
+                """,
+                (str(work_id),),
+            )
+            blocks = [
+                {"id": r[0], "title": r[1], "work_status": r[2]}
+                for r in await cur.fetchall()
+            ]
+        return {"blocked_by": blocked_by, "blocks": blocks}
+
+    # -- followers --------------------------------------------------------
+
+    async def add_follower(
+        self,
+        org_id: UUID,
+        work_id: UUID,
+        *,
+        follower_type: PartyType,
+        follower_id: UUID,
+    ) -> dict[str, Any]:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                INSERT INTO work_followers
+                    (org_id, work_item_id, follower_type, follower_id)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (org_id, work_item_id, follower_type, follower_id)
+                DO NOTHING
+                RETURNING id, org_id, work_item_id, follower_type, follower_id, created_at
+                """,
+                (str(org_id), str(work_id), follower_type, str(follower_id)),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            return {"work_item_id": str(work_id), "follower_id": str(follower_id),
+                    "already_exists": True}
+        return {
+            "id": row[0], "org_id": row[1], "work_item_id": row[2],
+            "follower_type": row[3], "follower_id": row[4], "created_at": row[5],
+            "already_exists": False,
+        }
+
+    async def remove_follower(
+        self,
+        org_id: UUID,
+        work_id: UUID,
+        *,
+        follower_type: PartyType,
+        follower_id: UUID,
+    ) -> None:
+        async with self.db.org(org_id) as conn:
+            await conn.execute(
+                "DELETE FROM work_followers "
+                "WHERE work_item_id = %s AND follower_type = %s AND follower_id = %s",
+                (str(work_id), follower_type, str(follower_id)),
+            )
+
+    async def list_followers(
+        self, org_id: UUID, work_id: UUID
+    ) -> list[dict[str, Any]]:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT id, org_id, work_item_id, follower_type, follower_id, created_at
+                FROM work_followers
+                WHERE work_item_id = %s
+                ORDER BY created_at ASC
+                """,
+                (str(work_id),),
+            )
+            rows = await cur.fetchall()
+        followers = [
+            {
+                "id": r[0], "org_id": r[1], "work_item_id": r[2],
+                "follower_type": r[3], "follower_id": r[4], "created_at": r[5],
+            }
+            for r in rows
+        ]
+        await self._enrich_follower_labels(org_id, followers)
+        return followers
+
+    async def _enrich_follower_labels(
+        self, org_id: UUID, followers: list[dict[str, Any]]
+    ) -> None:
+        if not followers:
+            return
+        agent_ids = {str(f["follower_id"]) for f in followers if f["follower_type"] == "agent"}
+        user_ids = {str(f["follower_id"]) for f in followers if f["follower_type"] == "user"}
+        agent_names: dict[str, str] = {}
+        user_labels: dict[str, str] = {}
+        async with self.db.org(org_id) as conn:
+            if agent_ids:
+                cur = await conn.execute(
+                    "SELECT id::text, name FROM agents WHERE id = ANY(%s::uuid[])",
+                    (list(agent_ids),),
+                )
+                for r in await cur.fetchall():
+                    agent_names[r[0]] = r[1]
+            if user_ids:
+                cur = await conn.execute(
+                    "SELECT id::text, coalesce(display_name, email) FROM users "
+                    "WHERE id = ANY(%s::uuid[])",
+                    (list(user_ids),),
+                )
+                for r in await cur.fetchall():
+                    user_labels[r[0]] = r[1]
+        for f in followers:
+            f["follower_label"] = _resolve_label(
+                f.get("follower_type"), f.get("follower_id"), agent_names, user_labels,
+            )
+
     async def stats(self, org_id: UUID) -> dict[str, int]:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
@@ -555,6 +912,18 @@ def _order_clause(sort: WorkSort, sort_dir: WorkSortDir) -> str:
     return f"{expr} {direction}, updated_at DESC"
 
 
+def _membership_row(row: tuple[Any, ...]) -> dict[str, Any]:
+    return {
+        "id": row[0],
+        "org_id": row[1],
+        "work_item_id": row[2],
+        "project_id": row[3],
+        "section_id": row[4],
+        "sort_order": row[5],
+        "created_at": row[6],
+    }
+
+
 def _comment_row(row: tuple[Any, ...]) -> dict[str, Any]:
     return {
         "id": row[0],
@@ -592,4 +961,7 @@ def _row(row: tuple[Any, ...]) -> dict[str, Any]:
         "created_at": row[19],
         "updated_at": row[20],
         "closed_at": row[21],
+        "parent_id": row[22],
+        "start_at": row[23],
+        "item_type": row[24],
     }

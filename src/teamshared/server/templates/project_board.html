@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% import "work_macros.html" as wm %}
+{% block title %}{% if project %}{{ project.name }}{% else %}Project{% endif %}{% endblock %}
+{% block content %}
+  <a class="work-form-back" href="/app/projects">&larr; Back to projects</a>
+
+  {% if flash == 'created' %}<div class="flash-ok">Project created.</div>{% endif %}
+  {% if flash == 'section' %}<div class="flash-ok">Section added.</div>{% endif %}
+  {% if flash == 'invalid' %}<div class="unavailable">A name is required.</div>{% endif %}
+  {% if flash == 'error' %}<div class="unavailable">Something went wrong. Please try again.</div>{% endif %}
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if project %}
+  <div class="page-head">
+    <div>
+      <h1>{{ project.name }}</h1>
+      {% if project.description_md %}<p class="sub">{{ project.description_md }}</p>{% endif %}
+    </div>
+  </div>
+
+  {% if project.latest_status %}
+  <div class="project-status-banner {{ project.latest_status.state }}">
+    <strong>{{ project.latest_status.state | replace('_', ' ') | title }}</strong>
+    {% if project.latest_status.body_md %}&middot; {{ project.latest_status.body_md }}{% endif %}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/app/projects/{{ project.id }}/sections" class="project-section-add">
+    {{ cm.csrf_field() }}
+    <input name="name" type="text" required placeholder="+ Add section (e.g. To do)" aria-label="Section name" />
+    <button type="submit">Add</button>
+  </form>
+
+  <div class="project-board">
+    {% for col in columns %}
+    <section class="board-column">
+      <header class="board-column-head">
+        <h3>{{ col.name }}</h3>
+        <span class="board-count">{{ col.cards | length }}</span>
+      </header>
+      <div class="board-column-body">
+        {% for item in col.cards %}
+        <a class="board-card" href="/app/work/{{ item.id }}">
+          <div class="board-card-title">{{ item.title }}</div>
+          <div class="board-card-meta">
+            <span class="work-status-pill {{ item.work_status }}">{{ wm.status_label(item.work_status) }}</span>
+            <span class="work-priority {{ item.priority }}">{{ wm.priority_label(item.priority) }}</span>
+            {% if item.assignee_label %}
+            <span class="work-avatar" title="{{ item.assignee_label }}">{{ wm.assignee_initial(item.assignee_label) }}</span>
+            {% endif %}
+          </div>
+        </a>
+        {% else %}
+        <p class="muted board-empty">No tasks</p>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endblock %}

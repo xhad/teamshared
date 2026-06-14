@@ -70,6 +70,7 @@ NAV: list[tuple[str, str, str]] = [
     ("/app/wiki", "Wiki", "wiki"),
     ("/app/playbooks", "Playbooks", "playbooks"),
     ("/app/work", "Work", "work"),
+    ("/app/projects", "Projects", "projects"),
     ("/app/strategy", "Strategy", "strategy"),
     ("/app/memory", "Memory", "memory"),
     ("/app/agents", "Agents", "agents"),
@@ -105,6 +106,30 @@ def _group_by_kind(records: list[Any]) -> list[tuple[str, list[Any]]]:
 def _safe(value: Any, default: Any) -> Any:
     """Coerce a gathered store result to a usable value, tolerating failures."""
     return default if isinstance(value, BaseException) else value
+
+
+def _board_columns(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Group a project's tasks into ordered board columns by section.
+
+    Tasks with no section land in a leading "No section" column. Section order
+    follows the project's declared section order.
+    """
+    sections = project.get("sections") or []
+    items = project.get("items") or []
+    buckets: dict[str | None, list[dict[str, Any]]] = {None: []}
+    for s in sections:
+        buckets[str(s.get("id"))] = []
+    for item in items:
+        key = item.get("section_id")
+        key = str(key) if key else None
+        buckets.setdefault(key, []).append(item)
+    columns: list[dict[str, Any]] = []
+    if buckets.get(None):
+        columns.append({"id": None, "name": "No section", "cards": buckets[None]})
+    for s in sections:
+        sid = str(s.get("id"))
+        columns.append({"id": sid, "name": s.get("name"), "cards": buckets.get(sid, [])})
+    return columns
 
 
 async def _settings_context(
@@ -915,6 +940,117 @@ def register_console_routes(
             log.warning("work_save_failed", error=str(exc))
             return RedirectResponse("/app/work?flash=error", status_code=303)
 
+    # --- projects -------------------------------------------------------
+
+    async def projects_page(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "projects")
+        include_archived = request.query_params.get("include_archived") == "1"
+        projects: list[dict[str, Any]] = []
+        note = ""
+        try:
+            data = await get_state().facade.project_list(
+                principal,
+                team_id=None,
+                initiative_id=None,
+                include_archived=include_archived,
+                limit=100,
+            )
+            projects = data.get("projects") or []
+        except Exception as exc:
+            log.warning("projects_page_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({
+            "projects": projects,
+            "include_archived": include_archived,
+            "note": note,
+            "flash": request.query_params.get("flash") or "",
+        })
+        return _TEMPLATES.TemplateResponse(request, "projects.html", ctx)
+
+    async def project_create_post(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        name = str(form.get("name") or "").strip()
+        if not name:
+            return RedirectResponse("/app/projects?flash=invalid", status_code=303)
+        description_md = str(form.get("description_md") or "").strip() or None
+        default_view = str(form.get("default_view") or "board").strip()
+        try:
+            created = await get_state().facade.project_create(
+                principal,
+                name=name,
+                description_md=description_md,
+                team_id=None,
+                default_view=default_view,
+                color=None,
+                owner_email=None,
+                initiative_id=None,
+                agent_override=None,
+            )
+            pid = created.get("id")
+            return RedirectResponse(
+                f"/app/projects/{pid}?flash=created" if pid else "/app/projects?flash=created",
+                status_code=303,
+            )
+        except Exception as exc:
+            log.warning("project_create_failed", error=str(exc))
+            return RedirectResponse("/app/projects?flash=error", status_code=303)
+
+    async def project_board(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "projects")
+        project_id = str(request.path_params["project_id"])
+        project: dict[str, Any] | None = None
+        columns: list[dict[str, Any]] = []
+        note = ""
+        try:
+            project = await get_state().facade.project_get(
+                principal, project_id=project_id, include_items=True,
+            )
+            if project is None:
+                note = "Project not found."
+            else:
+                columns = _board_columns(project)
+        except Exception as exc:
+            log.warning("project_board_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({
+            "project": project,
+            "columns": columns,
+            "note": note,
+            "flash": request.query_params.get("flash") or "",
+        })
+        return _TEMPLATES.TemplateResponse(request, "project_board.html", ctx)
+
+    async def project_section_add_post(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        project_id = str(request.path_params["project_id"])
+        name = str(form.get("name") or "").strip()
+        if not name:
+            return RedirectResponse(f"/app/projects/{project_id}?flash=invalid", status_code=303)
+        try:
+            await get_state().facade.project_section_add(
+                principal, project_id=project_id, name=name,
+            )
+            return RedirectResponse(f"/app/projects/{project_id}?flash=section", status_code=303)
+        except Exception as exc:
+            log.warning("project_section_add_failed", error=str(exc))
+            return RedirectResponse(f"/app/projects/{project_id}?flash=error", status_code=303)
+
     # --- read screens (Phase 3) -----------------------------------------
 
     def _ctx(principal: Principal) -> RequestContext:
@@ -1490,6 +1626,10 @@ def register_console_routes(
         Route("/app/work/{work_id}", work_detail, methods=["GET"]),
         Route("/app/work/{work_id}/edit", work_edit, methods=["GET"]),
         Route("/app/work/{work_id}/comment", work_comment, methods=["POST"]),
+        Route("/app/projects", projects_page, methods=["GET"]),
+        Route("/app/projects/create", project_create_post, methods=["POST"]),
+        Route("/app/projects/{project_id}", project_board, methods=["GET"]),
+        Route("/app/projects/{project_id}/sections", project_section_add_post, methods=["POST"]),
         Route("/app/strategy", strategy_home, methods=["GET"]),
         Route("/app/strategy/statement", strategy_statement_propose, methods=["POST"]),
         Route("/app/strategy/plans/{plan_id}", strategy_plan_detail, methods=["GET"]),

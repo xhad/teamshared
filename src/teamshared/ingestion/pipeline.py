@@ -481,6 +481,11 @@ class IngestionPipeline:
         github: str | None,
         agent: str,
         require_approval: bool = True,
+        project_id: UUID | None = None,
+        section_id: UUID | None = None,
+        parent_id: UUID | None = None,
+        start_at: Any = None,
+        item_type: str = "task",
     ) -> WorkIngestionResult:
         await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
         screen_text = f"{title}\n{description_md or ''}"
@@ -524,7 +529,15 @@ class IngestionPipeline:
             source="agent",
             agent=agent,
             status=status,  # type: ignore[arg-type]
+            parent_id=parent_id,
+            start_at=start_at,
+            item_type=item_type,  # type: ignore[arg-type]
         )
+
+        if project_id is not None:
+            await self.work.add_to_project(
+                ctx.org_id, UUID(str(row["id"])), project_id, section_id=section_id,
+            )
 
         if status in {"pending_approval", "quarantined"}:
             reason = "prompt_injection_suspected" if verdict.quarantine else "work_review_required"

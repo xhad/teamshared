@@ -685,6 +685,19 @@ def register_tools(mcp: Any) -> None:
         due_at: Annotated[datetime | None, Field(description="Optional due datetime")] = None,
         repo: Annotated[str | None, Field(description="Optional workspace slug tag")] = None,
         github: Annotated[str | None, Field(description="Optional owner/repo tag")] = None,
+        project_id: Annotated[
+            str | None, Field(description="Add the task to this project UUID")
+        ] = None,
+        section_id: Annotated[
+            str | None, Field(description="Place in this project section UUID")
+        ] = None,
+        parent_id: Annotated[
+            str | None, Field(description="Parent task UUID (makes this a subtask)")
+        ] = None,
+        start_at: Annotated[datetime | None, Field(description="Optional start datetime")] = None,
+        item_type: Annotated[
+            str, Field(description="task, milestone, or approval")
+        ] = "task",
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
         """Create a work item. Agent writes require approval; human console writes are immediate."""
@@ -705,6 +718,11 @@ def register_tools(mcp: Any) -> None:
             due_at=due_at,
             repo=repo,
             github=github,
+            project_id=project_id,
+            section_id=section_id,
+            parent_id=parent_id,
+            start_at=start_at,
+            item_type=item_type,
             agent_override=agent,
         )
 
@@ -789,6 +807,272 @@ def register_tools(mcp: Any) -> None:
         return await state.facade.work_comment_list(
             principal, work_id=work_id, limit=limit,
         )
+
+    @mcp.tool()
+    async def project_create(
+        name: Annotated[str, Field(description="Project name")],
+        description_md: Annotated[str | None, Field(description="Optional markdown body")] = None,
+        team_id: Annotated[str | None, Field(description="Owning team UUID")] = None,
+        default_view: Annotated[
+            str, Field(description="list, board, timeline, or calendar")
+        ] = "list",
+        color: Annotated[str | None, Field(description="Optional color label")] = None,
+        owner_email: Annotated[str | None, Field(description="Owner member email")] = None,
+        initiative_id: Annotated[
+            str | None, Field(description="Strategic initiative UUID for roll-up")
+        ] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Create a project (Asana-style task container)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.project_create(
+            principal,
+            name=name,
+            description_md=description_md,
+            team_id=team_id,
+            default_view=default_view,
+            color=color,
+            owner_email=owner_email,
+            initiative_id=initiative_id,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def project_list(
+        team_id: Annotated[str | None, Field(description="Filter by team UUID")] = None,
+        initiative_id: Annotated[str | None, Field(description="Filter by initiative UUID")] = None,
+        include_archived: Annotated[bool, Field(description="Include archived projects")] = False,
+        limit: Annotated[int, Field(ge=1, le=200)] = 100,
+    ) -> dict[str, Any]:
+        """List projects in the org."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.project_list(
+            principal,
+            team_id=team_id,
+            initiative_id=initiative_id,
+            include_archived=include_archived,
+            limit=limit,
+        )
+
+    @mcp.tool()
+    async def project_get(
+        project_id: Annotated[str, Field(description="Project UUID")],
+        include_items: Annotated[
+            bool, Field(description="Include the project's tasks (board view)")
+        ] = True,
+    ) -> dict[str, Any] | None:
+        """Fetch a project with its sections, latest status, and optionally its tasks."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.project_get(
+            principal, project_id=project_id, include_items=include_items,
+        )
+
+    @mcp.tool()
+    async def project_update(
+        project_id: Annotated[str, Field(description="Project UUID")],
+        name: Annotated[str | None, Field(description="New name")] = None,
+        description_md: Annotated[str | None, Field(description="New markdown body")] = None,
+        default_view: Annotated[str | None, Field(description="list/board/timeline/calendar")] = None,
+        color: Annotated[str | None, Field(description="Color label")] = None,
+        initiative_id: Annotated[str | None, Field(description="Strategic initiative UUID")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any] | None:
+        """Update project metadata."""
+        state = get_state()
+        principal = await _principal()
+        fields: dict[str, Any] = {}
+        if name is not None:
+            fields["name"] = name
+        if description_md is not None:
+            fields["description_md"] = description_md
+        if default_view is not None:
+            fields["default_view"] = default_view
+        if color is not None:
+            fields["color"] = color
+        if initiative_id is not None:
+            fields["initiative_id"] = initiative_id
+        return await state.facade.project_update(
+            principal, project_id=project_id, fields=fields, agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def project_archive(
+        project_id: Annotated[str, Field(description="Project UUID")],
+        archived: Annotated[bool, Field(description="True to archive, False to restore")] = True,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any] | None:
+        """Archive or restore a project."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.project_archive(
+            principal, project_id=project_id, archived=archived,
+        )
+
+    @mcp.tool()
+    async def project_section_add(
+        project_id: Annotated[str, Field(description="Project UUID")],
+        name: Annotated[str, Field(description="Section name (list group / board column)")],
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Add an ordered section to a project."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.project_section_add(
+            principal, project_id=project_id, name=name,
+        )
+
+    @mcp.tool()
+    async def project_section_list(
+        project_id: Annotated[str, Field(description="Project UUID")],
+    ) -> dict[str, Any]:
+        """List a project's sections in order."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.project_section_list(principal, project_id=project_id)
+
+    @mcp.tool()
+    async def project_status_post(
+        project_id: Annotated[str, Field(description="Project UUID")],
+        state_label: Annotated[
+            str, Field(description="on_track, at_risk, or off_track")
+        ] = "on_track",
+        body_md: Annotated[str | None, Field(description="Status note (markdown ok)")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Post a project status update (on-track / at-risk / off-track banner)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.project_status_post(
+            principal, project_id=project_id, state=state_label, body_md=body_md,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_add_to_project(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+        project_id: Annotated[str, Field(description="Project UUID")],
+        section_id: Annotated[str | None, Field(description="Optional section UUID")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Add a task to a project (tasks can belong to multiple projects)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_add_to_project(
+            principal, work_id=work_id, project_id=project_id, section_id=section_id,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_remove_from_project(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+        project_id: Annotated[str, Field(description="Project UUID")],
+    ) -> dict[str, Any]:
+        """Remove a task from a project."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_remove_from_project(
+            principal, work_id=work_id, project_id=project_id,
+        )
+
+    @mcp.tool()
+    async def work_move(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+        project_id: Annotated[str, Field(description="Project UUID")],
+        section_id: Annotated[str | None, Field(description="Target section UUID")] = None,
+        sort_order: Annotated[float, Field(description="Fractional rank within section")] = 0.0,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any] | None:
+        """Move a task to a section and/or reorder it within a project."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_move(
+            principal, work_id=work_id, project_id=project_id, section_id=section_id,
+            sort_order=sort_order, agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_subtasks_list(
+        work_id: Annotated[str, Field(description="Parent work item UUID")],
+    ) -> dict[str, Any]:
+        """List subtasks of a work item. Create subtasks via work_create with parent_id."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_subtasks_list(principal, work_id=work_id)
+
+    @mcp.tool()
+    async def work_dependency_add(
+        blocker_id: Annotated[str, Field(description="Task that must finish first")],
+        blocked_id: Annotated[str, Field(description="Task that is blocked")],
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Add a dependency: blocker must finish before blocked can proceed."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_dependency_add(
+            principal, blocker_id=blocker_id, blocked_id=blocked_id, agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_dependency_remove(
+        blocker_id: Annotated[str, Field(description="Blocker task UUID")],
+        blocked_id: Annotated[str, Field(description="Blocked task UUID")],
+    ) -> dict[str, Any]:
+        """Remove a task dependency."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_dependency_remove(
+            principal, blocker_id=blocker_id, blocked_id=blocked_id,
+        )
+
+    @mcp.tool()
+    async def work_dependencies_list(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+    ) -> dict[str, Any]:
+        """List what a task is blocked by and what it blocks."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_dependencies_list(principal, work_id=work_id)
+
+    @mcp.tool()
+    async def work_follower_add(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+        follower_agent: Annotated[str | None, Field(description="Agent name to add")] = None,
+        follower_email: Annotated[str | None, Field(description="Member email to add")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Add a follower/collaborator (human or agent) to a task."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_follower_add(
+            principal, work_id=work_id, follower_agent=follower_agent,
+            follower_email=follower_email, agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def work_follower_remove(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+        follower_agent: Annotated[str | None, Field(description="Agent name to remove")] = None,
+        follower_email: Annotated[str | None, Field(description="Member email to remove")] = None,
+    ) -> dict[str, Any]:
+        """Remove a follower from a task."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_follower_remove(
+            principal, work_id=work_id, follower_agent=follower_agent,
+            follower_email=follower_email,
+        )
+
+    @mcp.tool()
+    async def work_followers_list(
+        work_id: Annotated[str, Field(description="Work item UUID")],
+    ) -> dict[str, Any]:
+        """List followers/collaborators on a task."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.work_followers_list(principal, work_id=work_id)
 
     @mcp.tool()
     async def memory_graph_relate(

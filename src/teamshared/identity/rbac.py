@@ -34,6 +34,8 @@ class Permissions:
     ORG_ADMIN = "org:admin"
     WORK_READ = "work:read"
     WORK_WRITE = "work:write"
+    PROJECT_READ = "project:read"
+    PROJECT_WRITE = "project:write"
 
 
 class PermissionDenied(Exception):  # noqa: N818 - idiomatic name; not an *Error
@@ -53,11 +55,17 @@ def implies_permission(granted: frozenset[str], permission: str) -> bool:
         return True
     if Permissions.MEMORY_ADMIN in granted and permission.startswith("memory:"):
         return True
-    if Permissions.ORG_ADMIN in granted and permission.startswith("work:"):
+    if Permissions.ORG_ADMIN in granted and (
+        permission.startswith("work:") or permission.startswith("project:")
+    ):
         return True
     if permission == Permissions.WORK_READ and Permissions.MEMORY_READ in granted:
         return True
-    return permission == Permissions.WORK_WRITE and Permissions.MEMORY_CREATE in granted
+    if permission == Permissions.WORK_WRITE and Permissions.MEMORY_CREATE in granted:
+        return True
+    if permission == Permissions.PROJECT_READ and Permissions.WORK_READ in granted:
+        return True
+    return permission == Permissions.PROJECT_WRITE and Permissions.WORK_WRITE in granted
 
 
 class Authorizer:

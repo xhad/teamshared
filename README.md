@@ -158,6 +158,24 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | `work_close`                | Mark done or cancelled (writes episodic timeline event)        |
 | `work_comment_add`          | Add a progress comment on a task                             |
 | `work_comment_list`         | List comments on a task                                      |
+| `work_add_to_project`       | Add a task to a project (tasks can be in multiple projects)  |
+| `work_remove_from_project`  | Remove a task from a project                                 |
+| `work_move`                 | Move/reorder a task within a project section                 |
+| `work_subtasks_list`        | List subtasks (create via `work_create` with `parent_id`)    |
+| `work_dependency_add`       | Add a blocker → blocked dependency between tasks             |
+| `work_dependency_remove`    | Remove a task dependency                                     |
+| `work_dependencies_list`    | List what a task is blocked by and what it blocks            |
+| `work_follower_add`         | Add a follower/collaborator (human or agent) to a task       |
+| `work_follower_remove`      | Remove a follower from a task                                |
+| `work_followers_list`       | List a task's followers                                      |
+| `project_create`            | Create a project (Asana-style task container)                |
+| `project_list`              | List projects (filter by team/initiative, archived)          |
+| `project_get`               | Fetch a project with sections, latest status, and tasks      |
+| `project_update`            | Update project metadata                                      |
+| `project_archive`           | Archive or restore a project                                 |
+| `project_section_add`       | Add an ordered section (list group / board column)           |
+| `project_section_list`      | List a project's sections                                    |
+| `project_status_post`       | Post an on-track / at-risk / off-track status update         |
 | `memory_graph_relate`       | Add an explicit (subject)-[predicate]->(object) edge (Neo4j) |
 | `memory_graph_related`      | Walk the graph from an entity, up to N hops (Neo4j)          |
 | `memory_state_get`          | Read token+repo scoped JSON state (client bookkeeping)         |
