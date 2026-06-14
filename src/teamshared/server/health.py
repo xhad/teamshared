@@ -94,7 +94,9 @@ async def check_components(state: ServerState) -> dict[str, Any]:
         except Exception as exc:
             components["graph"] = f"error: {exc}"
     else:
-        components["graph"] = "down"
+        # Neo4j is an optional dependency; not configuring it is intentional and
+        # must not degrade overall status.
+        components["graph"] = "disabled"
 
     # Active LLM/embedding backend, reported under a single generic "provider"
     # key (OpenRouter, Ollama, OpenAI, ...) so the health surface never assumes

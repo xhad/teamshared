@@ -105,12 +105,12 @@ async def test_postgres_error_degrades_with_detail() -> None:
     assert body["status"] == "degraded"
 
 
-async def test_graph_none_reports_down_and_degrades() -> None:
+async def test_graph_none_reports_disabled_and_does_not_degrade() -> None:
     state = _make_state(graph=None)
-    await _beat(state.working, "distiller", "curator")
+    await _beat(state.working, "distiller", "curator", "agent-worker")
     body = await check_components(state)
-    assert body["components"]["graph"] == "down"
-    assert body["status"] == "degraded"
+    assert body["components"]["graph"] == "disabled"
+    assert body["status"] == "ok"
 
 
 async def test_graph_verify_failure_reports_error() -> None:
