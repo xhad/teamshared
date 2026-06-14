@@ -12,7 +12,7 @@ stores.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from teamshared.identity.legacy_bridge import PrincipalResolver
@@ -921,6 +921,62 @@ class MemoryFacade:
             "comments": [_serialize_work(r) for r in rows],
         }
 
+    # -- agent runs -------------------------------------------------------
+
+    async def agent_run_create(
+        self,
+        principal: Principal,
+        *,
+        work_id: str,
+        agent: str,
+        playbook_name: str | None = None,
+        playbook_version: int | None = None,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        agent_id = await self.services.work.resolve_agent_id(principal.org_id, agent)
+        if agent_id is None:
+            raise ValueError(f"No active agent named {agent!r} in this org.")
+        run = await self.services.agent_run_service().assign_and_run(
+            ctx,
+            work_id=UUID(work_id),
+            agent_id=agent_id,
+            playbook_name=playbook_name,
+            playbook_version=playbook_version,
+            model=model,
+        )
+        return cast("dict[str, Any]", _serialize_deep(run))
+
+    async def agent_run_list(
+        self, principal: Principal, *, status: str | None = None, limit: int = 50
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        rows = await self.services.agent_run_service().list_runs(
+            ctx, status=status, limit=limit,  # type: ignore[arg-type]
+        )
+        return {"count": len(rows), "runs": [_serialize_deep(r) for r in rows]}
+
+    async def agent_run_get(
+        self, principal: Principal, *, run_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        run = await self.services.agent_run_service().get_run(ctx, UUID(run_id))
+        return cast("dict[str, Any]", _serialize_deep(run))
+
+    async def agent_run_cancel(
+        self, principal: Principal, *, run_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        run = await self.services.agent_run_service().cancel(ctx, UUID(run_id))
+        return cast("dict[str, Any]", _serialize_deep(run))
+
+    async def agent_run_retry(
+        self, principal: Principal, *, run_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        run = await self.services.agent_run_service().retry(ctx, UUID(run_id))
+        return cast("dict[str, Any]", _serialize_deep(run))
+
     # -- projects ---------------------------------------------------------
 
     async def project_create(
@@ -1329,6 +1385,15 @@ def _serialize_value(val: Any) -> Any:
     if isinstance(val, (datetime, date)):
         return val.isoformat()
     return val
+
+
+def _serialize_deep(val: Any) -> Any:
+    """Recursively JSON-normalize dicts/lists (UUIDs, datetimes -> strings)."""
+    if isinstance(val, dict):
+        return {k: _serialize_deep(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_serialize_deep(v) for v in val]
+    return _serialize_value(val)
 
 
 def _with_scope_tags(

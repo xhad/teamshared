@@ -128,6 +128,36 @@ class StreamQueue:
         await self.client.xdel(stream, job.id)
         return outcome
 
+    async def claim_stale(
+        self,
+        stream: str,
+        group: str,
+        consumer: str,
+        *,
+        min_idle_ms: int = 60_000,
+        count: int = 10,
+    ) -> list[Job]:
+        """Reclaim messages pending (delivered but unacked) longer than
+        ``min_idle_ms`` -- e.g. a worker that crashed mid-job. Idempotent
+        reprocessing is safe because the authoritative DB lease guards execution.
+        """
+        try:
+            resp = await self.client.xautoclaim(
+                stream, group, consumer, min_idle_ms, start_id="0-0", count=count
+            )
+        except redis.ResponseError as exc:
+            if "NOGROUP" in str(exc):
+                return []
+            raise
+        # redis-py returns (next_cursor, claimed, deleted) on newer servers and
+        # (next_cursor, claimed) on older ones.
+        claimed = resp[1] if len(resp) > 1 else []
+        jobs: list[Job] = []
+        for msg_id, raw in claimed or []:
+            if raw:
+                jobs.append(_to_job(stream, msg_id, raw))
+        return jobs
+
     async def depth(self, stream: str) -> int:
         return int(await self.client.xlen(stream))
 

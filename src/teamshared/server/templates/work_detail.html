@@ -9,6 +9,7 @@
     {% if flash == 'saved' %}<div class="flash-ok">Task updated.</div>{% endif %}
     {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
     {% if flash == 'commented' %}<div class="flash-ok">Comment added.</div>{% endif %}
+    {% if flash == 'run_queued' %}<div class="flash-ok">Background agent run queued.</div>{% endif %}
     {% if flash == 'invalid' %}<div class="unavailable">Comment body is required.</div>{% endif %}
     {% if flash == 'error' %}<div class="unavailable">Could not save. Please try again.</div>{% endif %}
     {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
@@ -119,9 +120,63 @@
           <div class="work-prop-value work-cell-muted">{{ (item.updated_at or '')[:16] | replace('T', ' ') }}</div>
         </div>
 
+        {% if runs %}
+        <div class="work-prop-row">
+          <div class="work-prop-label">Latest run</div>
+          <div class="work-prop-value">
+            <a href="/app/agents/runs/{{ runs[0].id }}">
+              <span class="status-pill {{ runs[0].status }}">{{ runs[0].status }}</span>
+            </a>
+            {% if runs[0].agent_name %}<span class="muted">by {{ runs[0].agent_name }}</span>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+
         <div class="work-detail-actions">
           <a href="/app/work/{{ item.id }}/edit"><button type="button">Edit task</button></a>
         </div>
+
+        <h3 style="margin-top:1rem">Run an agent</h3>
+        <form method="post" action="/app/work/{{ item.id }}/assign-agent" class="stack-form">
+          {{ cm.csrf_field() }}
+          <div class="field">
+            <label for="assign-agent">Agent</label>
+            <select id="assign-agent" name="agent_id" required>
+              <option value="">Select an agent…</option>
+              {% for a in agents %}
+              <option value="{{ a.id }}">{{ a.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="assign-playbook">Playbook (optional)</label>
+            <select id="assign-playbook" name="playbook">
+              <option value="">None</option>
+              {% for p in playbooks %}
+              <option value="{{ p.name }}@{{ p.version }}">{{ p.name }} v{{ p.version }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="assign-model">Model override (optional)</label>
+            <input id="assign-model" name="model" placeholder="e.g. openai/gpt-4o-mini" />
+          </div>
+          <button type="submit">Queue background run</button>
+        </form>
+
+        {% if runs %}
+        <h3 style="margin-top:1rem">Run history</h3>
+        <ul class="work-runs">
+          {% for r in runs %}
+          <li>
+            <a href="/app/agents/runs/{{ r.id }}">
+              <span class="status-pill {{ r.status }}">{{ r.status }}</span>
+            </a>
+            <span class="muted">{{ r.created }}{% if r.agent_name %} &middot; {{ r.agent_name }}{% endif %}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
       </aside>
     </div>
     {% endif %}

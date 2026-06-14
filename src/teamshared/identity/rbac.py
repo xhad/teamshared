@@ -36,6 +36,8 @@ class Permissions:
     WORK_WRITE = "work:write"
     PROJECT_READ = "project:read"
     PROJECT_WRITE = "project:write"
+    AGENTRUN_READ = "agentrun:read"
+    AGENTRUN_WRITE = "agentrun:write"
 
 
 class PermissionDenied(Exception):  # noqa: N818 - idiomatic name; not an *Error
@@ -56,7 +58,9 @@ def implies_permission(granted: frozenset[str], permission: str) -> bool:
     if Permissions.MEMORY_ADMIN in granted and permission.startswith("memory:"):
         return True
     if Permissions.ORG_ADMIN in granted and (
-        permission.startswith("work:") or permission.startswith("project:")
+        permission.startswith("work:")
+        or permission.startswith("project:")
+        or permission.startswith("agentrun:")
     ):
         return True
     if permission == Permissions.WORK_READ and Permissions.MEMORY_READ in granted:
@@ -65,7 +69,15 @@ def implies_permission(granted: frozenset[str], permission: str) -> bool:
         return True
     if permission == Permissions.PROJECT_READ and Permissions.WORK_READ in granted:
         return True
-    return permission == Permissions.PROJECT_WRITE and Permissions.WORK_WRITE in granted
+    if permission == Permissions.PROJECT_WRITE and Permissions.WORK_WRITE in granted:
+        return True
+    # Agent-run control is gated alongside work access (runs are work-scoped), so
+    # anyone who can read/write work can read/control its agent runs.
+    if permission == Permissions.AGENTRUN_READ and Permissions.WORK_READ in granted:
+        return True
+    return (
+        permission == Permissions.AGENTRUN_WRITE and Permissions.WORK_WRITE in granted
+    )
 
 
 class Authorizer:

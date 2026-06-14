@@ -14,7 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_ORG_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 EmbedProvider = Literal["openai", "ollama", "local"]
-LLMProvider = Literal["openai", "ollama"]
+LLMProvider = Literal["openai", "ollama", "openrouter"]
 DeploymentEnv = Literal["development", "production"]
 
 
@@ -271,11 +271,36 @@ class Settings(BaseSettings):
 
     ollama_base_url: str = "http://localhost:11434"
 
+    openrouter_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("TEAMSHARED_OPENROUTER_API_KEY", "OPENROUTER_API_KEY"),
+        description=(
+            "API key for OpenRouter (https://openrouter.ai). Required when "
+            "llm_provider='openrouter'. Reads OPENROUTER_API_KEY as a fallback."
+        ),
+    )
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        description=(
+            "OpenAI-compatible base URL for OpenRouter chat completions. "
+            "OpenRouter offers no embeddings endpoint, so embed_provider must "
+            "stay 'openai' or 'local' when using OpenRouter for the LLM role."
+        ),
+    )
+
     neo4j_url: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "neo4j"
 
     distill_interval_seconds: int = 30
+
+    agent_run_timeout_seconds: int = Field(
+        default=300,
+        description=(
+            "Hard wall-clock budget for one background agent run before the "
+            "worker marks it failed. The DB lease TTL is this plus a buffer."
+        ),
+    )
 
     capture_enabled: bool = Field(
         default=True,

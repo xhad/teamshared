@@ -809,6 +809,83 @@ def register_tools(mcp: Any) -> None:
         )
 
     @mcp.tool()
+    async def agent_run_create(
+        work_id: Annotated[str, Field(description="Work item UUID to run on")],
+        agent: Annotated[
+            str, Field(description="Name of the worker agent to assign (e.g. cursor)")
+        ],
+        playbook_name: Annotated[
+            str | None,
+            Field(description="Procedure/playbook name to execute (latest version unless pinned)"),
+        ] = None,
+        playbook_version: Annotated[
+            int | None, Field(description="Pin a specific playbook version")
+        ] = None,
+        model: Annotated[
+            str | None,
+            Field(description="Override model for this run (defaults to server LLM model)"),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Assign an agent to a work item and queue an async background run.
+
+        Creates an ``agent_runs`` row (status ``queued``), reflects the agent as
+        the work item's assignee, and enqueues the run for the background worker.
+        The worker assembles context (task + playbook + teamshared.mdc + recalled
+        memory), calls the configured model, and writes the result + a trace back
+        to the task. Requires ``agentrun:write``.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.agent_run_create(
+            principal,
+            work_id=work_id,
+            agent=agent,
+            playbook_name=playbook_name,
+            playbook_version=playbook_version,
+            model=model,
+        )
+
+    @mcp.tool()
+    async def agent_run_list(
+        status: Annotated[
+            str | None,
+            Field(description="Filter: queued, running, completed, failed, paused, cancelled"),
+        ] = None,
+        limit: Annotated[int, Field(ge=1, le=200)] = 50,
+    ) -> dict[str, Any]:
+        """List background agent runs in the caller's org (newest first)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.agent_run_list(principal, status=status, limit=limit)
+
+    @mcp.tool()
+    async def agent_run_get(
+        run_id: Annotated[str, Field(description="Agent run UUID")],
+    ) -> dict[str, Any]:
+        """Fetch one agent run with its trace timeline and model-call metadata."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.agent_run_get(principal, run_id=run_id)
+
+    @mcp.tool()
+    async def agent_run_cancel(
+        run_id: Annotated[str, Field(description="Agent run UUID")],
+    ) -> dict[str, Any]:
+        """Request cancellation of a queued or running agent run."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.agent_run_cancel(principal, run_id=run_id)
+
+    @mcp.tool()
+    async def agent_run_retry(
+        run_id: Annotated[str, Field(description="Agent run UUID to retry")],
+    ) -> dict[str, Any]:
+        """Queue a fresh run cloning a previous run's work, agent, and playbook."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.agent_run_retry(principal, run_id=run_id)
+
+    @mcp.tool()
     async def project_create(
         name: Annotated[str, Field(description="Project name")],
         description_md: Annotated[str | None, Field(description="Optional markdown body")] = None,

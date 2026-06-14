@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from teamshared.admin.service import AdminService
+from teamshared.agents.runs import AgentRunStore
+from teamshared.agents.service import AgentRunService
 from teamshared.config import Settings
 from teamshared.connectors.service import ConnectorService
 from teamshared.connectors.vault import TokenVault
@@ -33,6 +35,7 @@ from teamshared.memory.vectorstore import VectorStore
 from teamshared.memory.wiki import WikiStore
 from teamshared.memory.work import WorkStore
 from teamshared.memory.working import WorkingMemory
+from teamshared.queue.streams import StreamQueue
 from teamshared.tenancy.context import TenantDb
 from teamshared.tenancy.repository import TenancyRepository
 
@@ -49,6 +52,7 @@ class ProductionServices:
     procedural: OrgProceduralStore
     strategic: OrgStrategicStore
     work: WorkStore
+    agent_runs: AgentRunStore
     projects: ProjectStore
     wiki: WikiStore
     audit: AuditLog
@@ -77,6 +81,12 @@ class ProductionServices:
             self.procedural,
             self.strategic,
             self.work,
+        )
+
+    def agent_run_service(self) -> AgentRunService:
+        """Lifecycle facade for agent runs (enqueue needs a live Redis client)."""
+        return AgentRunService(
+            self.agent_runs, self.work, StreamQueue(self.working.client)
         )
 
 
@@ -108,6 +118,7 @@ def make_services(settings: Settings) -> ProductionServices:
         procedural=OrgProceduralStore(tenant_db),
         strategic=OrgStrategicStore(tenant_db),
         work=WorkStore(tenant_db),
+        agent_runs=AgentRunStore(tenant_db),
         projects=ProjectStore(tenant_db),
         wiki=WikiStore(tenant_db),
         audit=audit,

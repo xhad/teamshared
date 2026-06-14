@@ -73,7 +73,7 @@ def test_is_healthy_rules() -> None:
 
 async def test_all_components_ok() -> None:
     state = _make_state(graph=SimpleNamespace(verify=AsyncMock()))
-    await _beat(state.working, "distiller", "curator")
+    await _beat(state.working, "distiller", "curator", "agent-worker")
     body = await check_components(state)
     assert body["status"] == "ok"
     components = body["components"]
@@ -83,6 +83,7 @@ async def test_all_components_ok() -> None:
     assert components["semantic"] == "ok (hash-embedder)"
     assert components["distiller"] == "ok"
     assert components["curator"] == "ok"
+    assert components["agent-worker"] == "ok"
     assert components["graph"] == "ok"
     assert components["ollama"] == "disabled"  # openai providers by default
     assert components["queues"] == "ok"
@@ -128,7 +129,7 @@ async def test_queue_warning_does_not_degrade() -> None:
         queue_depth_critical_threshold=100,
     )
     state = _make_state(settings=settings, graph=SimpleNamespace(verify=AsyncMock()))
-    await _beat(state.working, "distiller", "curator")
+    await _beat(state.working, "distiller", "curator", "agent-worker")
     await state.working.client.rpush(DISTILL_QUEUE_KEY, "j1", "j2", "j3")
     body = await check_components(state)
     assert body["components"]["queues"] == "warning"

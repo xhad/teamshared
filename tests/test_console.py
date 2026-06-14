@@ -452,6 +452,68 @@ def test_agents_page_lists_agents() -> None:
     assert "cursor" in resp.text
 
 
+def test_agents_page_lists_background_runs() -> None:
+    client, services = _build()
+    services.admin.list_agents = AsyncMock(return_value=[])
+    run_svc = SimpleNamespace(
+        list_runs=AsyncMock(
+            return_value=[
+                {
+                    "id": "r1", "status": "completed", "agent_name": "cursor",
+                    "work_title": "Ship it", "work_item_id": "w1",
+                    "playbook_name": "ship-pr", "playbook_version": 2,
+                    "model": "gpt-4o-mini", "provider": "openrouter", "error": None,
+                    "created_at": "2026-05-28T10:00:00",
+                    "started_at": "2026-05-28T10:00:01",
+                    "completed_at": "2026-05-28T10:00:05",
+                }
+            ]
+        ),
+    )
+    services.agent_run_service = MagicMock(return_value=run_svc)
+    _login(client)
+    resp = client.get("/app/agents")
+    assert resp.status_code == 200
+    assert "Background runs" in resp.text
+    assert "ship-pr" in resp.text
+    assert "/app/agents/runs/r1" in resp.text
+
+
+def test_agent_run_detail_shows_trace_and_model_calls() -> None:
+    client, services = _build()
+    run_svc = SimpleNamespace(
+        get_run=AsyncMock(
+            return_value={
+                "id": "r1", "status": "completed", "agent_name": "cursor",
+                "work_title": "Ship it", "work_item_id": "w1",
+                "playbook_name": "ship-pr", "playbook_version": 2,
+                "model": "gpt-4o-mini", "provider": "openrouter", "error": None,
+                "created_at": "2026-05-28T10:00:00",
+                "started_at": "2026-05-28T10:00:01",
+                "completed_at": "2026-05-28T10:00:05",
+                "trace": [
+                    {"event_type": "started", "summary": "began work",
+                     "sequence": 0, "payload_json": {}, "created_at": "2026-05-28T10:00:01"}
+                ],
+                "model_calls": [
+                    {"model": "gpt-4o-mini", "provider": "openrouter",
+                     "request_id": "req-xyz", "prompt_tokens": 100,
+                     "completion_tokens": 20, "latency_ms": 42, "error": None,
+                     "created_at": "2026-05-28T10:00:03"}
+                ],
+            }
+        ),
+    )
+    services.agent_run_service = MagicMock(return_value=run_svc)
+    _login(client)
+    resp = client.get(f"/app/agents/runs/{uuid.uuid4()}")
+    assert resp.status_code == 200
+    assert "Trace timeline" in resp.text
+    assert "began work" in resp.text
+    assert "Model calls" in resp.text
+    assert "42" in resp.text  # latency_ms rendered in the model-calls table
+
+
 def test_people_page_lists_members() -> None:
     client, services = _build()
     services.admin.list_members = AsyncMock(

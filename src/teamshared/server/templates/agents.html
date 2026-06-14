@@ -43,4 +43,35 @@
     </table>
     {% else %}<p class="muted">No agents yet.</p>{% endif %}
   </div>
+
+  <h2 style="margin-top:1.5rem">Background runs</h2>
+  <p class="sub">Async worker runs assigned to Work Board tasks.</p>
+  <div class="panel" style="margin-top:.5rem">
+    {% if runs %}
+    <table>
+      <thead><tr>
+        <th>Status</th><th>Agent</th><th>Task</th><th>Playbook</th>
+        <th>Model</th><th>Started</th><th>Finished</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for r in runs %}
+        <tr>
+          <td><span class="status-pill {{ r.status }}">{{ r.status }}</span></td>
+          <td>{{ r.agent_name or '—' }}</td>
+          <td>
+            {% if r.work_item_id %}
+            <a href="/app/work/{{ r.work_item_id }}">{{ r.work_title or r.work_item_id }}</a>
+            {% else %}{{ r.work_title or '—' }}{% endif %}
+          </td>
+          <td>{% if r.playbook_name %}{{ r.playbook_name }}{% if r.playbook_version %} v{{ r.playbook_version }}{% endif %}{% else %}—{% endif %}</td>
+          <td>{{ r.model or '—' }}</td>
+          <td>{{ r.started }}</td>
+          <td>{{ r.completed }}</td>
+          <td class="actions"><a href="/app/agents/runs/{{ r.id }}">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No agent runs yet. Assign an agent from a Work Board task.</p>{% endif %}
+  </div>
 {% endblock %}

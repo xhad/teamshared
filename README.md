@@ -73,6 +73,14 @@ make build         # TEAMSHARED_OLLAMA_BASE_URL=http://host.docker.internal:1143
 **Bundled Ollama (optional, CPU-only on macOS):** `make build-bundled-ollama` and
 `TEAMSHARED_OLLAMA_BASE_URL=http://ollama:11434`.
 
+**OpenRouter for the LLM role (hosted, OpenAI-compatible):** set
+`TEAMSHARED_LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY=sk-or-...`, and an
+`TEAMSHARED_LLM_MODEL` slug (e.g. `openai/gpt-4o-mini`). The distiller and
+curator then call OpenRouter through the OpenAI SDK
+(`TEAMSHARED_OPENROUTER_BASE_URL` defaults to `https://openrouter.ai/api/v1`).
+OpenRouter has no embeddings endpoint, so keep `TEAMSHARED_EMBED_PROVIDER` on
+`openai` or `local`.
+
 **In-process embeddings (lowest recall latency):** set
 `TEAMSHARED_EMBED_PROVIDER=local` (requires `pip install 'teamshared[local-embed]'`)
 to embed with a fastembed/ONNX model (default `BAAI/bge-small-en-v1.5`,
@@ -168,6 +176,11 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | `work_follower_add`         | Add a follower/collaborator (human or agent) to a task       |
 | `work_follower_remove`      | Remove a follower from a task                                |
 | `work_followers_list`       | List a task's followers                                      |
+| `agent_run_create`          | Assign an agent to a task and queue an async background run  |
+| `agent_run_list`            | List background agent runs (filter by status)               |
+| `agent_run_get`             | Fetch one run with its trace timeline + model-call metadata |
+| `agent_run_cancel`          | Request cancellation of a queued/running run                |
+| `agent_run_retry`           | Queue a fresh run cloning a previous run                    |
 | `project_create`            | Create a project (Asana-style task container)                |
 | `project_list`              | List projects (filter by team/initiative, archived)          |
 | `project_get`               | Fetch a project with sections, latest status, and tasks      |

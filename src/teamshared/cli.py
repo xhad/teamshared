@@ -5,6 +5,7 @@ Subcommands:
 - ``teamshared serve [--transport http|stdio]`` -- run the MCP server.
 - ``teamshared worker`` -- run the distillation worker.
 - ``teamshared curator`` -- run the wiki curation worker.
+- ``teamshared agent-worker`` -- run the background agent-run worker.
 - ``teamshared migrate`` -- apply SQL migrations against the configured Postgres.
 - ``teamshared token mint <agent>`` -- issue a bearer token for an agent.
 - ``teamshared token invite-create [--agent] [--uses]`` -- create a one-time invite code.
@@ -161,6 +162,14 @@ def curator() -> None:
     from teamshared.distill.curator_worker import main as curator_main
 
     curator_main()
+
+
+@app.command(name="agent-worker")
+def agent_worker() -> None:
+    """Run the background agent-run worker (long-running)."""
+    from teamshared.agents.worker import main as agent_worker_main
+
+    agent_worker_main()
 
 
 @app.command(name="worker-health")

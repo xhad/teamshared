@@ -170,6 +170,22 @@ class Metrics:
             "Estimated tokens used per assembled context pack",
             buckets=(50, 100, 250, 500, 1000, 2000, 4000, 8000),
         )
+        self.agent_runs_started = _Counter(
+            "teamshared_agent_runs_started_total", "Background agent runs started"
+        )
+        self.agent_runs_completed = _Counter(
+            "teamshared_agent_runs_completed_total", "Background agent runs completed"
+        )
+        self.agent_runs_failed = _Counter(
+            "teamshared_agent_runs_failed_total", "Background agent runs failed"
+        )
+        self.agent_runs_cancelled = _Counter(
+            "teamshared_agent_runs_cancelled_total", "Background agent runs cancelled"
+        )
+        self.agent_run_latency = _Histogram(
+            "teamshared_agent_run_model_latency_seconds",
+            "Background agent run model-call latency",
+        )
 
     def render(self) -> str:
         with self._lock:
@@ -183,6 +199,9 @@ class Metrics:
                 self.rate_limited, self.job_signature_invalid,
                 self.admin_export_total, self.admin_purge_total,
                 self.context_pack_built, self.context_pack_tokens,
+                self.agent_runs_started, self.agent_runs_completed,
+                self.agent_runs_failed, self.agent_runs_cancelled,
+                self.agent_run_latency,
             ):
                 lines.extend(metric.render())
             return "\n".join(lines) + "\n"

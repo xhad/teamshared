@@ -79,6 +79,13 @@ async def check_components(state: ServerState) -> dict[str, Any]:
     except Exception as exc:
         components["curator"] = f"error: {exc}"
 
+    # Background agent-run worker; same short-TTL heartbeat contract.
+    try:
+        beat = await state.working.last_heartbeat("agent-worker")
+        components["agent-worker"] = "ok" if beat else "down"
+    except Exception as exc:
+        components["agent-worker"] = f"error: {exc}"
+
     if state.graph is not None:
         try:
             await state.graph.verify()
@@ -92,6 +99,9 @@ async def check_components(state: ServerState) -> dict[str, Any]:
         components["ollama"] = await _probe_ollama(settings)
     else:
         components["ollama"] = "disabled"
+
+    if settings.llm_provider == "openrouter":
+        components["openrouter"] = await _probe_openrouter(settings)
 
     queues: dict[str, Any] = {}
     try:
@@ -145,3 +155,19 @@ async def _probe_ollama(settings: Any) -> str:
     if settings.embed_provider == "ollama":
         roles.append(f"embed={settings.embed_model}")
     return f"ok ({', '.join(roles)})" if roles else "ok"
+
+
+async def _probe_openrouter(settings: Any) -> str:
+    """Confirm OpenRouter is reachable and report the model teamshared runs on it."""
+    base_url = settings.openrouter_base_url.rstrip("/")
+    headers: dict[str, str] = {}
+    if settings.openrouter_api_key:
+        headers["Authorization"] = f"Bearer {settings.openrouter_api_key}"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{base_url}/models", headers=headers)
+            resp.raise_for_status()
+    except Exception as exc:
+        detail = str(exc) or type(exc).__name__
+        return f"error: {detail} (GET {base_url}/models)"
+    return f"ok (llm={settings.llm_model})"
