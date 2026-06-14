@@ -43,3 +43,16 @@ async def test_curate_uses_ollama_when_configured(monkeypatch: pytest.MonkeyPatc
     out = await curate(settings, subject="x", facts=[], episodes=[])  # type: ignore[arg-type]
     assert out["body_md"] == "b"
     call.assert_awaited_once()
+
+
+async def test_curate_uses_openai_path_for_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OpenRouter is OpenAI-compatible, so it goes through ``_call_openai``."""
+    openai_call = AsyncMock(return_value='{"title": "T", "body_md": "b"}')
+    ollama_call = AsyncMock()
+    monkeypatch.setattr(curator_mod, "_call_openai", openai_call)
+    monkeypatch.setattr(curator_mod, "_call_ollama", ollama_call)
+    settings = SimpleNamespace(llm_provider="openrouter", llm_model="openai/gpt-4o-mini")
+    out = await curate(settings, subject="x", facts=[], episodes=[])  # type: ignore[arg-type]
+    assert out["body_md"] == "b"
+    openai_call.assert_awaited_once()
+    ollama_call.assert_not_awaited()

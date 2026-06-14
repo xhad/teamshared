@@ -1,7 +1,9 @@
 """LLM call that turns a transcript into structured durable memories.
 
-Supports OpenAI and Ollama backends. The output is parsed as strict JSON; on
-parse error we log + skip rather than poisoning the memory store with garbage.
+Supports OpenAI, OpenRouter, and Ollama backends. OpenRouter speaks the OpenAI
+Chat Completions API, so it shares the OpenAI code path via a custom base URL +
+key. The output is parsed as strict JSON; on parse error we log + skip rather
+than poisoning the memory store with garbage.
 """
 
 from __future__ import annotations
@@ -23,6 +25,21 @@ class SummarizerError(RuntimeError):
     """Raised when the LLM returned a response we couldn't parse."""
 
 
+def build_chat_client(settings: Settings) -> AsyncOpenAI:
+    """Build an OpenAI-compatible chat client for the configured provider.
+
+    OpenRouter implements the OpenAI Chat Completions API, so it reuses the
+    same SDK with a custom base URL and key. Plain ``openai`` relies on the SDK
+    defaults (``OPENAI_API_KEY`` from the environment).
+    """
+    if settings.llm_provider == "openrouter":
+        return AsyncOpenAI(
+            base_url=settings.openrouter_base_url,
+            api_key=settings.openrouter_api_key,
+        )
+    return AsyncOpenAI()
+
+
 async def summarize(
     settings: Settings,
     *,
@@ -32,15 +49,15 @@ async def summarize(
 ) -> dict[str, Any]:
     """Call the configured LLM and return the parsed distillation payload."""
     user_msg = build_user_message(agent, topic, transcript)
-    if settings.llm_provider == "openai":
-        raw = await _call_openai(settings, user_msg)
-    else:
+    if settings.llm_provider == "ollama":
         raw = await _call_ollama(settings, user_msg)
+    else:
+        raw = await _call_openai(settings, user_msg)
     return _parse_json(raw)
 
 
 async def _call_openai(settings: Settings, user_msg: str) -> str:
-    client = AsyncOpenAI()
+    client = build_chat_client(settings)
     resp = await client.chat.completions.create(
         model=settings.llm_model,
         messages=[

@@ -53,12 +53,7 @@ def _build_mem0_config(settings: Settings) -> dict[str, Any]:
             },
         }
 
-    if settings.llm_provider == "openai":
-        llm = {
-            "provider": "openai",
-            "config": {"model": settings.llm_model, "temperature": 0.1},
-        }
-    else:
+    if settings.llm_provider == "ollama":
         llm = {
             "provider": "ollama",
             "config": {
@@ -66,6 +61,23 @@ def _build_mem0_config(settings: Settings) -> dict[str, Any]:
                 "ollama_base_url": settings.ollama_base_url,
                 "temperature": 0.1,
             },
+        }
+    elif settings.llm_provider == "openrouter":
+        # OpenRouter is OpenAI-compatible; Mem0's openai provider accepts a
+        # custom base URL + key.
+        llm = {
+            "provider": "openai",
+            "config": {
+                "model": settings.llm_model,
+                "temperature": 0.1,
+                "openai_base_url": settings.openrouter_base_url,
+                "api_key": settings.openrouter_api_key,
+            },
+        }
+    else:
+        llm = {
+            "provider": "openai",
+            "config": {"model": settings.llm_model, "temperature": 0.1},
         }
 
     return {

@@ -33,6 +33,45 @@ def test_validate_production_requires_secrets() -> None:
     assert "DASHBOARD_PUBLIC_CONTENT" in msg
 
 
+def test_validate_production_requires_openrouter_key() -> None:
+    s = Settings(
+        _env_file=None,
+        deployment_env="production",
+        auth_disabled=False,
+        session_secret="test-session-secret",
+        job_signing_secret="test-job-signing-secret",
+        pg_app_user="teamshared_app",
+        pg_app_password="secret",
+        mint_secret="mint-secret",
+        connector_encryption_key="a" * 64,
+        self_service_tokens=True,
+        dashboard_public_content=False,
+        llm_provider="openrouter",
+    )
+    with pytest.raises(ConfigValidationError) as exc:
+        validate_settings(s)
+    assert "OPENROUTER_API_KEY" in str(exc.value)
+
+
+def test_validate_production_passes_with_openrouter_key() -> None:
+    s = Settings(
+        _env_file=None,
+        deployment_env="production",
+        auth_disabled=False,
+        session_secret="test-session-secret",
+        job_signing_secret="test-job-signing-secret",
+        pg_app_user="teamshared_app",
+        pg_app_password="secret",
+        mint_secret="mint-secret",
+        connector_encryption_key="a" * 64,
+        self_service_tokens=True,
+        dashboard_public_content=False,
+        llm_provider="openrouter",
+        openrouter_api_key="sk-or-test",
+    )
+    validate_settings(s)
+
+
 def test_validate_production_passes_minimal_safe_config() -> None:
     s = Settings(
         _env_file=None,

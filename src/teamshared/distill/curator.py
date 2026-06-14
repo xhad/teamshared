@@ -1,8 +1,9 @@
 """LLM call that synthesizes one subject's memory into a canonical wiki article.
 
-Mirrors :mod:`teamshared.distill.summarizer`: same OpenAI/Ollama backends, strict
-JSON output parsed into ``{"title", "body_md"}``. On parse failure we raise so
-the worker can requeue rather than writing garbage into the wiki.
+Mirrors :mod:`teamshared.distill.summarizer`: same OpenAI/OpenRouter/Ollama
+backends, strict JSON output parsed into ``{"title", "body_md"}``. On parse
+failure we raise so the worker can requeue rather than writing garbage into the
+wiki.
 """
 
 from __future__ import annotations
@@ -11,11 +12,10 @@ import json
 from typing import Any
 
 import httpx
-from openai import AsyncOpenAI
 
 from teamshared.config import Settings
 from teamshared.distill.prompts import CURATOR_SYSTEM, build_curator_message
-from teamshared.distill.summarizer import SummarizerError
+from teamshared.distill.summarizer import SummarizerError, build_chat_client
 from teamshared.logging import get_logger
 
 log = get_logger(__name__)
@@ -30,15 +30,15 @@ async def curate(
 ) -> dict[str, Any]:
     """Call the configured LLM and return the parsed ``{title, body_md}`` page."""
     user_msg = build_curator_message(subject, facts, episodes)
-    if settings.llm_provider == "openai":
-        raw = await _call_openai(settings, user_msg)
-    else:
+    if settings.llm_provider == "ollama":
         raw = await _call_ollama(settings, user_msg)
+    else:
+        raw = await _call_openai(settings, user_msg)
     return _parse_json(raw)
 
 
 async def _call_openai(settings: Settings, user_msg: str) -> str:
-    client = AsyncOpenAI()
+    client = build_chat_client(settings)
     resp = await client.chat.completions.create(
         model=settings.llm_model,
         messages=[

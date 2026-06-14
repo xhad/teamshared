@@ -57,6 +57,12 @@ def validate_settings(settings: Settings) -> None:
             "(connector OAuth tokens must not use the dev-derived key)"
         )
 
+    if settings.llm_provider == "openrouter" and not settings.openrouter_api_key:
+        errors.append(
+            "OPENROUTER_API_KEY (or TEAMSHARED_OPENROUTER_API_KEY) is required "
+            "when TEAMSHARED_LLM_PROVIDER=openrouter"
+        )
+
     if settings.dashboard_public_content:
         errors.append(
             "TEAMSHARED_DASHBOARD_PUBLIC_CONTENT must be false in production "
