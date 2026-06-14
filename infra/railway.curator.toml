@@ -1,0 +1,20 @@
+# Railway service config for the teamshared wiki curation worker.
+#
+# Apply by setting "Custom config file path" to /infra/railway.curator.toml
+# in the Railway service Settings → Source panel. See infra/railway.example.md
+# for the full deploy walkthrough.
+#
+# Like the distiller, this service has no public domain, no port, and no
+# HTTP healthcheck — it consumes the debounced curate queue from Redis and
+# (re)synthesizes wiki_pages articles via the LLM.
+
+"$schema" = "https://railway.com/railway.schema.json"
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "infra/Dockerfile"
+
+[deploy]
+startCommand = "teamshared curator"
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 10
