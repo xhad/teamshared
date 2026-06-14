@@ -6,6 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex" />
   {% if csrf_token %}<meta name="csrf-token" content="{{ csrf_token }}" />{% endif %}
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>{% block title %}Console{% endblock %} &middot; TeamShared</title>
   <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
   <style>
@@ -36,8 +40,8 @@
     aside .brand .ver { font-size: .62rem; font-weight: 600; color: var(--faint);
       letter-spacing: .02em; align-self: center; margin-left: -.2rem; }
     aside .brand a.ver:hover { color: var(--indigo-bright); }
-    .brand-mark { width: 1.05rem; height: 1.05rem; border-radius: 6px; flex: none;
-      background: linear-gradient(135deg, var(--indigo-bright), var(--indigo)); box-shadow: 0 0 18px rgba(99,102,241,.6); }
+    .brand-mark { width: 1.4rem; height: 1.4rem; border-radius: 6px; flex: none;
+      background: url("/assets/logo.png") center/contain no-repeat; }
     aside nav { display: flex; flex-direction: column; gap: .15rem; padding: 0 .6rem; }
     aside nav a { color: var(--muted); padding: .5rem .8rem; border-radius: 8px; font-size: .92rem; font-weight: 500; }
     aside nav a:hover { background: rgba(255,255,255,.05); color: #fff; }

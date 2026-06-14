@@ -15,12 +15,13 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 
 from fastmcp import FastMCP
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.routing import Mount, Route
 
 from teamshared.auth import BearerAuthMiddleware
@@ -68,6 +69,28 @@ from teamshared.server.tools import register_tools
 from teamshared.telemetry import instrument_asgi, setup_tracing
 
 log = get_logger(__name__)
+
+# Bundled brand assets (logo + favicons), shipped under the package and copied
+# into the image by the Dockerfile (`COPY src ./src`).
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+_STATIC_CONTENT_TYPES = {
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+    ".svg": "image/svg+xml",
+}
+
+
+def _serve_static(name: str) -> Response:
+    """Serve a file from the bundled static dir, guarding against traversal."""
+    target = (_STATIC_DIR / name).resolve()
+    if _STATIC_DIR not in target.parents or not target.is_file():
+        return Response(status_code=404)
+    media_type = _STATIC_CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
+    return FileResponse(
+        target,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 def build_mcp(settings: Settings | None = None) -> FastMCP:
@@ -222,7 +245,13 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             return JSONResponse({"status": "starting"}, status_code=503)
 
     async def favicon_route(_: Request) -> Response:
-        return Response(status_code=204)
+        return _serve_static("favicon.ico")
+
+    async def apple_touch_icon_route(_: Request) -> Response:
+        return _serve_static("apple-touch-icon.png")
+
+    async def static_asset_route(request: Request) -> Response:
+        return _serve_static(request.path_params["asset_path"])
 
     async def metrics_route(_: Request) -> Response:
         with suppress(RuntimeError):
@@ -448,6 +477,9 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         routes=[
             Route("/", root_route, methods=["GET"]),
             Route("/favicon.ico", favicon_route, methods=["GET"]),
+            Route("/apple-touch-icon.png", apple_touch_icon_route, methods=["GET"]),
+            Route("/apple-touch-icon-precomposed.png", apple_touch_icon_route, methods=["GET"]),
+            Route("/assets/{asset_path:path}", static_asset_route, methods=["GET"]),
             Route("/health", health_route, methods=["GET"]),
             Route("/metrics", metrics_route, methods=["GET"]),
             Route("/memory", memory_dashboard_route, methods=["GET"]),

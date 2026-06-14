@@ -164,8 +164,8 @@ _LANDING_CSS = """
     p { margin: 0; }
 
     .brand { display: inline-flex; align-items: center; gap: .55rem; font-weight: 700; font-size: 1.05rem; color: #fff; }
-    .brand-mark { width: 1.05rem; height: 1.05rem; border-radius: 6px;
-      background: linear-gradient(135deg, var(--indigo-bright), var(--indigo)); box-shadow: 0 0 18px rgba(99,102,241,.6); }
+    .brand-mark { width: 1.4rem; height: 1.4rem; border-radius: 6px;
+      background: url("/assets/logo.png") center/contain no-repeat; }
 
     .btn { display: inline-flex; align-items: center; justify-content: center; font-weight: 600;
       border-radius: 10px; padding: .6rem 1.05rem; font-size: .92rem; transition: transform .12s ease, background .15s ease, border-color .15s ease; border: 1px solid transparent; cursor: pointer; }
@@ -323,6 +323,10 @@ def _landing_page_html() -> str:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>TeamShared — Shared context for your agentic workforce</title>
   <meta name="description" content="Multi-pillar agent memory, exposed as an MCP server. Give Cursor, Codex, Claude, and every agent on your team one durable, shared memory." />
   <style>{_LANDING_CSS}</style>
@@ -754,6 +758,10 @@ def _token_form_html(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>Connect an agent — TeamShared</title>
   <meta name="description" content="Connect Cursor, Claude, Codex, and any MCP agent to TeamShared: sign in, create an org, add an agent, mint an API key, and install over MCP." />
   <style>{_LANDING_CSS}{_CONNECT_PAGE_CSS}</style>
@@ -941,6 +949,9 @@ def _token_result_html(agent_type: str, token: str, base_url: str) -> str:
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>teamshared setup — {escape(setup.title)}</title>
   <style>
     body {{ font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }}

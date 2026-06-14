@@ -32,6 +32,8 @@ class RouteClass(StrEnum):
 _EXACT: dict[str, RouteClass] = {
     "/": RouteClass.PUBLIC_UNAUTH,
     "/favicon.ico": RouteClass.PUBLIC_UNAUTH,
+    "/apple-touch-icon.png": RouteClass.PUBLIC_UNAUTH,
+    "/apple-touch-icon-precomposed.png": RouteClass.PUBLIC_UNAUTH,
     "/health": RouteClass.HEALTH_METRICS,
     "/metrics": RouteClass.HEALTH_METRICS,
     "/memory": RouteClass.PUBLIC_UNAUTH,
@@ -55,6 +57,7 @@ _PREFIX: tuple[tuple[str, RouteClass], ...] = (
     ("/logout", RouteClass.CONSOLE_SESSION),
     ("/tokens/mint/", RouteClass.PUBLIC_MINT),
     ("/get-token/", RouteClass.PUBLIC_UNAUTH),
+    ("/assets/", RouteClass.PUBLIC_UNAUTH),
     ("/install/assets/", RouteClass.PUBLIC_UNAUTH),
     ("/install/plugin/", RouteClass.PUBLIC_UNAUTH),
 )
