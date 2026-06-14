@@ -169,8 +169,8 @@ async def test_health_tool(mcp_with_mocks: tuple[FastMCP, ServerState]) -> None:
     assert comps["semantic"] == "ok (text-embedding-3-small)"
     assert comps["distiller"] == "ok"
     assert comps["graph"] == "ok"
-    # Ollama is unused in the mock (openai providers); "disabled" must not degrade.
-    assert comps["ollama"] == "disabled"
+    # The active backend is reported generically; openai is the mock default.
+    assert comps["provider"] == "ok (openai)"
 
 
 async def test_version_tool_reports_update_when_behind(

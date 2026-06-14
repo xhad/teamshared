@@ -85,7 +85,7 @@ async def test_all_components_ok() -> None:
     assert components["curator"] == "ok"
     assert components["agent-worker"] == "ok"
     assert components["graph"] == "ok"
-    assert components["ollama"] == "disabled"  # openai providers by default
+    assert components["provider"] == "ok (openai)"  # openai is the default backend
     assert components["queues"] == "ok"
 
 

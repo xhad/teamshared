@@ -32,8 +32,9 @@ def _is_healthy(value: str) -> bool:
 async def check_components(state: ServerState) -> dict[str, Any]:
     """Return ``{"status", "version", "components": {...}}``.
 
-    Probes every runtime dependency. Optional components (Neo4j, Ollama) report
-    ``"disabled"`` when not configured, which does not degrade overall status.
+    Probes every runtime dependency. The active LLM/embedding backend is
+    reported generically under ``provider``. Optional components (e.g. Neo4j)
+    report ``"disabled"`` when not configured, which does not degrade status.
     """
     settings = state.settings
     components: dict[str, str] = {}
@@ -95,13 +96,10 @@ async def check_components(state: ServerState) -> dict[str, Any]:
     else:
         components["graph"] = "down"
 
-    if settings.embed_provider == "ollama" or settings.llm_provider == "ollama":
-        components["ollama"] = await _probe_ollama(settings)
-    else:
-        components["ollama"] = "disabled"
-
-    if settings.llm_provider == "openrouter":
-        components["openrouter"] = await _probe_openrouter(settings)
+    # Active LLM/embedding backend, reported under a single generic "provider"
+    # key (OpenRouter, Ollama, OpenAI, ...) so the health surface never assumes
+    # a specific vendor.
+    components["provider"] = await _probe_provider(settings)
 
     queues: dict[str, Any] = {}
     try:
@@ -133,6 +131,21 @@ async def check_components(state: ServerState) -> dict[str, Any]:
     if queues:
         body["queues"] = queues
     return body
+
+
+async def _probe_provider(settings: Any) -> str:
+    """Health of the active LLM/embedding backend, reported vendor-neutrally.
+
+    Dispatches to the configured provider so the ``provider`` component shows
+    the same shape regardless of which backend teamshared is wired to.
+    """
+    if settings.llm_provider == "openrouter":
+        return await _probe_openrouter(settings)
+    if settings.llm_provider == "ollama" or settings.embed_provider == "ollama":
+        return await _probe_ollama(settings)
+    # OpenAI / other OpenAI-compatible backends: no dedicated liveness probe
+    # here (the active embedder is already surfaced under "semantic").
+    return f"ok ({settings.llm_provider})"
 
 
 async def _probe_ollama(settings: Any) -> str:
