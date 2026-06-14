@@ -23,7 +23,7 @@ import asyncio
 import hashlib
 import math
 import os
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import httpx
 from openai import AsyncOpenAI
@@ -32,10 +32,15 @@ from teamshared.config import Settings
 from teamshared.logging import get_logger
 from teamshared.metrics import METRICS
 
-try:  # Optional extra: pip install 'teamshared[local-embed]'
-    from fastembed import TextEmbedding
-except ImportError:  # pragma: no cover - exercised via build_embedder fallback
-    TextEmbedding = None  # type: ignore[assignment,misc]
+# Optional extra: pip install 'teamshared[local-embed]'. Guarded behind
+# TYPE_CHECKING so mypy's strict run is deterministic whether or not fastembed
+# is installed in the env (CI's [dev] extra omits it).
+TextEmbedding: Any = None
+if not TYPE_CHECKING:
+    try:
+        from fastembed import TextEmbedding
+    except ImportError:  # pragma: no cover - exercised via build_embedder fallback
+        TextEmbedding = None
 
 log = get_logger(__name__)
 
