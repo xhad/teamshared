@@ -25,7 +25,7 @@ AGENT_RUN_STREAM = "agent:runs"
 AGENT_RUN_GROUP = "agent-workers"
 
 
-class AgentRunNotFound(Exception):
+class AgentRunNotFoundError(Exception):
     """Raised when a run id does not resolve within the caller's org."""
 
 
@@ -65,7 +65,7 @@ class AgentRunService:
         await ctx.authorizer.require(ctx.principal, Permissions.AGENTRUN_WRITE)
         work = await self.work.get(ctx.org_id, work_id)
         if work is None:
-            raise AgentRunNotFound(f"work item {work_id} not found")
+            raise AgentRunNotFoundError(f"work item {work_id} not found")
 
         run = await self.runs.create(
             ctx.org_id,
@@ -114,7 +114,7 @@ class AgentRunService:
         await ctx.authorizer.require(ctx.principal, Permissions.AGENTRUN_WRITE)
         run = await self.runs.request_cancel(ctx.org_id, run_id)
         if run is None:
-            raise AgentRunNotFound(f"agent run {run_id} not found")
+            raise AgentRunNotFoundError(f"agent run {run_id} not found")
         await self.runs.append_trace(
             ctx.org_id, run_id,
             event_type="cancel_requested",
@@ -130,7 +130,7 @@ class AgentRunService:
         await ctx.authorizer.require(ctx.principal, Permissions.AGENTRUN_WRITE)
         prev = await self.runs.get(ctx.org_id, run_id)
         if prev is None:
-            raise AgentRunNotFound(f"agent run {run_id} not found")
+            raise AgentRunNotFoundError(f"agent run {run_id} not found")
         return await self.assign_and_run(
             ctx,
             work_id=UUID(str(prev["work_item_id"])),
@@ -161,7 +161,7 @@ class AgentRunService:
         await ctx.authorizer.require(ctx.principal, Permissions.AGENTRUN_READ)
         run = await self.runs.get(ctx.org_id, run_id)
         if run is None:
-            raise AgentRunNotFound(f"agent run {run_id} not found")
+            raise AgentRunNotFoundError(f"agent run {run_id} not found")
         await self.runs.enrich(ctx.org_id, [run])
         run["trace"] = await self.runs.list_trace(ctx.org_id, run_id)
         run["model_calls"] = await self.runs.list_model_calls(ctx.org_id, run_id)

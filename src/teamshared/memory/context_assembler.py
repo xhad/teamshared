@@ -111,7 +111,8 @@ def _record_snippet(record: MemoryRecord) -> str:
         meta.append(record.created_at.date().isoformat())
     if record.confidence is not None:
         meta.append(f"conf={record.confidence:.2f}")
-    suffix = f" ({' \u00b7 '.join(meta)})" if meta else ""
+    sep = " \u00b7 "
+    suffix = f" ({sep.join(meta)})" if meta else ""
     return f"- {content}{suffix}"
 
 

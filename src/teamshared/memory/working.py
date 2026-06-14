@@ -21,7 +21,7 @@ import hmac
 import json
 import secrets
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import redis.asyncio as redis
@@ -176,7 +176,7 @@ class WorkingMemory:
         the Redis TTL set in :meth:`set_login_otp`.
         """
         key = _otp_key(email)
-        data = await self.client.hgetall(key)
+        data = cast("dict[str, str]", await self.client.hgetall(key))
         if not data:
             return False
         attempts = int(data.get("attempts", "0"))
@@ -215,7 +215,7 @@ class WorkingMemory:
             "ttl": str(ttl),
         }
         pipe = self.client.pipeline()
-        pipe.hset(_session_key(org_id, session_id), mapping=meta)
+        pipe.hset(_session_key(org_id, session_id), mapping=cast("dict[Any, Any]", meta))
         pipe.expire(_session_key(org_id, session_id), ttl)
         pipe.expire(_turns_key(org_id, session_id), ttl)
         pipe.zadd(
@@ -366,7 +366,7 @@ class WorkingMemory:
         async for key in client.scan_iter(match=f"{prefix}*", count=200):
             if key.endswith(":turns"):
                 continue
-            meta = await client.hgetall(key)
+            meta = cast("dict[str, str]", await client.hgetall(key))
             if not meta:
                 continue
             session_id = key.split(prefix, 1)[1]
@@ -413,10 +413,13 @@ class WorkingMemory:
     async def list_open_sessions(
         self, org_id: UUID | str, agent: str, limit: int = 20
     ) -> list[dict[str, Any]]:
-        ids = await self.client.zrevrange(_agent_index_key(org_id, agent), 0, limit - 1)
+        ids = cast(
+            "list[str]",
+            await self.client.zrevrange(_agent_index_key(org_id, agent), 0, limit - 1),
+        )
         out: list[dict[str, Any]] = []
         for sid in ids:
-            meta = await self.client.hgetall(_session_key(org_id, sid))
+            meta = cast("dict[str, str]", await self.client.hgetall(_session_key(org_id, sid)))
             if meta:
                 out.append({"session_id": sid, **meta})
         return out
@@ -454,7 +457,7 @@ class WorkingMemory:
 
     async def last_heartbeat(self, component: str) -> str | None:
         """Return the last heartbeat timestamp for ``component`` (None if stale/absent)."""
-        return await self.client.get(f"{_HEARTBEAT_PREFIX}{component}")
+        return cast("str | None", await self.client.get(f"{_HEARTBEAT_PREFIX}{component}"))
 
     async def pop_distill_job(self, timeout: int = 5) -> dict[str, Any] | None:
         """Blocking-pop the next distillation job. Returns None on timeout."""
@@ -557,7 +560,10 @@ class WorkingMemory:
     async def _pop_queue_job(
         self, queue_key: str, dead_letter_key: str, timeout: int
     ) -> dict[str, Any] | None:
-        result = await self.client.blpop([queue_key], timeout=timeout)
+        result = cast(
+            "tuple[str, str] | None",
+            await self.client.blpop([queue_key], timeout=timeout),
+        )
         if result is None:
             return None
         _, payload = result

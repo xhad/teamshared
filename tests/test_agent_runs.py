@@ -144,7 +144,7 @@ def _runner(monkeypatch: pytest.MonkeyPatch, *, output: str, playbook: dict | No
         procedural=procedural, ingestion=ingestion,
     )
 
-    async def _fake_principal(org_id, agent_id):  # noqa: ANN001
+    async def _fake_principal(org_id, agent_id):
         return Principal(org_id=org_id, type="agent", id=agent_id, display="cursor",
                          roles=("agent",))
 
@@ -170,7 +170,7 @@ def _runner(monkeypatch: pytest.MonkeyPatch, *, output: str, playbook: dict | No
                 completions=SimpleNamespace(create=self._create)
             )
 
-        async def _create(self, *, model, messages, temperature):  # noqa: ANN001
+        async def _create(self, *, model, messages, temperature):
             captured["model"] = model
             captured["messages"] = messages
             return SimpleNamespace(
@@ -242,7 +242,7 @@ async def test_runner_does_not_leak_prompt_into_traces(
 async def test_runner_fails_when_playbook_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner, runs, work, _ingestion, _captured = _runner(
+    runner, runs, _work, _ingestion, _captured = _runner(
         monkeypatch, output="x", playbook=None,
     )
     # A run that names a playbook which resolves to None must fail safely.

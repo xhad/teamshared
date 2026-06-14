@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import redis.asyncio as redis
 
@@ -79,11 +79,15 @@ class StreamQueue:
     async def read(
         self, stream: str, group: str, consumer: str, *, count: int = 10, block_ms: int = 5000
     ) -> list[Job]:
-        resp = await self.client.xreadgroup(
-            group, consumer, {stream: ">"}, count=count, block=block_ms
+        resp = cast(
+            "list[tuple[Any, list[tuple[Any, dict[Any, Any]]]]]",
+            await self.client.xreadgroup(
+                group, consumer, {stream: ">"}, count=count, block=block_ms
+            )
+            or [],
         )
         jobs: list[Job] = []
-        for _stream, messages in resp or []:
+        for _stream, messages in resp:
             for msg_id, raw in messages:
                 jobs.append(_to_job(stream, msg_id, raw))
         return jobs

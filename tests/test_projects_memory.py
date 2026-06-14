@@ -73,7 +73,7 @@ async def test_list_subtasks_queries_parent() -> None:
 
 
 async def test_add_dependency_returns_existing_flag_when_conflict() -> None:
-    db, conn = _mock_db(fetchone=None)  # ON CONFLICT DO NOTHING -> no row
+    db, _conn = _mock_db(fetchone=None)  # ON CONFLICT DO NOTHING -> no row
     store = WorkStore(db)
     result = await store.add_dependency(ORG, blocker_id=WORK_ID, blocked_id=PROJECT_ID)
     assert result["already_exists"] is True

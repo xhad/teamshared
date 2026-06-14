@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-
 from unittest.mock import AsyncMock
+
+from typer.testing import CliRunner
 
 import teamshared.memory.working as working_mod
 from teamshared import cli
-from typer.testing import CliRunner
 
 runner = CliRunner()
 

@@ -1246,7 +1246,7 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form, deny = await _verified_form(request)
+        _form, deny = await _verified_form(request)
         if deny:
             return deny
         run_id = str(request.path_params["run_id"])
@@ -1260,7 +1260,7 @@ def register_console_routes(
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        form, deny = await _verified_form(request)
+        _form, deny = await _verified_form(request)
         if deny:
             return deny
         run_id = str(request.path_params["run_id"])

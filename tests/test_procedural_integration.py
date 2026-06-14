@@ -35,7 +35,7 @@ async def store() -> AsyncIterator[ProceduralStore]:
     await s.connect()
     try:
         async with s.pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute("TRUNCATE procedures RESTART IDENTITY")
+            await cur.execute("TRUNCATE procedures RESTART IDENTITY CASCADE")
         yield s
     finally:
         await s.close()

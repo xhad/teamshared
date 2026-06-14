@@ -22,6 +22,7 @@ secrets, or credentials.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -57,7 +58,7 @@ _RUNNER_SYSTEM = (
 _MAX_OUTPUT_CHARS = 12_000
 
 
-class PlaybookUnavailable(Exception):
+class PlaybookUnavailableError(Exception):
     """Raised when the requested playbook cannot be used for a run."""
 
 
@@ -122,7 +123,7 @@ class AgentRunner:
 
         try:
             playbook = await self._resolve_playbook(rc, run)
-        except PlaybookUnavailable as exc:
+        except PlaybookUnavailableError as exc:
             await self._fail(rc, str(exc))
             return
 
@@ -179,7 +180,7 @@ class AgentRunner:
         version = run.get("playbook_version")
         pb = await self.procedural.get_procedure(rc.org_id, name, version)
         if pb is None:
-            raise PlaybookUnavailable(
+            raise PlaybookUnavailableError(
                 f"Playbook '{name}' is unavailable (missing, pending approval, "
                 "or quarantined)."
             )
@@ -372,13 +373,11 @@ class AgentRunner:
             rc.org_id, rc.run_id, event_type="cancelled",
             summary=f"Run cancelled ({stage}).",
         )
-        try:
+        with contextlib.suppress(Exception):  # comment is best-effort
             await self.work.add_comment(
                 rc.org_id, rc.work_id, author_type="agent", author_id=rc.agent_id,
                 body_md=f"Agent run `{rc.run_id}` was cancelled.",
             )
-        except Exception:  # noqa: BLE001 - comment is best-effort
-            pass
         METRICS.agent_runs_cancelled.inc()
         return True
 
@@ -388,13 +387,11 @@ class AgentRunner:
             rc.org_id, rc.run_id, event_type="failed",
             summary="Run failed.", payload={"error": _short(error)},
         )
-        try:
+        with contextlib.suppress(Exception):  # comment is best-effort
             await self.work.add_comment(
                 rc.org_id, rc.work_id, author_type="agent", author_id=rc.agent_id,
                 body_md=f"Agent run `{rc.run_id}` failed: {_short(error)}",
             )
-        except Exception:  # noqa: BLE001 - comment is best-effort
-            pass
         METRICS.agent_runs_failed.inc()
         log.warning("agent_run_failed", run_id=str(rc.run_id), error=_short(error))
 
