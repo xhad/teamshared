@@ -16,6 +16,7 @@ navigation works end to end.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import secrets
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,23 @@ _OTP_DIGITS = 6
 _ORG_NAME = "TeamShared"
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def _asset_version() -> str:
+    """Short content hash of console.css for cache-busting the stylesheet link.
+
+    The static assets are served with a 24h ``Cache-Control``; without a
+    version query the browser keeps serving a stale stylesheet after a deploy.
+    """
+    css = Path(__file__).parent / "static" / "console.css"
+    try:
+        digest = hashlib.sha256(css.read_bytes()).hexdigest()
+    except OSError:
+        return "0"
+    return digest[:12]
+
+
+_TEMPLATES.env.globals["asset_version"] = _asset_version()
 
 # (href, label, active-key). Drives the sidebar nav in base.html.
 NAV: list[tuple[str, str, str]] = [

@@ -22,15 +22,15 @@ from teamshared.memory.types import MemoryRecord
 from teamshared.server.health import check_components
 from teamshared.server.state import ServerState
 
-# Chart/segment palette — teal-forward, distinct from generic indigo AI palettes.
+# Chart/segment palette — indigo/cyan, matching the landing page accent family.
 _PALETTE = ["#818cf8", "#6366f1", "#7dd3fc", "#38bdf8", "#a5b4fc", "#60a5fa"]
 _DASH = "\u2014"
 
 _DASHBOARD_CSS = """
 :root {
-  color-scheme: light;
-  --font-sans: "Instrument Sans", "Segoe UI", sans-serif;
-  --font-serif: "Source Serif 4", Georgia, serif;
+  color-scheme: dark;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
   --bg: #07080d;
   --panel: #11131d;
   --panel-2: #161927;
@@ -403,9 +403,6 @@ def _render_page(
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&display=swap" rel="stylesheet" />
   <title>teamshared — memory status</title>
   <style>{_DASHBOARD_CSS}</style>
 </head>
