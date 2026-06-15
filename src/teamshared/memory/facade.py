@@ -661,34 +661,9 @@ class MemoryFacade:
         requester_type = writer.type if writer.type in {"user", "agent"} else None
         requester_id = writer.id if requester_type else None
         init_uuid = UUID(initiative_id) if initiative_id else None
-        require_approval = writer.type == "agent"
-        if require_approval:
-            result = await self.services.ingestion().ingest_work_create(
-                ctx,
-                title=title,
-                description_md=description_md,
-                tags=tags,
-                work_status=work_status,  # type: ignore[arg-type]
-                priority=priority,  # type: ignore[arg-type]
-                requester_type=requester_type,
-                requester_id=requester_id,
-                assignee_type=resolved_assignee_type,
-                assignee_id=resolved_assignee_id,
-                initiative_id=init_uuid,
-                due_at=due_at,
-                repo=repo,
-                github=github,
-                agent=writer.display or writer.attribution,
-                require_approval=True,
-                project_id=UUID(project_id) if project_id else None,
-                section_id=UUID(section_id) if section_id else None,
-                parent_id=UUID(parent_id) if parent_id else None,
-                start_at=start_at,
-                item_type=item_type,
-            )
-            out = _serialize_work(result.item)
-            out["approval_status"] = result.status
-            return out
+        # Work creation is direct for everyone — humans and agents alike. New
+        # tasks land active rather than queuing for approval; the approval queue
+        # is reserved for memory/strategic writes, not the task backlog.
         await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
         row = await self.services.work.create(
             principal.org_id,
@@ -705,7 +680,7 @@ class MemoryFacade:
             due_at=due_at,
             repo=repo,
             github=github,
-            source="human",
+            source="agent" if writer.type == "agent" else "human",
             agent=writer.display or writer.attribution,
             status="active",
             parent_id=UUID(parent_id) if parent_id else None,

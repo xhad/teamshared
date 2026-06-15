@@ -700,7 +700,7 @@ def register_tools(mcp: Any) -> None:
         ] = "task",
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Create a work item. Agent writes require approval; human console writes are immediate."""
+        """Create a work item. Created active immediately for humans and agents (no approval queue)."""
         state = get_state()
         principal = await _principal()
         return await state.facade.work_create(

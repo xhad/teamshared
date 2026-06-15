@@ -116,8 +116,8 @@ Use `work_*` for durable, assignable tasks — not `memory_remember`.
 5. **Finish:** `work_close(work_id=..., work_status="done")` when complete.
    Closing writes an episodic event for the timeline.
 
-Agent-created tasks land in `/app/approvals` until a human approves them.
-Human/console-created tasks are active immediately. Optional `initiative_id=`
+Work items are created active immediately for both humans and agents — task
+creation does not go through the approval queue. Optional `initiative_id=`
 links a task to a strategic initiative.
 
 ### Session logging (every chat)

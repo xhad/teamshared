@@ -161,7 +161,7 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | `memory_strategic_initiative_set` | Propose a strategic initiative                       |
 | `work_list`                 | List org work items (status, assignee, mine, sort, exclude_closed) |
 | `work_get`                  | Fetch one work item                                          |
-| `work_create`               | Create a task (agent writes → approval; humans → immediate)  |
+| `work_create`               | Create a task (active immediately for humans and agents)     |
 | `work_update`               | Update status, assignee, priority, etc.                      |
 | `work_close`                | Mark done or cancelled (writes episodic timeline event)        |
 | `work_comment_add`          | Add a progress comment on a task                             |
