@@ -553,6 +553,40 @@ tbody tr:hover td { background: var(--panel-2); }
 
 .work-row-title a:hover { color: var(--accent); }
 
+.work-row-sub { background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
+.work-row-sub .work-row-title { padding-left: 1.4rem; }
+.work-row-sub .work-row-title a { font-weight: 400; color: var(--muted); }
+.work-row-sub .work-row-title a:hover { color: var(--accent); }
+
+.work-subtask-mark { color: var(--faint); margin-right: 0.35rem; }
+
+.work-project-tag {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+  vertical-align: middle;
+}
+
+.work-project-tag:hover { color: var(--accent-bright); }
+
+.work-parent-link {
+  display: inline-block;
+  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.work-parent-link:hover { color: var(--accent); }
+
+.work-subtask-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.4rem; }
+.work-subtask-list li { display: flex; align-items: center; gap: 0.5rem; }
+.work-subtask-list a { color: var(--text); font-weight: 500; }
+.work-subtask-list a:hover { color: var(--accent); }
+
 .work-row-meta { display: none; }
 
 .work-status-dot {

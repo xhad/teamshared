@@ -616,39 +616,20 @@ def test_projects_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
         resp = client.get("/app/projects")
         assert resp.status_code == 200
         assert "Q3 Launch" in resp.text
-        assert "/app/projects/p1" in resp.text
+        assert "/app/work?project=p1" in resp.text
         assert "Create project" in resp.text
     finally:
         clear_state()
 
 
-def test_project_board_groups_tasks_by_section(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_project_board_redirects_to_filtered_work(monkeypatch: pytest.MonkeyPatch) -> None:
     client, _services = _build()
-    facade = MagicMock()
-    facade.project_get = AsyncMock(return_value={
-        "id": "p1", "name": "Q3 Launch", "description_md": None,
-        "default_view": "board",
-        "sections": [{"id": "s1", "name": "To do"}, {"id": "s2", "name": "Doing"}],
-        "latest_status": {"state": "on_track", "body_md": "Looking good"},
-        "items": [
-            {"id": "w1", "title": "Design", "work_status": "todo",
-             "priority": "high", "assignee_label": "cursor", "section_id": "s1"},
-            {"id": "w2", "title": "Build", "work_status": "in_progress",
-             "priority": "normal", "assignee_label": None, "section_id": "s2"},
-            {"id": "w3", "title": "Triage", "work_status": "todo",
-             "priority": "low", "assignee_label": None, "section_id": None},
-        ],
-    })
-    set_state(SimpleNamespace(facade=facade))
+    set_state(SimpleNamespace(facade=MagicMock()))
     try:
         _login(client)
-        resp = client.get("/app/projects/p1")
-        assert resp.status_code == 200
-        assert "Q3 Launch" in resp.text
-        assert "To do" in resp.text and "Doing" in resp.text
-        assert "No section" in resp.text
-        assert "Design" in resp.text and "Build" in resp.text and "Triage" in resp.text
-        assert "Looking good" in resp.text
+        resp = client.get("/app/projects/p1", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/app/work?project=p1"
     finally:
         clear_state()
 
@@ -688,6 +669,7 @@ def test_work_detail_renders_comments(monkeypatch: pytest.MonkeyPatch) -> None:
             "author_label": "cursor", "created_at": "2026-06-07T12:00:00+00:00",
         }],
     })
+    facade.work_subtasks_list = AsyncMock(return_value={"count": 0, "subtasks": []})
     set_state(SimpleNamespace(facade=facade))
     try:
         _login(client)

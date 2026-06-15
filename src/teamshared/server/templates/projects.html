@@ -5,7 +5,7 @@
   <div class="page-head">
     <div>
       <h1>Projects</h1>
-      <p class="sub">Group tasks into projects with sections, owners, and a board view.</p>
+      <p class="sub">A project groups related tasks. Open one to see its tasks on the Work page.</p>
     </div>
   </div>
 
@@ -40,11 +40,11 @@
   {% if projects %}
   <div class="project-grid">
     {% for p in projects %}
-    <a class="project-card" href="/app/projects/{{ p.id }}">
+    <a class="project-card" href="/app/work?project={{ p.id }}">
       <h3>{{ p.name }}</h3>
       {% if p.description_md %}<p class="muted">{{ p.description_md[:140] }}</p>{% endif %}
       <div class="project-card-meta">
-        <span class="work-status-pill">{{ p.default_view | title }}</span>
+        <span class="work-status-pill">View tasks &rarr;</span>
         {% if p.project_status == 'archived' %}<span class="muted">Archived</span>{% endif %}
       </div>
     </a>

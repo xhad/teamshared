@@ -26,6 +26,14 @@
   <form method="get" action="/app/work" class="work-toolbar">
     <input type="hidden" name="view" value="{{ view }}" />
     <div class="work-toolbar-filters">
+      <label>Project
+        <select name="project" onchange="this.form.submit()" aria-label="Filter by project">
+          <option value="">All projects</option>
+          {% for p in projects %}
+          <option value="{{ p.id }}" {% if project_filter == (p.id | string) %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
       <label>Status
         <select name="status" onchange="this.form.submit()" aria-label="Filter by status">
           <option value="">Any open</option>
@@ -55,22 +63,17 @@
     </div>
   </form>
 
-  <div class="work-list">
-    {% if items %}
-    <div class="work-list-header" aria-hidden="true">
-      <span></span>
-      <span>Task name</span>
-      <span>Status</span>
-      <span>Priority</span>
-      <span>Assignee</span>
-      <span>Due</span>
-      <span>Updated</span>
-    </div>
-    {% for item in items %}
-    <article class="work-row">
+{% macro work_row(item, is_subtask=False) %}
+    <article class="work-row{% if is_subtask %} work-row-sub{% endif %}">
       <div class="work-status-dot {{ item.work_status }}" title="{{ wm.status_label(item.work_status) }}" aria-hidden="true"></div>
       <div class="work-row-title">
+        {% if is_subtask %}<span class="work-subtask-mark" aria-hidden="true">&#8627;</span>{% endif %}
         <a href="/app/work/{{ item.id }}">{{ item.title }}</a>
+        {% if not project_filter %}
+          {% for proj in item.projects or [] %}
+          <a class="work-project-tag" href="/app/work?project={{ proj.id }}">{{ proj.name }}</a>
+          {% endfor %}
+        {% endif %}
         <div class="work-row-meta">
           <span class="work-status-pill {{ item.work_status }}">{{ wm.status_label(item.work_status) }}</span>
           <span class="work-priority {{ item.priority }}">{{ wm.priority_label(item.priority) }}</span>
@@ -102,6 +105,24 @@
       <div class="work-col-due work-cell-muted">{{ (item.due_at or '')[:10] or '—' }}</div>
       <div class="work-col-updated work-cell-muted">{{ (item.updated_at or '')[:16] | replace('T', ' ') }}</div>
     </article>
+{% endmacro %}
+
+  <div class="work-list">
+    {% if items %}
+    <div class="work-list-header" aria-hidden="true">
+      <span></span>
+      <span>Task name</span>
+      <span>Status</span>
+      <span>Priority</span>
+      <span>Assignee</span>
+      <span>Due</span>
+      <span>Updated</span>
+    </div>
+    {% for item in items %}
+    {{ work_row(item) }}
+    {% for sub in item.subtasks or [] %}
+    {{ work_row(sub, is_subtask=True) }}
+    {% endfor %}
     {% endfor %}
     {% else %}
     <div class="work-empty">

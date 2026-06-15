@@ -578,6 +578,7 @@ class MemoryFacade:
         sort: str,
         sort_dir: str,
         limit: int,
+        project_id: str | None = None,
     ) -> dict[str, Any]:
         ctx = self._ctx(principal)
         await ctx.authorizer.require(ctx.principal, Permissions.WORK_READ)
@@ -607,6 +608,7 @@ class MemoryFacade:
             sort=sort,  # type: ignore[arg-type]
             sort_dir=sort_dir,  # type: ignore[arg-type]
             limit=limit,
+            project_id=UUID(project_id) if project_id else None,
         )
         return {
             "count": len(rows),
@@ -752,6 +754,7 @@ class MemoryFacade:
         repo: str | None,
         github: str | None,
         agent_override: str | None,
+        parent_id: str | None = None,
     ) -> dict[str, Any] | None:
         caller_ctx = self._ctx(principal)
         writer = await self._write_principal(
@@ -775,6 +778,8 @@ class MemoryFacade:
             fields["blocked_reason"] = blocked_reason
         if initiative_id is not None:
             fields["initiative_id"] = UUID(initiative_id) if initiative_id else None
+        if parent_id is not None:
+            fields["parent_id"] = UUID(parent_id) if parent_id else None
         if due_at is not None:
             fields["due_at"] = due_at
         if repo is not None:

@@ -151,6 +151,7 @@ class WorkStore:
         sort: WorkSort = "updated_at",
         sort_dir: WorkSortDir = "desc",
         limit: int = 50,
+        project_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
         clauses = ["status = %s"]
         params: list[Any] = [approval_status]
@@ -159,6 +160,11 @@ class WorkStore:
             params.append(work_status)
         elif exclude_closed:
             clauses.append("work_status NOT IN ('done', 'cancelled')")
+        if project_id is not None:
+            clauses.append(
+                "id IN (SELECT work_item_id FROM work_item_projects WHERE project_id = %s)"
+            )
+            params.append(str(project_id))
         if assignee_type is not None:
             clauses.append("assignee_type = %s")
             params.append(assignee_type)
@@ -193,6 +199,7 @@ class WorkStore:
             rows = await cur.fetchall()
         items = [_row(r) for r in rows]
         await self.enrich_labels(org_id, items)
+        await self.enrich_projects(org_id, items)
         return items
 
     async def update(
@@ -426,6 +433,34 @@ class WorkStore:
             item["initiative_title"] = (
                 initiative_titles.get(str(init_id)) if init_id else None
             )
+
+    async def enrich_projects(self, org_id: UUID, items: list[dict[str, Any]]) -> None:
+        """Attach each item's linked projects in-place as ``item["projects"]``.
+
+        One round-trip for the whole batch; every item gets a (possibly empty)
+        ``projects`` list of ``{"id", "name"}`` so templates can render a label.
+        """
+        if not items:
+            return
+        ids = [str(i["id"]) for i in items if i.get("id")]
+        if not ids:
+            return
+        mapping: dict[str, list[dict[str, str]]] = {}
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT wip.work_item_id::text, wip.project_id::text, p.name
+                FROM work_item_projects wip
+                JOIN projects p ON p.id = wip.project_id
+                WHERE wip.work_item_id = ANY(%s::uuid[])
+                ORDER BY wip.created_at ASC
+                """,
+                (ids,),
+            )
+            for r in await cur.fetchall():
+                mapping.setdefault(r[0], []).append({"id": r[1], "name": r[2]})
+        for item in items:
+            item["projects"] = mapping.get(str(item.get("id")), [])
 
     async def add_comment(
         self,

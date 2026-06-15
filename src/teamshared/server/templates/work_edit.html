@@ -86,6 +86,19 @@
               </select>
             </div>
 
+            <div class="work-field-row">
+              <label for="work-project">Project</label>
+              <select id="work-project" name="project_id">
+                <option value="">No project</option>
+                {% for p in projects %}
+                <option value="{{ p.id }}"
+                  {% if item and item.projects and (item.projects[0].id | string) == (p.id | string) %}selected{% endif %}>
+                  {{ p.name }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
             <div class="work-field-row{% if not item or item.work_status != 'blocked' %} is-hidden{% endif %}" id="work-blocked-row">
               <label for="work-blocked">Blocked</label>
               <input id="work-blocked" type="text" name="blocked_reason"
@@ -93,8 +106,22 @@
                 value="{{ item.blocked_reason if item and item.blocked_reason else '' }}" />
             </div>
 
-            <details class="work-advanced"{% if item and item.initiative_id %} open{% endif %}>
+            <details class="work-advanced"{% if item and (item.initiative_id or item.parent_id) %} open{% endif %}>
               <summary>Advanced</summary>
+              {% if parent_options %}
+              <div class="work-field-row">
+                <label for="work-parent">Parent task</label>
+                <select id="work-parent" name="parent_id">
+                  <option value="">None (top-level task)</option>
+                  {% for t in parent_options %}
+                  <option value="{{ t.id }}"
+                    {% if item and item.parent_id and (item.parent_id | string) == (t.id | string) %}selected{% endif %}>
+                    {{ t.title }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+              {% endif %}
               <div class="work-field-row">
                 <label for="work-initiative">Initiative</label>
                 <input id="work-initiative" type="text" name="initiative_id"

@@ -126,28 +126,25 @@ def _safe(value: Any, default: Any) -> Any:
     return default if isinstance(value, BaseException) else value
 
 
-def _board_columns(project: dict[str, Any]) -> list[dict[str, Any]]:
-    """Group a project's tasks into ordered board columns by section.
+def _nest_subtasks(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group a flat work list into top-level tasks with nested ``subtasks``.
 
-    Tasks with no section land in a leading "No section" column. Section order
-    follows the project's declared section order.
+    A subtask (``parent_id`` set) is attached to its parent's ``subtasks`` list
+    when the parent is present in the same result set; otherwise it surfaces as
+    a top-level row so filtered views never silently drop it.
     """
-    sections = project.get("sections") or []
-    items = project.get("items") or []
-    buckets: dict[str | None, list[dict[str, Any]]] = {None: []}
-    for s in sections:
-        buckets[str(s.get("id"))] = []
+    by_id = {str(i["id"]): i for i in items if i.get("id")}
     for item in items:
-        key = item.get("section_id")
-        key = str(key) if key else None
-        buckets.setdefault(key, []).append(item)
-    columns: list[dict[str, Any]] = []
-    if buckets.get(None):
-        columns.append({"id": None, "name": "No section", "cards": buckets[None]})
-    for s in sections:
-        sid = str(s.get("id"))
-        columns.append({"id": sid, "name": s.get("name"), "cards": buckets.get(sid, [])})
-    return columns
+        item.setdefault("subtasks", [])
+    roots: list[dict[str, Any]] = []
+    for item in items:
+        parent_id = item.get("parent_id")
+        parent = by_id.get(str(parent_id)) if parent_id else None
+        if parent is not None and parent is not item:
+            parent["subtasks"].append(item)
+        else:
+            roots.append(item)
+    return roots
 
 
 async def _settings_context(
@@ -758,6 +755,76 @@ def register_console_routes(
             log.warning("work_assignee_options_failed", error=str(exc))
         return agents, members
 
+    async def _work_link_options(
+        principal: Principal, *, exclude_id: str | None
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Projects (for the project picker) and candidate parent tasks."""
+        projects: list[dict[str, Any]] = []
+        parents: list[dict[str, Any]] = []
+        try:
+            pdata = await get_state().facade.project_list(
+                principal, team_id=None, initiative_id=None,
+                include_archived=False, limit=100,
+            )
+            projects = pdata.get("projects") or []
+        except Exception as exc:
+            log.warning("work_link_projects_failed", error=str(exc))
+        try:
+            wdata = await get_state().facade.work_list(
+                principal, work_status=None, assignee=None, mine=False,
+                initiative_id=None, exclude_closed=True,
+                sort="updated_at", sort_dir="desc", limit=100,
+            )
+            for it in wdata.get("items") or []:
+                # Only top-level tasks can be parents, and never self.
+                if it.get("parent_id"):
+                    continue
+                if exclude_id and str(it.get("id")) == exclude_id:
+                    continue
+                parents.append({"id": str(it.get("id")), "title": it.get("title") or ""})
+        except Exception as exc:
+            log.warning("work_link_parents_failed", error=str(exc))
+        return projects, parents
+
+    async def _work_item_projects(
+        principal: Principal, work_id: str
+    ) -> list[dict[str, Any]]:
+        try:
+            rows = await services.work.list_item_projects(principal.org_id, UUID(work_id))
+            return [
+                {"id": str(r.get("project_id")), "name": r.get("project_name") or ""}
+                for r in rows
+            ]
+        except Exception as exc:
+            log.warning("work_item_projects_failed", error=str(exc))
+            return []
+
+    async def _sync_work_project(
+        principal: Principal, work_id: str, project_id: str | None
+    ) -> None:
+        """Make the task's project membership match the single selected project.
+
+        The console models one project per task: drop any other links and add
+        the chosen one (a no-op upsert when it already exists).
+        """
+        try:
+            current = await services.work.list_item_projects(
+                principal.org_id, UUID(work_id),
+            )
+            current_ids = {str(r.get("project_id")) for r in current}
+            for pid in current_ids:
+                if pid != project_id:
+                    await get_state().facade.work_remove_from_project(
+                        principal, work_id=work_id, project_id=pid,
+                    )
+            if project_id and project_id not in current_ids:
+                await get_state().facade.work_add_to_project(
+                    principal, work_id=work_id, project_id=project_id,
+                    section_id=None, agent_override=None,
+                )
+        except Exception as exc:
+            log.warning("work_project_sync_failed", error=str(exc))
+
     def _fmt_run(run: dict[str, Any]) -> dict[str, Any]:
         return {
             "id": str(run.get("id")),
@@ -807,7 +874,10 @@ def register_console_routes(
         sort = str(request.query_params.get("sort") or "updated_at").strip()
         sort_dir = str(request.query_params.get("dir") or "desc").strip()
         include_done = request.query_params.get("include_done") == "1"
+        project_filter = str(request.query_params.get("project") or "").strip() or None
         items: list[dict[str, Any]] = []
+        projects: list[dict[str, Any]] = []
+        project_name = ""
         note = ""
         flash = request.query_params.get("flash") or ""
         try:
@@ -825,8 +895,22 @@ def register_console_routes(
                 sort=sort,
                 sort_dir=sort_dir,
                 limit=100,
+                project_id=project_filter,
             )
-            items = data.get("items") or []
+            items = _nest_subtasks(data.get("items") or [])
+            try:
+                pdata = await get_state().facade.project_list(
+                    principal, team_id=None, initiative_id=None,
+                    include_archived=False, limit=100,
+                )
+                projects = pdata.get("projects") or []
+            except Exception as exc:
+                log.warning("work_page_projects_failed", error=str(exc))
+            if project_filter:
+                project_name = next(
+                    (p.get("name") for p in projects if str(p.get("id")) == project_filter),
+                    "",
+                )
         except Exception as exc:
             log.warning("work_page_failed", error=str(exc))
             note = f"Unavailable: {exc}"
@@ -835,6 +919,9 @@ def register_console_routes(
             "status_filter": status_filter or "",
             "sort": sort, "sort_dir": sort_dir,
             "include_done": include_done,
+            "projects": projects,
+            "project_filter": project_filter or "",
+            "project_name": project_name,
         })
         return _TEMPLATES.TemplateResponse(request, "work.html", ctx)
 
@@ -844,9 +931,11 @@ def register_console_routes(
             return _redirect_login()
         ctx = await _shell(request, principal, "work")
         agents, members = await _work_assignee_options(principal)
+        projects, parent_options = await _work_link_options(principal, exclude_id=None)
         ctx.update({
             "item": None, "is_new": True, "note": "",
             "agents": agents, "members": members,
+            "projects": projects, "parent_options": parent_options,
         })
         return _TEMPLATES.TemplateResponse(request, "work_edit.html", ctx)
 
@@ -874,6 +963,19 @@ def register_console_routes(
                 runs = await _runs_view_for_work(principal, UUID(work_id))
                 agents, _members = await _work_assignee_options(principal)
                 playbooks = await _playbook_options(principal)
+                item["projects"] = await _work_item_projects(principal, work_id)
+                subs = await get_state().facade.work_subtasks_list(
+                    principal, work_id=work_id,
+                )
+                item["subtasks"] = subs.get("subtasks") or []
+                if item.get("parent_id"):
+                    parent = await get_state().facade.work_get(
+                        principal, work_id=str(item["parent_id"]),
+                    )
+                    item["parent"] = (
+                        {"id": str(parent["id"]), "title": parent.get("title")}
+                        if parent else None
+                    )
         except Exception as exc:
             log.warning("work_detail_failed", error=str(exc))
             note = f"Unavailable: {exc}"
@@ -893,16 +995,20 @@ def register_console_routes(
         item: dict[str, Any] | None = None
         note = ""
         agents, members = await _work_assignee_options(principal)
+        projects, parent_options = await _work_link_options(principal, exclude_id=work_id)
         try:
             item = await get_state().facade.work_get(principal, work_id=work_id)
             if item is None:
                 note = "Work item not found."
+            else:
+                item["projects"] = await _work_item_projects(principal, work_id)
         except Exception as exc:
             log.warning("work_edit_failed", error=str(exc))
             note = f"Unavailable: {exc}"
         ctx.update({
             "item": item, "is_new": False, "note": note,
             "agents": agents, "members": members,
+            "projects": projects, "parent_options": parent_options,
             "flash": request.query_params.get("flash") or "",
         })
         return _TEMPLATES.TemplateResponse(request, "work_edit.html", ctx)
@@ -945,6 +1051,8 @@ def register_console_routes(
         initiative_id = str(form.get("initiative_id") or "").strip() or None
         assignee_kind = str(form.get("assignee_kind") or "").strip()
         assignee_ref = str(form.get("assignee_ref") or "").strip()
+        project_id = str(form.get("project_id") or "").strip() or None
+        parent_id = str(form.get("parent_id") or "").strip()
         assignee_type: str | None = None
         assignee_agent: str | None = None
         assignee_email: str | None = None
@@ -974,9 +1082,11 @@ def register_console_routes(
                     repo=None,
                     github=None,
                     agent_override=None,
+                    parent_id=parent_id,
                 )
                 if updated is None:
                     return RedirectResponse("/app/work?flash=error", status_code=303)
+                await _sync_work_project(principal, work_id, project_id)
                 return RedirectResponse(f"/app/work/{work_id}?flash=saved", status_code=303)
             created = await get_state().facade.work_create(
                 principal,
@@ -994,6 +1104,8 @@ def register_console_routes(
                 repo=None,
                 github=None,
                 agent_override=None,
+                project_id=project_id,
+                parent_id=parent_id or None,
             )
             new_id = created.get("id")
             return RedirectResponse(
@@ -1068,32 +1180,13 @@ def register_console_routes(
             return RedirectResponse("/app/projects?flash=error", status_code=303)
 
     async def project_board(request: Request) -> Response:
+        # Projects are now a label/grouping over tasks; a project's tasks live on
+        # the Work page filtered to that project rather than a per-project board.
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        ctx = await _shell(request, principal, "projects")
         project_id = str(request.path_params["project_id"])
-        project: dict[str, Any] | None = None
-        columns: list[dict[str, Any]] = []
-        note = ""
-        try:
-            project = await get_state().facade.project_get(
-                principal, project_id=project_id, include_items=True,
-            )
-            if project is None:
-                note = "Project not found."
-            else:
-                columns = _board_columns(project)
-        except Exception as exc:
-            log.warning("project_board_failed", error=str(exc))
-            note = f"Unavailable: {exc}"
-        ctx.update({
-            "project": project,
-            "columns": columns,
-            "note": note,
-            "flash": request.query_params.get("flash") or "",
-        })
-        return _TEMPLATES.TemplateResponse(request, "project_board.html", ctx)
+        return RedirectResponse(f"/app/work?project={project_id}", status_code=303)
 
     async def project_section_add_post(request: Request) -> Response:
         principal = _session(request)

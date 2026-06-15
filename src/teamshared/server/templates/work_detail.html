@@ -17,7 +17,25 @@
     {% if item %}
     <div class="work-detail-layout">
       <div class="work-detail-main">
+        {% if item.parent %}
+        <a class="work-parent-link" href="/app/work/{{ item.parent.id }}">&#8627; Subtask of {{ item.parent.title }}</a>
+        {% endif %}
         <h1 class="work-detail-title">{{ item.title }}</h1>
+
+        {% if item.subtasks %}
+        <div class="work-detail-section">
+          <h3>Subtasks</h3>
+          <ul class="work-subtask-list">
+            {% for s in item.subtasks %}
+            <li>
+              <span class="work-status-dot {{ s.work_status }}" aria-hidden="true"></span>
+              <a href="/app/work/{{ s.id }}">{{ s.title }}</a>
+              <span class="work-status-pill {{ s.work_status }}">{{ wm.status_label(s.work_status) }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
 
         {% if item.blocked_reason %}
         <div class="work-blocked-banner">
@@ -100,6 +118,17 @@
             {% endif %}
           </div>
         </div>
+
+        {% if item.projects %}
+        <div class="work-prop-row">
+          <div class="work-prop-label">Project</div>
+          <div class="work-prop-value">
+            {% for proj in item.projects %}
+            <a class="work-project-tag" href="/app/work?project={{ proj.id }}">{{ proj.name }}</a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
 
         {% if item.initiative_title %}
         <div class="work-prop-row">
