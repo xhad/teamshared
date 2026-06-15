@@ -23,7 +23,7 @@ from teamshared.server.health import check_components
 from teamshared.server.state import ServerState
 
 # Chart/segment palette — teal-forward, distinct from generic indigo AI palettes.
-_PALETTE = ["#1a6b5c", "#0d9488", "#2d8a5e", "#b45309", "#9d4b6a", "#3d6b8c"]
+_PALETTE = ["#818cf8", "#6366f1", "#7dd3fc", "#38bdf8", "#a5b4fc", "#60a5fa"]
 _DASH = "\u2014"
 
 _DASHBOARD_CSS = """
@@ -39,7 +39,7 @@ _DASHBOARD_CSS = """
   --muted: #9aa0b4;
   --faint: #6b7180;
   --accent: #6366f1;
-  --success: #34d399;
+  --success: #818cf8;
   --danger: #f87171;
   --warn: #fbbf24;
   --warn-soft: rgba(251,191,36,0.14);

@@ -253,7 +253,7 @@ _LANDING_CSS = """
       padding: .15rem .5rem; border-radius: 999px; }
     .pill-sem { background: rgba(99,102,241,.18); color: #a5b4fc; }
     .pill-epi { background: rgba(56,189,248,.16); color: #7dd3fc; }
-    .pill-proc { background: rgba(52,211,153,.16); color: #6ee7b7; }
+    .pill-proc { background: rgba(167,139,250,.16); color: #c4b5fd; }
 
     .cta-band { padding: 5rem 1.5rem; text-align: center; }
     .cta-inner { max-width: 640px; margin: 0 auto; padding: 3rem 2rem; border-radius: 24px;
