@@ -31,31 +31,31 @@ _DASHBOARD_CSS = """
   color-scheme: light;
   --font-sans: "Instrument Sans", "Segoe UI", sans-serif;
   --font-serif: "Source Serif 4", Georgia, serif;
-  --bg: oklch(0.985 0.006 95);
-  --panel: oklch(1 0 0);
-  --panel-2: oklch(0.975 0.007 94);
-  --border: oklch(0.9 0.012 90);
-  --text: oklch(0.28 0.02 70);
-  --muted: oklch(0.48 0.02 75);
-  --faint: oklch(0.62 0.015 78);
-  --accent: oklch(0.42 0.09 175);
-  --success: oklch(0.48 0.12 155);
-  --danger: oklch(0.52 0.19 25);
-  --warn: oklch(0.62 0.14 75);
-  --warn-soft: oklch(0.96 0.04 85);
+  --bg: #07080d;
+  --panel: #11131d;
+  --panel-2: #161927;
+  --border: rgba(255,255,255,0.08);
+  --text: #f4f5fb;
+  --muted: #9aa0b4;
+  --faint: #6b7180;
+  --accent: #6366f1;
+  --success: #34d399;
+  --danger: #f87171;
+  --warn: #fbbf24;
+  --warn-soft: rgba(251,191,36,0.14);
 }
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --bg: oklch(0.16 0.015 75);
-    --panel: oklch(0.22 0.015 75);
-    --panel-2: oklch(0.25 0.015 75);
-    --border: oklch(0.32 0.015 75);
-    --text: oklch(0.93 0.01 90);
-    --muted: oklch(0.72 0.015 85);
-    --faint: oklch(0.58 0.015 80);
-    --accent: oklch(0.68 0.1 175);
-    --warn-soft: oklch(0.3 0.04 85);
+    --bg: #07080d;
+    --panel: #11131d;
+    --panel-2: #161927;
+    --border: rgba(255,255,255,0.08);
+    --text: #f4f5fb;
+    --muted: #9aa0b4;
+    --faint: #6b7180;
+    --accent: #6366f1;
+    --warn-soft: rgba(251,191,36,0.14);
   }
 }
 * { box-sizing: border-box; }
@@ -104,7 +104,7 @@ th, td { text-align: left; padding: .55rem .65rem; border-bottom: 1px solid var(
 th { color: var(--faint); font-weight: 600; text-transform: uppercase; font-size: .68rem; letter-spacing: .04em; }
 td.content { max-width: 28rem; }
 .tag { display: inline-block; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: .1rem .5rem; margin: 0 .2rem .2rem 0; font-size: .75rem; }
-.unavailable { color: var(--warn); background: var(--warn-soft); border: 1px solid color-mix(in oklch, var(--warn) 35%, transparent); border-radius: .625rem; padding: .65rem .9rem; font-size: .88rem; }
+.unavailable { color: var(--warn); background: var(--warn-soft); border: 1px solid rgba(251,191,36,.35); border-radius: .625rem; padding: .65rem .9rem; font-size: .88rem; }
 .foot { max-width: 68rem; margin: 2rem auto 0; color: var(--faint); font-size: .8rem; }
 @media (max-width: 640px) {
   .bar-row { grid-template-columns: 5rem 1fr 2rem; }
