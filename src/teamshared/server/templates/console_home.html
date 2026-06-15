@@ -2,17 +2,45 @@
 {% block title %}Home{% endblock %}
 {% block content %}
   <h1>Team mind overview</h1>
-  <p class="sub">The shared brain at a glance &mdash; live counts and recent activity.
+  <p class="sub">The shared brain at a glance — live counts and recent activity.
     <a href="/app/settings">System status</a> is on Settings.</p>
 
   <h2>Overview</h2>
-  <div class="cards">
-    <div class="card"><div class="num">{{ working_active }}</div><div class="label">Working sessions</div><div class="hint">{{ working_total }} in Redis (active + closed)</div></div>
-    <div class="card"><div class="num">{{ semantic }}</div><div class="label">Semantic</div><div class="hint">facts, preferences, notes</div></div>
-    <div class="card"><div class="num">{{ episodic }}</div><div class="label">Episodic</div><div class="hint">distilled sessions + events</div></div>
-    <div class="card"><div class="num">{{ procedural }}</div><div class="label">Procedural</div><div class="hint">{{ procedural_versions }} total versions</div></div>
-    <div class="card"><a href="/app/work" style="color:inherit;text-decoration:none;"><div class="num">{{ work_open }}</div><div class="label">Open tasks</div><div class="hint">{{ work_blocked }} blocked</div></a></div>
-    <div class="card"><a href="/app/approvals" style="color:inherit;text-decoration:none;"><div class="num">{{ work_pending }}</div><div class="label">Work pending approval</div><div class="hint">Agent-created tasks</div></a></div>
+  <div class="stats-row" role="list">
+    <div class="stat" role="listitem">
+      <div class="num">{{ working_active }}</div>
+      <div class="label">Working sessions</div>
+      <div class="hint">{{ working_total }} in Redis (active + closed)</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="num">{{ semantic }}</div>
+      <div class="label">Semantic</div>
+      <div class="hint">facts, preferences, notes</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="num">{{ episodic }}</div>
+      <div class="label">Episodic</div>
+      <div class="hint">distilled sessions + events</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="num">{{ procedural }}</div>
+      <div class="label">Procedural</div>
+      <div class="hint">{{ procedural_versions }} total versions</div>
+    </div>
+    <div class="stat" role="listitem">
+      <a href="/app/work">
+        <div class="num">{{ work_open }}</div>
+        <div class="label">Open tasks</div>
+        <div class="hint">{{ work_blocked }} blocked</div>
+      </a>
+    </div>
+    <div class="stat" role="listitem">
+      <a href="/app/approvals">
+        <div class="num">{{ work_pending }}</div>
+        <div class="label">Pending approval</div>
+        <div class="hint">Agent-created tasks</div>
+      </a>
+    </div>
   </div>
 
   <h2>Breakdown &amp; activity</h2>
@@ -34,18 +62,20 @@
     <div class="panel">
       <h3>Recent activity</h3>
       {% if recent %}
-      <table>
-        <thead><tr><th>When</th><th>Agent</th><th>Action</th></tr></thead>
-        <tbody>
-          {% for ev in recent %}
-          <tr>
-            <td>{{ (ev.occurred_at or '')[:16] | replace('T', ' ') }}</td>
-            <td>{{ ev.agent or '\u2014' }}</td>
-            <td>{{ ev.action or '\u2014' }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>When</th><th>Agent</th><th>Action</th></tr></thead>
+          <tbody>
+            {% for ev in recent %}
+            <tr>
+              <td>{{ (ev.occurred_at or '')[:16] | replace('T', ' ') }}</td>
+              <td>{{ ev.agent or '\u2014' }}</td>
+              <td>{{ ev.action or '\u2014' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
       {% else %}
         <p class="muted">No activity recorded yet.</p>
       {% endif %}

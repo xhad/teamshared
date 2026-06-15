@@ -3,7 +3,7 @@
 A single server-rendered HTML page (zero JS/CSS dependencies) showing component
 health, per-pillar stats with CSS/inline-SVG charts, and the most recent saved
 records across all four pillars. Mirrors the f-string rendering convention used
-by the get-token and install pages. Every section degrades to "unavailable"
+by the install page. Every section degrades to "unavailable"
 rather than 500 when a backing store is down.
 """
 
@@ -22,58 +22,93 @@ from teamshared.memory.types import MemoryRecord
 from teamshared.server.health import check_components
 from teamshared.server.state import ServerState
 
-# Chart/segment palette. Plain hex so the page renders identically everywhere.
-_PALETTE = ["#4f46e5", "#0891b2", "#16a34a", "#d97706", "#db2777", "#6366f1"]
+# Chart/segment palette — teal-forward, distinct from generic indigo AI palettes.
+_PALETTE = ["#1a6b5c", "#0d9488", "#2d8a5e", "#b45309", "#9d4b6a", "#3d6b8c"]
 _DASH = "\u2014"
 
 _DASHBOARD_CSS = """
-:root { color-scheme: light; }
+:root {
+  color-scheme: light;
+  --font-sans: "Instrument Sans", "Segoe UI", sans-serif;
+  --font-serif: "Source Serif 4", Georgia, serif;
+  --bg: oklch(0.985 0.006 95);
+  --panel: oklch(1 0 0);
+  --panel-2: oklch(0.975 0.007 94);
+  --border: oklch(0.9 0.012 90);
+  --text: oklch(0.28 0.02 70);
+  --muted: oklch(0.48 0.02 75);
+  --faint: oklch(0.62 0.015 78);
+  --accent: oklch(0.42 0.09 175);
+  --success: oklch(0.48 0.12 155);
+  --danger: oklch(0.52 0.19 25);
+  --warn: oklch(0.62 0.14 75);
+  --warn-soft: oklch(0.96 0.04 85);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: oklch(0.16 0.015 75);
+    --panel: oklch(0.22 0.015 75);
+    --panel-2: oklch(0.25 0.015 75);
+    --border: oklch(0.32 0.015 75);
+    --text: oklch(0.93 0.01 90);
+    --muted: oklch(0.72 0.015 85);
+    --faint: oklch(0.58 0.015 80);
+    --accent: oklch(0.68 0.1 175);
+    --warn-soft: oklch(0.3 0.04 85);
+  }
+}
 * { box-sizing: border-box; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  margin: 0; padding: 2rem; background: #f7f7fb; color: #1f2330; line-height: 1.5;
+  font-family: var(--font-sans);
+  margin: 0; padding: clamp(1.25rem, 1rem + 1.5vw, 2rem);
+  background: var(--bg); color: var(--text); line-height: 1.55;
 }
-h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
-h2 { margin: 2rem 0 .75rem; font-size: 1.15rem; }
-.muted { color: #6b7280; }
-a { color: #4f46e5; }
-.bar-wrap { max-width: 1100px; margin: 0 auto; }
+h1 { font-family: var(--font-serif); margin: 0 0 .25rem; font-size: clamp(1.45rem, 1.2rem + 1vw, 1.75rem); font-weight: 600; }
+h2 { font-family: var(--font-serif); margin: 2rem 0 .75rem; font-size: 1.1rem; font-weight: 600; }
+.muted { color: var(--faint); }
+a { color: var(--accent); }
+.bar-wrap { max-width: 68rem; margin: 0 auto; }
 .badges { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 0; }
 .badge {
   display: inline-flex; align-items: center; gap: .4rem;
-  padding: .25rem .6rem; border-radius: 999px; font-size: .8rem;
-  background: #eef0f6; border: 1px solid #dfe2ec;
+  padding: .25rem .6rem; border-radius: 999px; font-size: .78rem;
+  background: var(--panel-2); border: 1px solid var(--border);
 }
-.dot { width: .6rem; height: .6rem; border-radius: 50%; background: #9ca3af; }
-.dot.ok { background: #16a34a; }
-.dot.bad { background: #dc2626; }
-.dot.warn { background: #d97706; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+.dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--faint); }
+.dot.ok { background: var(--success); }
+.dot.bad { background: var(--danger); }
+.dot.warn { background: var(--warn); }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .75rem; }
 .card {
-  background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1rem 1.25rem;
+  background: var(--panel); border: 1px solid var(--border); border-radius: .875rem; padding: 1rem 1.15rem;
 }
-.card .num { font-size: 2rem; font-weight: 700; }
-.card .label { font-size: .85rem; color: #6b7280; text-transform: uppercase; letter-spacing: .03em; }
-.card .sub { font-size: .8rem; color: #9ca3af; margin-top: .25rem; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
-.panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.25rem; }
-.panel h3 { margin: 0 0 1rem; font-size: 1rem; }
-.bar-row { display: grid; grid-template-columns: 130px 1fr 48px; align-items: center; gap: .6rem; margin: .4rem 0; }
-.bar-row .name { font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar-row .track { background: #eef0f6; border-radius: 6px; height: 14px; overflow: hidden; }
-.bar-row .fill { height: 100%; border-radius: 6px; }
-.bar-row .val { font-size: .8rem; text-align: right; color: #6b7280; }
+.card .num { font-family: var(--font-serif); font-size: 1.85rem; font-weight: 600; }
+.card .label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.card .sub { font-size: .76rem; color: var(--faint); margin-top: .25rem; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1.25rem; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: .875rem; padding: 1.15rem 1.25rem; }
+.panel h3 { margin: 0 0 1rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--faint); font-weight: 600; }
+.bar-row { display: grid; grid-template-columns: 7.5rem 1fr 2.5rem; align-items: center; gap: .65rem; margin: .45rem 0; }
+.bar-row .name { font-size: .84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-row .track { background: var(--panel-2); border-radius: .375rem; height: .5rem; overflow: hidden; }
+.bar-row .fill { height: 100%; border-radius: .375rem; }
+.bar-row .val { font-size: .78rem; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .donut-wrap { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
 .legend { list-style: none; padding: 0; margin: 0; font-size: .85rem; }
 .legend li { display: flex; align-items: center; gap: .5rem; margin: .3rem 0; }
 .swatch { width: .8rem; height: .8rem; border-radius: 3px; display: inline-block; }
-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
-th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid #eef0f6; vertical-align: top; }
-th { color: #6b7280; font-weight: 600; text-transform: uppercase; font-size: .72rem; letter-spacing: .03em; }
-td.content { max-width: 460px; }
-.tag { display: inline-block; background: #eef0f6; border-radius: 5px; padding: 0 .35rem; margin: 0 .2rem .2rem 0; font-size: .75rem; }
-.unavailable { color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: .6rem .8rem; font-size: .85rem; }
-.foot { max-width: 1100px; margin: 2rem auto 0; color: #9ca3af; font-size: .8rem; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+th, td { text-align: left; padding: .55rem .65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--faint); font-weight: 600; text-transform: uppercase; font-size: .68rem; letter-spacing: .04em; }
+td.content { max-width: 28rem; }
+.tag { display: inline-block; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: .1rem .5rem; margin: 0 .2rem .2rem 0; font-size: .75rem; }
+.unavailable { color: var(--warn); background: var(--warn-soft); border: 1px solid color-mix(in oklch, var(--warn) 35%, transparent); border-radius: .625rem; padding: .65rem .9rem; font-size: .88rem; }
+.foot { max-width: 68rem; margin: 2rem auto 0; color: var(--faint); font-size: .8rem; }
+@media (max-width: 640px) {
+  .bar-row { grid-template-columns: 5rem 1fr 2rem; }
+}
 """
 
 
@@ -368,13 +403,16 @@ def _render_page(
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..700&display=swap" rel="stylesheet" />
   <title>teamshared — memory status</title>
   <style>{_DASHBOARD_CSS}</style>
 </head>
 <body>
   <div class="bar-wrap">
     <h1>teamshared memory status</h1>
-    <p class="muted">Shared brain across the team. <a href="/">Home</a> &middot; <a href="/app">Team console</a> &middot; <a href="/get-token">Get a token</a></p>
+    <p class="muted">Shared brain across the team. <a href="/">Home</a> &middot; <a href="/app">Team console</a> &middot; <a href="/app/keys">API keys</a></p>
     {_health_badges(health)}
 
     <h2>Overview</h2>

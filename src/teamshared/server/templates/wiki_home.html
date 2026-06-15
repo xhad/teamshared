@@ -34,6 +34,7 @@
   <h2>Recently updated</h2>
   {% if recent %}
   <div class="panel">
+    <div class="table-wrap">
     <table>
       <thead><tr><th>Content</th><th>Subject</th><th>Agent</th><th>When</th></tr></thead>
       <tbody>
@@ -47,6 +48,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
   {% else %}
   <p class="muted">Nothing captured yet.</p>

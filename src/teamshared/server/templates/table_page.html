@@ -6,6 +6,7 @@
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
   <div class="panel">
     {% if rows %}
+    <div class="table-wrap">
     <table>
       <thead><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
       <tbody>
@@ -14,6 +15,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% elif not note %}
     <p class="muted">Nothing here yet.</p>
     {% endif %}

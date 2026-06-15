@@ -34,7 +34,7 @@ from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.invite import InviteStore
 from teamshared.logging import configure_logging
 from teamshared.server.services import make_services
-from teamshared.server.token_api import get_token_path, invite_redeem_curl, invite_redeem_url
+from teamshared.server.token_api import invite_mint_path, invite_redeem_curl, invite_redeem_url
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="teamshared memory CLI")
 token_app = typer.Typer(no_args_is_help=True, help="Bearer-token management")
@@ -622,20 +622,19 @@ def token_invite_create(
     if base:
         root = base.rstrip("/")
         if record.agent:
-            link = f"{root}{get_token_path(record.code, record.agent)}"
             curl = invite_redeem_curl(root, record.code, record.agent)
             root_url = invite_redeem_url(root, record.code, record.agent)
-        else:
-            link = f"{root}{get_token_path(record.code)}"
-            curl = invite_redeem_curl(root, record.code, "<agent>")
-            root_url = None
-        console.print(f"[bold]link[/bold]: {link}")
-        console.print(f"[bold]curl[/bold]: {curl}")
-        if root_url:
+            mint_path = invite_mint_path(record.code, record.agent)
+            console.print(f"[bold]mint[/bold]: POST {root}{mint_path}")
+            console.print(f"[bold]curl[/bold]: {curl}")
             console.print(f"[bold]url[/bold]: {root_url}")
+        else:
+            console.print(
+                "[dim]Bind an agent type on create (--agent cursor) to print curl/url hints.[/dim]"
+            )
     else:
         console.print(
-            "[dim]Set TEAMSHARED_PUBLIC_URL to print a shareable /get-token link.[/dim]"
+            "[dim]Set TEAMSHARED_PUBLIC_URL to print shareable invite redemption hints.[/dim]"
         )
 
 

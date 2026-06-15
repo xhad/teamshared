@@ -89,9 +89,6 @@ def _redemption_app(limiter: RedisRateLimiter) -> Starlette:
     app = Starlette(
         routes=[
             Route("/", root, methods=["GET"]),
-            Route("/get-token", root, methods=["GET"]),
-            Route("/get-token/{invite}", root, methods=["GET"]),
-            Route("/get-token/{invite}/{agent}", root, methods=["GET"]),
         ],
         middleware=[Middleware(HttpRateLimitMiddleware)],
     )
@@ -108,18 +105,10 @@ def test_root_invite_redemption_returns_429(limiter: RedisRateLimiter) -> None:
     assert resp.json()["error"] == "rate_limited"
 
 
-def test_get_token_path_redemption_returns_429(limiter: RedisRateLimiter) -> None:
-    client = TestClient(_redemption_app(limiter))
-    assert client.get("/get-token/abc/cursor").status_code == 200
-    assert client.get("/get-token/abc/cursor").status_code == 200
-    assert client.get("/get-token/abc/cursor").status_code == 429
-
-
-def test_plain_landing_and_form_pages_not_throttled(limiter: RedisRateLimiter) -> None:
+def test_plain_landing_not_throttled(limiter: RedisRateLimiter) -> None:
     client = TestClient(_redemption_app(limiter))
     for _ in range(5):
         assert client.get("/").status_code == 200
-        assert client.get("/get-token").status_code == 200
 
 
 def _mcp_app(limiter: RedisRateLimiter) -> Starlette:

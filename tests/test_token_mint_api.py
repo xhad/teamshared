@@ -13,7 +13,6 @@ from teamshared.config import Settings
 from teamshared.invite import InviteStore
 from teamshared.server.token_api import (
     MINT_SECRET_HEADER,
-    handle_get_token_page,
     handle_root,
     handle_token_invite_create,
     handle_token_mint,
@@ -44,18 +43,6 @@ def _invite_app(settings: Settings, invites: InviteStore) -> Starlette:
         return await handle_token_invite_create(request, settings, invites)
 
     return Starlette(routes=[Route("/tokens/invites", route, methods=["POST"])])
-
-
-def _get_token_app(settings: Settings, minter: _StubMinter, invites: InviteStore) -> Starlette:
-    async def route(request):  # type: ignore[no-untyped-def]
-        return await handle_get_token_page(request, settings, minter, invites)
-
-    return Starlette(
-        routes=[
-            Route("/get-token/{invite}/{agent}", route, methods=["GET"]),
-            Route("/get-token", route, methods=["GET"]),
-        ]
-    )
 
 
 def test_token_mint_disabled_when_both_paths_off(tmp_path: Path) -> None:
@@ -214,22 +201,6 @@ def test_token_mint_with_invite_path(tmp_path: Path) -> None:
         assert invites.get(record.code) is None
 
 
-def test_get_token_page_redeems_invite_path(tmp_path: Path) -> None:
-    settings = Settings(
-        _env_file=None,
-        self_service_tokens=True,
-        invites_file=tmp_path / "invites.json",
-    )
-    minter = _StubMinter()
-    invites = InviteStore(settings.invites_file)
-    record = invites.create(agent="cursor-web", uses=1)
-    with TestClient(_get_token_app(settings, minter, invites)) as client:
-        resp = client.get(f"/get-token/{record.code}/cursor-web")
-        assert resp.status_code == 200
-        assert "tsk_" in resp.text
-        assert invites.get(record.code) is None
-
-
 def _root_app(settings: Settings, minter: _StubMinter, invites: InviteStore) -> Starlette:
     async def route(request):  # type: ignore[no-untyped-def]
         return await handle_root(request, settings, minter, invites)
@@ -251,7 +222,7 @@ def test_root_landing_page(tmp_path: Path) -> None:
         assert "teamshared" in resp.text
         assert "Multi-pillar agent memory" in resp.text
         assert "memory_recall" in resp.text
-        assert 'href="/get-token"' in resp.text
+        assert 'href="/install"' in resp.text
 
 
 def test_root_banner_json(tmp_path: Path) -> None:
@@ -267,6 +238,7 @@ def test_root_banner_json(tmp_path: Path) -> None:
         body = resp.json()
         assert body["service"] == "teamshared"
         assert "token_via_invite" in body
+        assert "get_token" not in body
 
 
 def test_root_redeems_invite_as_plain_text(tmp_path: Path) -> None:
@@ -308,47 +280,6 @@ def test_root_redeems_invite_as_json(tmp_path: Path) -> None:
         assert body.get("token_type") == "tsk"
 
 
-def test_get_token_page_shows_cursor_mcp_json(tmp_path: Path) -> None:
-    settings = Settings(
-        _env_file=None,
-        self_service_tokens=True,
-        invites_file=tmp_path / "invites.json",
-    )
-    minter = _StubMinter()
-    invites = InviteStore(settings.invites_file)
-    record = invites.create(agent="cursor", uses=1)
-    with TestClient(_get_token_app(settings, minter, invites)) as client:
-        resp = client.get(f"/get-token/{record.code}/cursor")
-        assert resp.status_code == 200
-        assert "Connect teamshared to Cursor" in resp.text
-        assert "mcpServers" in resp.text
-        assert "~/.cursor/mcp.json" in resp.text
-        assert "Memory rule" in resp.text
-        assert "teamshared.mdc" in resp.text
-        assert "teamshared Memory Protocol" in resp.text
-        assert "~/.cursor/rules/teamshared.mdc" in resp.text
-        assert "Memory rule section" in resp.text
-        assert 'id="about-teamshared"' in resp.text
-        assert "Multi-pillar agent memory" in resp.text
-        assert "memory_recall" in resp.text
-
-
-def test_get_token_form_shows_connect_page(tmp_path: Path) -> None:
-    settings = Settings(
-        _env_file=None,
-        self_service_tokens=True,
-        invites_file=tmp_path / "invites.json",
-    )
-    minter = _StubMinter()
-    invites = InviteStore(settings.invites_file)
-    with TestClient(_get_token_app(settings, minter, invites)) as client:
-        resp = client.get("/get-token")
-        assert resp.status_code == 200
-        assert "Connect an agent" in resp.text
-        assert "Learn what teamshared does" in resp.text
-        assert "Have an invite code?" in resp.text
-
-
 def test_invite_normalizes_cursor_chad_to_cursor(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
@@ -364,22 +295,3 @@ def test_invite_normalizes_cursor_chad_to_cursor(tmp_path: Path) -> None:
         body = resp.json()
         assert body["agent"] == "cursor"
         assert body["token"].startswith("tsk_")
-
-
-def test_get_token_page_redeems_invite(tmp_path: Path) -> None:
-    settings = Settings(
-        _env_file=None,
-        self_service_tokens=True,
-        invites_file=tmp_path / "invites.json",
-    )
-    minter = _StubMinter()
-    invites = InviteStore(settings.invites_file)
-    record = invites.create(agent="cursor-web", uses=1)
-    with TestClient(_get_token_app(settings, minter, invites)) as client:
-        resp = client.get(
-            "/get-token",
-            params={"invite": record.code, "agent": "cursor-web"},
-        )
-        assert resp.status_code == 200
-        assert "tsk_" in resp.text
-        assert invites.get(record.code) is None

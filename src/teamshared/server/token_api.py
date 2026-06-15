@@ -12,11 +12,8 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, R
 
 from teamshared.clients.agent_setup import (
     KNOWN_AGENT_TYPES,
-    agent_setup,
-    load_teamshared_memory_rule_mdc,
     normalize_agent_type,
 )
-from teamshared.clients.readme_page import render_readme_html
 from teamshared.config import Settings
 from teamshared.identity.agent_tokens import AgentTokenMinter
 from teamshared.invite import InviteStore
@@ -127,13 +124,6 @@ async def _mint_via_invite(
 def invite_mint_path(invite: str, agent: str) -> str:
     """Path suffix for invite-based minting (``/tokens/mint/{invite}/{agent}``)."""
     return f"/tokens/mint/{invite}/{agent}"
-
-
-def get_token_path(invite: str, agent: str | None = None) -> str:
-    """Path for browser token redemption."""
-    if agent:
-        return f"/get-token/{invite}/{agent}"
-    return f"/get-token/{invite}"
 
 
 _LANDING_CSS = """
@@ -304,7 +294,6 @@ def _service_banner_json() -> JSONResponse:
             "health": "/health",
             "memory_dashboard": "/memory",
             "state": "/state",
-            "get_token": "/get-token",
             "tokens_mint": "/tokens/mint",
             "tokens_invites": "/tokens/invites",
             "token_via_invite": "/?invite=<code>&agent=<name>",
@@ -363,7 +352,7 @@ def _landing_page_html() -> str:
         </p>
         <div class="hero-actions">
           <a class="btn btn-primary btn-lg" href="/login">Create your free account</a>
-          <a class="btn btn-ghost btn-lg" href="/get-token">Connect an agent</a>
+          <a class="btn btn-ghost btn-lg" href="/install">Install an agent</a>
         </div>
         <div class="hero-install">
           <span class="prompt">$</span>
@@ -484,7 +473,7 @@ def _landing_page_html() -> str:
         ready immediately.</p>
         <div class="hero-actions">
           <a class="btn btn-primary btn-lg" href="/login">Create your free account</a>
-          <a class="btn btn-ghost btn-lg" href="/get-token">Connect an agent</a>
+          <a class="btn btn-ghost btn-lg" href="/install">Install an agent</a>
         </div>
       </div>
     </section>
@@ -634,348 +623,6 @@ async def handle_token_invite_create(
         }
     )
 
-
-async def handle_get_token_page(
-    request: Request,
-    settings: Settings,
-    minter: AgentTokenMinter,
-    invites: InviteStore,
-) -> Response:
-    """Simple browser page for redeeming an invite code."""
-    if not settings.self_service_tokens:
-        return HTMLResponse("<h1>Token self-service is disabled</h1>", status_code=404)
-
-    invite_code = (
-        request.path_params.get("invite")
-        or request.query_params.get("invite", "")
-    ).strip()
-    record = invites.get(invite_code) if invite_code else None
-    preset_type = normalize_agent_type(record.agent) if record and record.agent else None
-    agent = (
-        request.path_params.get("agent")
-        or request.query_params.get("agent", "")
-    ).strip()
-    if not agent and preset_type:
-        agent = preset_type
-    error = ""
-
-    if invite_code:
-        if record is None:
-            error = "Invalid or expired invite code."
-        else:
-            agent_type = _resolve_invite_agent_type(agent or None, record.agent)
-            if agent_type is None:
-                if agent or record.agent:
-                    error = f"Agent must be one of: {', '.join(sorted(KNOWN_AGENT_TYPES))}."
-                else:
-                    error = "Choose your agent type below."
-            elif invites.redeem(invite_code) is None:
-                error = "Invalid or expired invite code."
-            else:
-                _, token = await minter.mint(agent_type)
-                log.info("token_minted_via_web", agent=agent_type, token_prefix=token[:12])
-                base = str(request.base_url).rstrip("/")
-                return HTMLResponse(
-                    _token_result_html(agent_type, token, base),
-                    status_code=200,
-                )
-
-    return HTMLResponse(
-        _token_form_html(error=error, invite=invite_code, agent=agent, preset_type=preset_type)
-    )
-
-
-_CONNECT_PAGE_CSS = """
-    .flow { max-width: 760px; margin: 0 auto; display: grid; gap: 1rem; }
-    .flow .step { display: grid; grid-template-columns: auto 1fr; gap: 1.1rem; align-items: start;
-      background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.3rem 1.4rem; }
-    .flow .step .step-n { margin-bottom: 0; }
-    .flow .step h3 { font-size: 1.1rem; margin-bottom: .35rem; }
-    .flow .step p { color: var(--muted); font-size: .95rem; }
-    .flow .step p + p { margin-top: .5rem; }
-    .flow .step a { color: var(--indigo-bright); }
-    .flow .step a:hover { color: #fff; }
-    .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; align-items: start; }
-    .install-card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 1.6rem 1.5rem; }
-    .install-card h3 { font-size: 1.15rem; margin-bottom: .35rem; }
-    .install-card > p { color: var(--muted); font-size: .94rem; margin-bottom: 1rem; }
-    .install-card h4 { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em;
-      color: var(--muted); margin: 1.2rem 0 .5rem; }
-    pre.snippet { background: #05060a; border: 1px solid var(--border); border-radius: 12px;
-      padding: 1rem 1.1rem; overflow-x: auto; font-size: .84rem; color: #d7dae6;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; line-height: 1.5; }
-    pre.snippet.wrap { white-space: pre-wrap; max-height: 22rem; overflow-y: auto; }
-    .path-note { color: var(--muted); font-size: .85rem; margin: .4rem 0 0; }
-    .path-note code { background: rgba(255,255,255,.06); border-radius: 5px; padding: .05rem .35rem;
-      color: var(--indigo-bright); }
-    details.rule { margin-top: .8rem; border: 1px solid var(--border); border-radius: 10px;
-      background: rgba(255,255,255,.02); padding: .3rem .9rem; }
-    details.rule summary { cursor: pointer; color: var(--indigo-bright); font-size: .9rem;
-      font-weight: 600; padding: .55rem 0; }
-    details.rule[open] summary { margin-bottom: .6rem; }
-    .form-card { max-width: 460px; margin: 0 auto; background: var(--panel);
-      border: 1px solid var(--border); border-radius: 16px; padding: 1.6rem 1.6rem 1.8rem; }
-    .form-card label { display: block; margin-top: 1rem; font-weight: 600; font-size: .8rem;
-      text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-    .form-card input { width: 100%; padding: .6rem .7rem; margin-top: .35rem; box-sizing: border-box;
-      border-radius: 8px; border: 1px solid var(--border); background: #05060a; color: var(--text);
-      font-size: .95rem; }
-    .form-card input:focus { outline: none; border-color: var(--indigo-bright);
-      box-shadow: 0 0 0 2px rgba(99,102,241,.25); }
-    .form-card .btn { width: 100%; margin-top: 1.3rem; }
-    .err { color: #fca5a5; background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3);
-      border-radius: 10px; padding: .7rem .9rem; font-size: .92rem; margin: 0 auto 1.2rem; max-width: 460px; }
-    @media (max-width: 900px) { .cols2 { grid-template-columns: 1fr; } }
-"""
-
-
-def _token_form_html(
-    *,
-    error: str,
-    invite: str,
-    agent: str,
-    preset_type: str | None = None,
-) -> str:
-    err = f"<p class='err'>{escape(error)}</p>" if error else ""
-    agent_value = preset_type or agent
-    readonly = " readonly" if preset_type else ""
-    install_cmd = "curl -fsSL https://teamshared.com/install.sh | bash"
-    mcp_url = "https://teamshared.com/mcp"
-    claude_config_path = "~/Library/Application Support/Claude/claude_desktop_config.json"
-    claude_mcp = (
-        "{\n"
-        '  "mcpServers": {\n'
-        '    "teamshared": {\n'
-        f'      "url": "{mcp_url}",\n'
-        '      "headers": { "Authorization": "Bearer tsk_YOUR_API_KEY" }\n'
-        "    }\n"
-        "  }\n"
-        "}"
-    )
-    rule_md = load_teamshared_memory_rule_mdc()
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" href="/favicon.ico" sizes="any" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
-  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <title>Connect an agent — TeamShared</title>
-  <meta name="description" content="Connect Cursor, Claude, Codex, and any MCP agent to TeamShared: sign in, create an org, add an agent, mint an API key, and install over MCP." />
-  <style>{_LANDING_CSS}{_CONNECT_PAGE_CSS}</style>
-</head>
-<body>
-  <header class="nav">
-    <div class="nav-inner">
-      <a class="brand" href="/">
-        <span class="brand-mark" aria-hidden="true"></span>
-        TeamShared
-      </a>
-      <nav class="nav-links">
-        <a href="#steps">Steps</a>
-        <a href="#install">Install</a>
-        <a href="#invite">Invite code</a>
-        <a href="/">What is it?</a>
-      </nav>
-      <div class="nav-cta">
-        <a class="link" href="/login">Sign in</a>
-        <a class="btn btn-primary" href="/login">Open console</a>
-      </div>
-    </div>
-  </header>
-
-  <main>
-    <section class="hero">
-      <div class="hero-glow" aria-hidden="true"></div>
-      <div class="hero-inner">
-        <a class="eyebrow" href="/">Connect over MCP · works with every agent</a>
-        <h1>Connect an agent<br />to your shared memory.</h1>
-        <p class="lede">
-          Five steps: sign in, create or join an org, add an agent, mint an API key, then
-          connect your client over MCP — with one install script or a quick manual setup.
-        </p>
-        <div class="hero-actions">
-          <a class="btn btn-primary btn-lg" href="/login">Sign in to get started</a>
-          <a class="btn btn-ghost btn-lg" href="#install">See install options</a>
-        </div>
-        <div class="hero-install">
-          <span class="prompt">$</span>
-          <code>{install_cmd}</code>
-        </div>
-        <p class="hero-foot"><a href="/">Learn what teamshared does</a> before you connect.</p>
-      </div>
-    </section>
-
-    <section id="steps" class="section">
-      <div class="section-head">
-        <h2>From zero to connected in five steps.</h2>
-        <p>Humans set things up in the console; your agent does the rest over MCP.</p>
-      </div>
-      <div class="flow">
-        <article class="step">
-          <span class="step-n">1</span>
-          <div>
-            <h3>Sign in</h3>
-            <p>Open the <a href="/login">console</a> and sign in with your email — we send a
-            one-time code, no password. Your first sign-in creates your own private org.</p>
-          </div>
-        </article>
-        <article class="step">
-          <span class="step-n">2</span>
-          <div>
-            <h3>Create or join an org</h3>
-            <p>An org is a shared brain. Use the org switcher in the header to spin up a new one,
-            or have an admin add you to your team's org (People → add member by email).</p>
-            <p>A fresh org starts empty and isolated; joining the team is what makes memory shared.</p>
-          </div>
-        </article>
-        <article class="step">
-          <span class="step-n">3</span>
-          <div>
-            <h3>Create an agent</h3>
-            <p>In <strong>Agents</strong>, add the identity you'll connect — e.g.
-            <code>cursor</code>, <code>claude</code>, or <code>codex</code>. The agent is who
-            memory writes get attributed to in the shared brain.</p>
-          </div>
-        </article>
-        <article class="step">
-          <span class="step-n">4</span>
-          <div>
-            <h3>Create an API key</h3>
-            <p>Under <strong>API Keys</strong>, mint a <code>tsk_…</code> key for that agent.
-            It's shown once — copy it now. This key is the bearer token your client sends on
-            every MCP request.</p>
-          </div>
-        </article>
-        <article class="step">
-          <span class="step-n">5</span>
-          <div>
-            <h3>Connect your agent</h3>
-            <p>Run the one-line installer, or paste the MCP config and memory rule into your
-            client by hand. Both options are below — including a manual walkthrough for Claude.</p>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <section id="install" class="section section-alt">
-      <div class="section-head">
-        <h2>Install: scripted or by hand.</h2>
-        <p>Use the installer for the common clients, or wire up MCP manually with your API key.</p>
-      </div>
-      <div class="cols2">
-        <article class="install-card">
-          <h3>Option A — install.sh</h3>
-          <p>The fastest path. The script detects your client, writes the MCP config, and
-          installs the memory rule. It prompts for the <code>tsk_…</code> API key from step 4.</p>
-          <h4>Run</h4>
-          <pre class="snippet">{escape(install_cmd)}</pre>
-          <p class="path-note">Covers {", ".join(a.capitalize() for a in sorted(KNOWN_AGENT_TYPES))}. Re-run any time to update.</p>
-        </article>
-        <article class="install-card">
-          <h3>Option B — manual setup (Claude)</h3>
-          <p>For Claude Desktop, add the MCP server and the memory rule yourself.</p>
-          <h4>1. MCP server</h4>
-          <p class="path-note">Merge into <code>{escape(claude_config_path)}</code>
-          (Claude Code: <code>claude mcp add</code> or a project <code>.mcp.json</code>),
-          then restart Claude.</p>
-          <pre class="snippet">{escape(claude_mcp)}</pre>
-          <p class="path-note">Replace <code>tsk_YOUR_API_KEY</code> with the key from step 4.</p>
-          <h4>2. Memory rule</h4>
-          <p class="path-note">Paste the protocol into Claude's instructions
-          (<code>CLAUDE.md</code> or custom instructions) so the agent recalls team memory first.</p>
-          <details class="rule">
-            <summary>Show teamshared memory rule</summary>
-            <pre class="snippet wrap">{escape(rule_md)}</pre>
-          </details>
-        </article>
-      </div>
-    </section>
-
-    <section id="invite" class="section">
-      <div class="section-head">
-        <h2>Have an invite code?</h2>
-        <p>Redeem an admin invite to mint a bearer token directly, without signing in.</p>
-      </div>
-      {err}
-      <form class="form-card" method="get" action="/get-token">
-        <label for="invite">Invite code</label>
-        <input id="invite" name="invite" required value="{escape(invite)}" />
-        <label for="agent">Agent type</label>
-        <input id="agent" name="agent" required placeholder="cursor" value="{escape(agent_value)}"{readonly} />
-        <button class="btn btn-primary" type="submit">Create token</button>
-      </form>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <div class="footer-inner">
-      <span class="brand"><span class="brand-mark" aria-hidden="true"></span> TeamShared</span>
-      <span class="footer-tag">Multi-pillar agent memory, exposed as an MCP server.</span>
-      <nav class="footer-links">
-        <a href="/login">Sign in</a>
-        <a href="/install">Install</a>
-        <a href="/health">Health</a>
-      </nav>
-    </div>
-  </footer>
-</body>
-</html>"""
-
-
-def _token_result_html(agent_type: str, token: str, base_url: str) -> str:
-    mcp_url = f"{base_url}/mcp"
-    setup = agent_setup(agent_type, mcp_url=mcp_url, token=token)
-    if setup is None:
-        return f"""<!doctype html>
-<html lang="en"><body><pre>{escape(token)}</pre></body></html>"""
-
-    steps_html = "".join(f"<li>{escape(step)}</li>" for step in setup.steps)
-    rule_section = ""
-    if setup.rule_mdc:
-        rule_steps_html = "".join(
-            f"<li>{escape(step)}</li>" for step in setup.rule_install_steps
-        )
-        rule_section = f"""
-  <h2>Memory rule — <code>teamshared.mdc</code></h2>
-  <p>Copy this rule from the page into Cursor so agents recall team memory on every turn.</p>
-  <p class="path"><strong>Save to:</strong> <code>~/.cursor/rules/teamshared.mdc</code></p>
-  <ol>{rule_steps_html}</ol>
-  <pre class="rule">{escape(setup.rule_mdc)}</pre>
-"""
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <link rel="icon" href="/favicon.ico" sizes="any" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <title>teamshared setup — {escape(setup.title)}</title>
-  <style>
-    body {{ font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }}
-    pre {{ word-break: break-all; background: #f4f4f5; padding: 0.75rem; overflow-x: auto; font-size: 0.9rem; }}
-    pre.rule {{ white-space: pre-wrap; max-height: 28rem; overflow-y: auto; }}
-    ol {{ padding-left: 1.25rem; }}
-    .path {{ color: #555; font-size: 0.95rem; }}
-    h2 {{ margin-top: 2rem; font-size: 1.15rem; }}
-    .readme-intro {{ color: #52525b; }}
-  </style>
-</head>
-<body>
-  <h1>Connect teamshared to {escape(setup.title)}</h1>
-  <p>Your bearer token is embedded in the config below. It is shown once — copy it now if you need it elsewhere.</p>
-  <p class="path"><strong>Config paths:</strong> <code>{escape(setup.config_path)}</code></p>
-  <ol>{steps_html}</ol>
-  {rule_section}
-  <h2>MCP config</h2>
-  <pre>{escape(setup.snippet)}</pre>
-  <p><strong>Token only:</strong></p>
-  <pre>{escape(token)}</pre>
-  {render_readme_html()}
-</body>
-</html>"""
 
 
 def invite_redeem_url(base_url: str, invite: str, agent: str) -> str:

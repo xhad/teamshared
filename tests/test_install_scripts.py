@@ -32,8 +32,8 @@ def test_unified_install_script() -> None:
     assert "_ts_tty" in body
     assert "/dev/tty" in body
     assert "_ts_prompt_token" in body
-    assert "/get-token" in body
-    # Accept both legacy /get-token tokens and console API keys.
+    assert "/app/keys" in body
+    # Accept console API keys (tsk_*).
     assert "tsk_*)" in body
     assert "token should start with tsk_" in body
     assert "https://teamshared.com/mcp" in body

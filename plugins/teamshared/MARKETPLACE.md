@@ -23,7 +23,7 @@ Once this repo is public (or teammates have access):
    Or use **Settings → Plugins** and enable **teamshared**.
 
 4. Add the MCP server to `~/.cursor/mcp.json` with the URL and bearer token **inline**
-   (no environment variables — `/get-token` and `install.sh` write this for you):
+   (no environment variables — `install.sh` writes this for you):
 
    ```json
    {
@@ -57,7 +57,7 @@ ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 
 Get a token: sign in to the web console at `<server>/app` (self-service — any
 email + a one-time passcode; first sign-in creates your own org) and mint one
-under **API Keys**, open your server's `/get-token` page, or ask an admin for an
+under **API Keys** in the console (`/app/keys`), or ask an admin for an
 invite link.
 
 ## Publish to Cursor Marketplace (official listing)

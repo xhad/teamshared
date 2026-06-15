@@ -35,12 +35,12 @@ ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 1. **teamshared server + bearer token** — sign in to the web console at
    `<server>/app` (e.g. https://teamshared.com/app) with your email and a
    one-time passcode, then mint a key under **API Keys** (`tsk_…`). The
-   `/get-token` page works too, or ask an admin for an invite link. First sign-in
+   the console **API Keys** page (`/app/keys`) works too, or ask an admin for an invite link. First sign-in
    is self-service: any email gets its own org, and you can create/switch orgs and
    add teammates (People → add member) from the console. The bearer token below is
    what Cursor's MCP client uses.
 2. **MCP server config** — put the URL and bearer token **directly** in `~/.cursor/mcp.json`
-   (no environment variables). The `/get-token` page and `install.sh` write this for you;
+   (no environment variables). `install.sh` writes this for you;
    to do it manually, merge:
 
 ```json

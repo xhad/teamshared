@@ -193,13 +193,11 @@ def rate_limit_response(
 def _is_invite_redemption(path: str, request: Request) -> bool:
     """True for public GET paths that redeem an invite into a bearer token.
 
-    ``GET /?invite=`` and ``GET /get-token[/...]`` mint real ``tsk_*`` tokens
-    but are classified ``PUBLIC_UNAUTH``, so they need the same per-IP mint
-    budget as ``POST /tokens/mint`` (otherwise redemption spam is free).
+    ``GET /?invite=`` mints real ``tsk_*`` tokens but is classified
+    ``PUBLIC_UNAUTH``, so it needs the same per-IP mint budget as
+    ``POST /tokens/mint`` (otherwise redemption spam is free).
     """
-    if path in {"/", "/get-token"}:
-        return bool(request.query_params.get("invite", "").strip())
-    return path.startswith("/get-token/")
+    return path == "/" and bool(request.query_params.get("invite", "").strip())
 
 
 class HttpRateLimitMiddleware(BaseHTTPMiddleware):

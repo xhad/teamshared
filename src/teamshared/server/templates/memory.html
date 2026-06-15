@@ -5,12 +5,12 @@
   .mem-search { display: flex; gap: .6rem; margin: 0 0 1.25rem; flex-wrap: wrap; }
   .mem-search input[type=text] { flex: 1 1 320px; padding: .55rem .7rem; border: 1px solid var(--border-strong); border-radius: 8px; font-size: .95rem; background: var(--panel-2); color: var(--text); }
   .mem-search select { padding: .55rem; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel-2); color: var(--text); }
-  .mem-search button { padding: .55rem 1rem; border: 0; border-radius: 8px; background: var(--indigo); color: #fff; cursor: pointer; font-weight: 600; }
-  .mem-search button:hover { background: var(--indigo-bright); }
+  .mem-search button { padding: .55rem 1rem; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
+  .mem-search button:hover { background: var(--accent-bright); }
   td.content { max-width: 520px; }
   .pp { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .73rem; font-weight: 600; }
-  .pp.semantic { background: rgba(99,102,241,.18); color: #a5b4fc; }
-  .pp.episodic { background: rgba(56,189,248,.16); color: #7dd3fc; }
+  .pp.semantic { background: var(--accent-soft); color: var(--accent); }
+  .pp.episodic { background: oklch(0.94 0.04 220); color: oklch(0.45 0.1 220); }
 </style>
 {% endblock %}
 {% block content %}
@@ -30,6 +30,7 @@
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
   <div class="panel">
     {% if records %}
+    <div class="table-wrap">
     <table>
       <thead><tr><th>Content</th><th>Pillar</th><th>Agent</th><th>Kind</th><th>Created</th></tr></thead>
       <tbody>
@@ -44,6 +45,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% elif not note %}
     <p class="muted">No matching memories.</p>
     {% endif %}

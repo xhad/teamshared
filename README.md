@@ -105,7 +105,7 @@ and places them in the right paths:
 curl -fsSL https://teamshared.com/install.sh | bash
 ```
 
-The script prompts for your bearer token ([`/get-token`](https://teamshared.com/get-token))
+The script prompts for your bearer token (mint under **API Keys** in the [console](https://teamshared.com/app/keys))
 and writes it into the harness MCP config. Details: [`/install`](https://teamshared.com/install).
 
 To undo everything the installer wrote (plugin, rule, hook, and the `teamshared`

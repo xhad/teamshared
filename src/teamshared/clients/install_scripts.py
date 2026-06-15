@@ -82,7 +82,7 @@ _ts_choose_harness() {
 }
 
 _ts_prompt_token() {
-  _ts_tty $'\nPaste your teamshared bearer token (from '"${TEAMSHARED_BASE_URL}"'/get-token): '
+  _ts_tty $'\nPaste your teamshared bearer token (mint under /app/keys in the console): '
   _ts_read_secret TEAMSHARED_TOKEN
   export TEAMSHARED_TOKEN
   [[ -n "${TEAMSHARED_TOKEN}" ]] || _ts_die "empty token"
@@ -660,8 +660,8 @@ def install_index_html(*, base_url: str) -> str:
   <p>One script for every harness ({harnesses}). Downloads plugin files and MCP
   config from this server — no local clone of the repo required.</p>
   <pre>curl -fsSL {base}/install.sh | bash</pre>
-  <p>The script prompts for your bearer token from <a href="/get-token">/get-token</a>
-  and writes it into the harness MCP config.</p>
+  <p>Mint a bearer token in the <a href="/app/keys">console API Keys</a> page,
+  then paste it when the script prompts. The installer writes it into your harness MCP config.</p>
   <h2>Uninstall</h2>
   <p>Remove every file the installer wrote (and strip teamshared from your MCP
   config) with the matching uninstaller:</p>

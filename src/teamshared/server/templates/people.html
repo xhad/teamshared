@@ -22,6 +22,7 @@
 
   <div class="panel">
     {% if members %}
+    <div class="table-wrap">
     <table>
       <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th></tr></thead>
       <tbody>
@@ -44,6 +45,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}<p class="muted">No members yet.</p>{% endif %}
   </div>
 
@@ -51,6 +53,7 @@
   <p class="sub">Raw RBAC bindings, including agents. Edit member roles above.</p>
   <div class="panel" style="margin-top:1rem">
     {% if bindings %}
+    <div class="table-wrap">
     <table>
       <thead><tr><th>Principal</th><th>Type</th><th>Role</th><th></th></tr></thead>
       <tbody>
@@ -72,6 +75,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}<p class="muted">No explicit role bindings.</p>{% endif %}
   </div>
 {% endblock %}

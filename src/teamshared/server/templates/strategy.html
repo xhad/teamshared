@@ -84,7 +84,7 @@
     <h3>{{ active_tree.name }} ({{ active_tree.period_start }} – {{ active_tree.period_end }})</h3>
     <p><a href="/app/strategy/plans/{{ active_tree.id }}">View full plan</a></p>
     {% for obj in active_tree.objectives %}
-    <div style="margin:1rem 0;padding-left:1rem;border-left:3px solid var(--indigo);">
+    <div style="margin:1rem 0;padding-left:1rem;border-left:3px solid var(--accent);">
       <strong>{{ obj.title }}</strong>
       {% if obj.description_md %}<p class="muted">{{ obj.description_md | truncate(200) }}</p>{% endif %}
       {% if obj.key_results %}

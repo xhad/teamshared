@@ -60,7 +60,6 @@ from teamshared.server.rate_limit import HttpRateLimitMiddleware, RateLimitLimit
 from teamshared.server.services import ProductionServices, make_services
 from teamshared.server.state import ServerState, clear_state, set_state
 from teamshared.server.token_api import (
-    handle_get_token_page,
     handle_root,
     handle_token_invite_create,
     handle_token_mint,
@@ -77,6 +76,8 @@ _STATIC_CONTENT_TYPES = {
     ".png": "image/png",
     ".ico": "image/x-icon",
     ".svg": "image/svg+xml",
+    ".css": "text/css",
+    ".js": "text/javascript",
 }
 
 
@@ -195,8 +196,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     - ``POST /tokens/mint`` -- mint a bearer token (invite code or admin secret).
     - ``POST /tokens/mint/{invite}/{agent}`` -- mint via invite (path params).
     - ``POST /tokens/invites`` -- create invite codes (admin secret).
-    - ``GET  /get-token`` -- browser page to redeem an invite.
-    - ``GET  /get-token/{invite}/{agent}`` -- browser redeem via path params.
+    - ``GET  /`` -- landing page, service banner JSON, or invite redemption via query params.
     - ``GET  /login`` -- console magic-link sign-in (HTML); ``POST`` sends the link.
     - ``GET  /login/verify`` -- exchange a magic token for a ``ts_session`` cookie.
     - ``GET  /app`` -- signed-in web console (home overview); ``/app/*`` sections.
@@ -287,9 +287,6 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
 
     async def token_invite_create_route(request: Request) -> JSONResponse:
         return await handle_token_invite_create(request, settings, invites)
-
-    async def get_token_route(request: Request) -> Response:
-        return await handle_get_token_page(request, settings, agent_minter, invites)
 
     async def install_index_route(request: Request) -> HTMLResponse:
         return await handle_install_index(request)
@@ -483,9 +480,6 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/health", health_route, methods=["GET"]),
             Route("/metrics", metrics_route, methods=["GET"]),
             Route("/memory", memory_dashboard_route, methods=["GET"]),
-            Route("/get-token/{invite}/{agent}", get_token_route, methods=["GET"]),
-            Route("/get-token/{invite}", get_token_route, methods=["GET"]),
-            Route("/get-token", get_token_route, methods=["GET"]),
             Route("/install", install_index_route, methods=["GET"]),
             Route("/install.sh", install_sh_route, methods=["GET"]),
             Route("/uninstall.sh", uninstall_sh_route, methods=["GET"]),

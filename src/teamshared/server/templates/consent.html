@@ -5,20 +5,20 @@
 {{ super() }}
 <style>
   .pill { display: inline-block; padding: .1rem .55rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
-  .pill.active { background: rgba(52,211,153,.16); color: #6ee7b7; }
-  .pill.off, .pill.expired { background: rgba(255,255,255,.06); color: var(--muted); }
-  .pill.revoked { background: rgba(248,113,113,.16); color: #fca5a5; }
+  .pill.active { background: var(--success-soft); color: var(--success); }
+  .pill.off, .pill.expired { background: var(--panel-2); color: var(--muted); }
+  .pill.revoked { background: var(--danger-soft); color: var(--danger); }
   form.inline { display: inline; margin: 0; }
   .grant-form { display: grid; gap: .85rem; max-width: 540px; }
   .grant-form label.fld { font-weight: 600; font-size: .88rem; display: block; margin-bottom: .3rem; }
   .grant-form input[type=text], .grant-form select { padding: .5rem; border: 1px solid var(--border-strong); border-radius: 8px; width: 100%; background: var(--panel-2); color: var(--text); }
   .scopes { display: flex; gap: 1.2rem; flex-wrap: wrap; }
   .scopes label { font-weight: 400; display: flex; gap: .4rem; align-items: center; font-size: .9rem; }
-  .btn { padding: .55rem 1rem; border: 0; border-radius: 8px; background: var(--indigo); color: #fff; cursor: pointer; font-size: .9rem; font-weight: 600; }
-  .btn:hover { background: var(--indigo-bright); }
-  .btn.link { background: none; color: #fca5a5; padding: .2rem .4rem; }
+  .btn { padding: .55rem 1rem; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-size: .9rem; font-weight: 600; }
+  .btn:hover { background: var(--accent-bright); }
+  .btn.link { background: none; color: var(--danger); padding: .2rem .4rem; }
   .toggle-row { display: flex; justify-content: space-between; padding: .45rem 0; border-bottom: 1px solid var(--border); font-size: .9rem; }
-  .toggle-row .on { color: #6ee7b7; font-weight: 600; }
+  .toggle-row .on { color: var(--success); font-weight: 600; }
   .lock { color: var(--faint); font-size: .8rem; }
 </style>
 {% endblock %}
