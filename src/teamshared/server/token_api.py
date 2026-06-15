@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 import secrets
-from html import escape
 from urllib.parse import urlencode
 
 from starlette.requests import Request

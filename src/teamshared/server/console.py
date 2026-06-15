@@ -907,10 +907,10 @@ def register_console_routes(
             except Exception as exc:
                 log.warning("work_page_projects_failed", error=str(exc))
             if project_filter:
-                project_name = next(
-                    (p.get("name") for p in projects if str(p.get("id")) == project_filter),
-                    "",
+                match = next(
+                    (p for p in projects if str(p.get("id")) == project_filter), None,
                 )
+                project_name = str(match.get("name") or "") if match else ""
         except Exception as exc:
             log.warning("work_page_failed", error=str(exc))
             note = f"Unavailable: {exc}"

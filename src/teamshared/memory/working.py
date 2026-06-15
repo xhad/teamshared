@@ -176,7 +176,7 @@ class WorkingMemory:
         the Redis TTL set in :meth:`set_login_otp`.
         """
         key = _otp_key(email)
-        data = cast("dict[str, str]", await self.client.hgetall(key))
+        data = _normalize_hash(await self.client.hgetall(key))
         if not data:
             return False
         attempts = int(data.get("attempts", "0"))
@@ -366,7 +366,7 @@ class WorkingMemory:
         async for key in client.scan_iter(match=f"{prefix}*", count=200):
             if key.endswith(":turns"):
                 continue
-            meta = cast("dict[str, str]", await client.hgetall(key))
+            meta = _normalize_hash(await client.hgetall(key))
             if not meta:
                 continue
             session_id = key.split(prefix, 1)[1]
@@ -419,7 +419,7 @@ class WorkingMemory:
         )
         out: list[dict[str, Any]] = []
         for sid in ids:
-            meta = cast("dict[str, str]", await self.client.hgetall(_session_key(org_id, sid)))
+            meta = _normalize_hash(await self.client.hgetall(_session_key(org_id, sid)))
             if meta:
                 out.append({"session_id": sid, **meta})
         return out
