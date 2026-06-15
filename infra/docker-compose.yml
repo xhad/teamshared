@@ -73,6 +73,12 @@ services:
         condition: service_healthy
       neo4j:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8077/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       TEAMSHARED_PG_HOST: postgres
       TEAMSHARED_PG_PORT: 5432
@@ -150,8 +156,7 @@ services:
     volumes:
       - teamshareddata:/data
     command: ["teamshared", "worker"]
-    # The shared image's HEALTHCHECK curls :8077, which workers don't serve.
-    # Probe the Redis heartbeat the worker writes instead.
+    # Probe the Redis heartbeat the worker writes.
     healthcheck:
       test: ["CMD", "teamshared", "worker-health", "distiller"]
       interval: 30s
@@ -192,8 +197,7 @@ services:
     volumes:
       - teamshareddata:/data
     command: ["teamshared", "curator"]
-    # The shared image's HEALTHCHECK curls :8077, which workers don't serve.
-    # Probe the Redis heartbeat the worker writes instead.
+    # Probe the Redis heartbeat the worker writes.
     healthcheck:
       test: ["CMD", "teamshared", "worker-health", "curator"]
       interval: 30s
@@ -239,8 +243,7 @@ services:
     volumes:
       - teamshareddata:/data
     command: ["teamshared", "agent-worker"]
-    # The shared image's HEALTHCHECK curls :8077, which workers don't serve.
-    # Probe the Redis heartbeat the worker writes instead.
+    # Probe the Redis heartbeat the worker writes.
     healthcheck:
       test: ["CMD", "teamshared", "worker-health", "agent-worker"]
       interval: 30s

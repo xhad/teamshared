@@ -29,7 +29,4 @@ ENV TEAMSHARED_HOST=0.0.0.0 \
 
 EXPOSE 8077
 
-HEALTHCHECK --interval=20s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS http://localhost:8077/health || exit 1
-
 CMD ["teamshared", "serve", "--transport", "http"]

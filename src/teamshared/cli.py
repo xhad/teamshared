@@ -181,9 +181,8 @@ def worker_health(
     """Exit 0 if ``component`` has a fresh Redis heartbeat, else 1.
 
     Docker healthcheck for the worker containers. They run ``teamshared worker``
-    / ``curator`` and never bind the HTTP port the image's default HEALTHCHECK
-    curls, so this probes the same short-TTL heartbeat the ``/health`` route
-    reads (``working:heartbeat:<component>``).
+    / ``curator`` and never bind the HTTP port, so this probes the same short-TTL
+    heartbeat the ``/health`` route reads (``working:heartbeat:<component>``).
     """
     from teamshared.memory.working import WorkingMemory
 
