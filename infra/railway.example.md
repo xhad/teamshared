@@ -1,7 +1,8 @@
 # Deploying teamshared on Railway
 
-Compose stack → five Railway services in one project (pgvector, Redis,
-server, distiller, curator). No Tailscale, no self-hosted TLS, no Caddy.
+Compose stack → six Railway services in one project (pgvector, Redis,
+server, distiller, curator, agent-worker). No Tailscale, no self-hosted TLS,
+no Caddy.
 Bearer-token auth in [`teamshared.auth`](../src/teamshared/auth.py) is what
 protects the public endpoint, so don't disable it.
 
@@ -19,14 +20,20 @@ protects the public endpoint, so don't disable it.
               private networking (*.railway.internal)
 ```
 
-Neo4j (the graph pillar) is optional and omitted here; `memory_graph_*`
-degrades to a no-op and `/health` reports `graph: down`. Add a Neo4j service
-and `TEAMSHARED_NEO4J_*` vars later if you want it.
+Neo4j (the graph pillar) is optional; when it is omitted `memory_graph_*`
+degrades to a no-op and `/health` reports `graph: disabled` (which does not
+degrade overall status). To enable it, add a Neo4j service (image `neo4j:5`,
+a volume at `/data`, `NEO4J_AUTH=neo4j/<password>` and
+`NEO4J_server_default__listen__address=::` so it binds Railway's IPv6 private
+network) and set `TEAMSHARED_NEO4J_URL=bolt://neo4j.railway.internal:7687`
+plus `TEAMSHARED_NEO4J_USER` / `TEAMSHARED_NEO4J_PASSWORD` on the server,
+distiller, and agent-worker.
 
-> The three app services share one Dockerfile and differ only by start
+> The four app services share one Dockerfile and differ only by start
 > command. Each ships a config file: [`railway.server.toml`](railway.server.toml),
-> [`railway.distiller.toml`](railway.distiller.toml), and
-> [`railway.curator.toml`](railway.curator.toml).
+> [`railway.distiller.toml`](railway.distiller.toml),
+> [`railway.curator.toml`](railway.curator.toml), and
+> [`railway.agent-worker.toml`](railway.agent-worker.toml).
 
 ## CLI-driven deploy (alternative to the dashboard)
 
@@ -116,16 +123,22 @@ ssh -o StrictHostKeyChecking=accept-new railway-teamshared-server \
 rows without an org context). If `railway ssh` is unavailable, run the same SQL
 as the Postgres superuser via `psql` against the `postgres` service.
 
-## 3. Deploy `teamshared-distiller` and `teamshared-curator`
+## 3. Deploy `teamshared-distiller`, `teamshared-curator`, and `teamshared-agent-worker`
 
-Both are worker services from the same GitHub repo with no public port and no
+These are worker services from the same GitHub repo with no public port and no
 healthcheck — only their start command differs.
 
 1. New service → same GitHub repo. **Settings → Source**: custom config file
    path `/infra/railway.distiller.toml` (start command `teamshared worker`).
 2. Repeat for a second service with `/infra/railway.curator.toml` (start
    command `teamshared curator`).
-3. **Variables** on each (workers don't mint tokens or serve HTTP, but they DO
+3. Repeat for a third service with `/infra/railway.agent-worker.toml` (start
+   command `teamshared agent-worker`). This one consumes the Redis `agent:runs`
+   stream and executes Work Board tasks, so it also needs the LLM-provider key
+   (`OPENROUTER_API_KEY` or `OPENAI_API_KEY`) and the `TEAMSHARED_NEO4J_*` vars
+   if the graph pillar is enabled. Its heartbeat surfaces as `agent-worker` in
+   the server's `/health`.
+4. **Variables** on each (workers don't mint tokens or serve HTTP, but they DO
    need the RLS role and a matching job-signing secret):
 
    | Var | Value |
