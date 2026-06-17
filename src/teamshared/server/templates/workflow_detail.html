@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}Workflow run{% endblock %}
+{% block content %}
+  <p><a href="/app/workflows">&larr; Workflows</a></p>
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+  {% if run %}
+  <h1>{{ run.workflow_name }}{% if run.workflow_version %} v{{ run.workflow_version }}{% endif %}</h1>
+  <p class="sub">
+    <span class="status-pill {{ run.status }}">{{ run.status }}</span>
+    &middot; iteration {{ run.iteration }}/{{ run.max_iterations }}
+    &middot; started {{ run.created }}{% if run.completed %} &middot; finished {{ run.completed }}{% endif %}
+  </p>
+  {% if run.error %}<div class="unavailable">{{ run.error }}</div>{% endif %}
+
+  <h2 style="margin-top:1.5rem">Steps</h2>
+  <div class="panel" style="margin-top:.5rem">
+    {% if steps %}
+    <table>
+      <thead><tr>
+        <th>Stage</th><th>Owner</th><th>Status</th><th>Seq</th><th>Task</th>
+        <th>Note</th><th>Finished</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for s in steps %}
+        <tr>
+          <td>{{ s.stage_id }}</td>
+          <td>{{ s.owner }}</td>
+          <td><span class="status-pill {{ s.status }}">{{ s.status }}</span></td>
+          <td>{{ s.seq }}</td>
+          <td>{% if s.work_item_id %}<a href="/app/work/{{ s.work_item_id }}">task</a>{% else %}—{% endif %}</td>
+          <td>{{ s.note or '—' }}</td>
+          <td>{{ s.completed }}</td>
+          <td class="actions">
+            {% if s.owner == 'human' and s.status == 'waiting_human' %}
+            <form method="post" action="/app/workflows/{{ run.id }}/advance" class="inline-form">
+              {{ cm.csrf_field() }}
+              <input type="hidden" name="step_id" value="{{ s.id }}" />
+              <button type="submit" name="decision" value="approve" class="ghost">Approve</button>
+              <button type="submit" name="decision" value="reject" class="danger">Reject</button>
+            </form>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No steps recorded.</p>{% endif %}
+  </div>
+  {% endif %}
+{% endblock %}

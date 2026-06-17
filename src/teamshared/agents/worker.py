@@ -22,7 +22,7 @@ from uuid import UUID
 
 from teamshared.agents.runner import AgentRunner
 from teamshared.agents.runs import AgentRunStore
-from teamshared.agents.service import AGENT_RUN_GROUP, AGENT_RUN_STREAM
+from teamshared.agents.service import AGENT_RUN_GROUP, AGENT_RUN_STREAM, AgentRunService
 from teamshared.config import Settings, get_settings
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.logging import configure_logging, get_logger
@@ -34,6 +34,8 @@ from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.working import WorkingMemory
 from teamshared.queue.streams import StreamQueue
 from teamshared.server.services import ProductionServices, make_services
+from teamshared.workflow.orchestrator import WorkflowOrchestrator
+from teamshared.workflow.runs import WorkflowRunStore
 
 log = get_logger(__name__)
 
@@ -103,6 +105,12 @@ class AgentWorker:
             strategic=OrgStrategicStore(self.services.tenant_db),
             graph=self._graph,
         )
+        orchestrator = WorkflowOrchestrator(
+            runs=WorkflowRunStore(self.services.tenant_db),
+            work=self.services.work,
+            procedural=self.services.procedural,
+            agent_runs=AgentRunService(self.runs, self.services.work, self.queue),
+        )
         self._runner = AgentRunner(
             settings=self.settings,
             runs=self.runs,
@@ -110,6 +118,7 @@ class AgentWorker:
             work=self.services.work,
             procedural=self.services.procedural,
             ingestion=self.services.ingestion(),
+            orchestrator=orchestrator,
         )
 
         await self.working.heartbeat("agent-worker", ttl=self._HEARTBEAT_TTL)

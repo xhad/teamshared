@@ -42,6 +42,7 @@ from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.work import WorkStore
 from teamshared.metrics import METRICS
+from teamshared.workflow.orchestrator import WorkflowOrchestrator
 
 log = get_logger(__name__)
 
@@ -84,6 +85,7 @@ class AgentRunner:
         work: WorkStore,
         procedural: OrgProceduralStore,
         ingestion: IngestionPipeline,
+        orchestrator: WorkflowOrchestrator | None = None,
     ) -> None:
         self.settings = settings
         self.runs = runs
@@ -91,6 +93,7 @@ class AgentRunner:
         self.work = work
         self.procedural = procedural
         self.ingestion = ingestion
+        self.orchestrator = orchestrator
         self.assembler = ContextAssembler(facade)
 
     async def execute(self, run: dict[str, Any]) -> None:
@@ -362,6 +365,7 @@ class AgentRunner:
         if meta.get("latency_ms") is not None:
             METRICS.agent_run_latency.observe(float(meta["latency_ms"]) / 1000.0)
         log.info("agent_run_completed", org_id=str(rc.org_id), run_id=str(rc.run_id))
+        await self._advance_workflow(rc, success=True)
 
     # -- helpers -----------------------------------------------------------
 
@@ -394,6 +398,21 @@ class AgentRunner:
             )
         METRICS.agent_runs_failed.inc()
         log.warning("agent_run_failed", run_id=str(rc.run_id), error=_short(error))
+        await self._advance_workflow(rc, success=False)
+
+    async def _advance_workflow(self, rc: _RunContext, *, success: bool) -> None:
+        """Auto-advance the workflow this run belongs to (no-op if standalone)."""
+        if self.orchestrator is None:
+            return
+        try:
+            await self.orchestrator.on_step_complete(
+                rc.ctx, agent_run_id=rc.run_id, success=success
+            )
+        except Exception as exc:  # workflow hiccup must never fail the run
+            log.warning(
+                "agent_run_workflow_advance_failed",
+                run_id=str(rc.run_id), error=str(exc),
+            )
 
 
 def _short(text: str, limit: int = 500) -> str:

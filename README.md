@@ -181,6 +181,12 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | `agent_run_get`             | Fetch one run with its trace timeline + model-call metadata |
 | `agent_run_cancel`          | Request cancellation of a queued/running run                |
 | `agent_run_retry`           | Queue a fresh run cloning a previous run                    |
+| `workflow_define`           | Define a procedural-loop workflow (procedure with stages)    |
+| `workflow_start`            | Start a workflow run over a set of work items                |
+| `workflow_advance`          | Resolve a human-gated step (approve/reject) and route        |
+| `workflow_cancel`           | Cancel a workflow run and skip its open steps                |
+| `workflow_list`             | List workflow runs (filter by status)                        |
+| `workflow_status`           | Fetch one workflow run with its per-item step history        |
 | `project_create`            | Create a project (Asana-style task container)                |
 | `project_list`              | List projects (filter by team/initiative, archived)          |
 | `project_get`               | Fetch a project with sections, latest status, and tasks      |

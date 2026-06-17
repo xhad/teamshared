@@ -38,6 +38,8 @@ from teamshared.memory.working import WorkingMemory
 from teamshared.queue.streams import StreamQueue
 from teamshared.tenancy.context import TenantDb
 from teamshared.tenancy.repository import TenancyRepository
+from teamshared.workflow.orchestrator import WorkflowOrchestrator
+from teamshared.workflow.runs import WorkflowRunStore
 
 log = get_logger(__name__)
 
@@ -53,6 +55,7 @@ class ProductionServices:
     strategic: OrgStrategicStore
     work: WorkStore
     agent_runs: AgentRunStore
+    workflow_runs: WorkflowRunStore
     projects: ProjectStore
     wiki: WikiStore
     audit: AuditLog
@@ -89,6 +92,15 @@ class ProductionServices:
             self.agent_runs, self.work, StreamQueue(self.working.client)
         )
 
+    def workflow_orchestrator(self) -> WorkflowOrchestrator:
+        """Procedural-loop engine; agent stages enqueue via the run service."""
+        return WorkflowOrchestrator(
+            runs=self.workflow_runs,
+            work=self.work,
+            procedural=self.procedural,
+            agent_runs=self.agent_run_service(),
+        )
+
 
 def make_services(settings: Settings) -> ProductionServices:
     """Assemble services without doing I/O.
@@ -119,6 +131,7 @@ def make_services(settings: Settings) -> ProductionServices:
         strategic=OrgStrategicStore(tenant_db),
         work=WorkStore(tenant_db),
         agent_runs=AgentRunStore(tenant_db),
+        workflow_runs=WorkflowRunStore(tenant_db),
         projects=ProjectStore(tenant_db),
         wiki=WikiStore(tenant_db),
         audit=audit,

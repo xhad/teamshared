@@ -38,6 +38,8 @@ class Permissions:
     PROJECT_WRITE = "project:write"
     AGENTRUN_READ = "agentrun:read"
     AGENTRUN_WRITE = "agentrun:write"
+    WORKFLOW_READ = "workflow:read"
+    WORKFLOW_WRITE = "workflow:write"
 
 
 class PermissionDenied(Exception):  # noqa: N818 - idiomatic name; not an *Error
@@ -61,6 +63,7 @@ def implies_permission(granted: frozenset[str], permission: str) -> bool:
         permission.startswith("work:")
         or permission.startswith("project:")
         or permission.startswith("agentrun:")
+        or permission.startswith("workflow:")
     ):
         return True
     if permission == Permissions.WORK_READ and Permissions.MEMORY_READ in granted:
@@ -72,11 +75,16 @@ def implies_permission(granted: frozenset[str], permission: str) -> bool:
     if permission == Permissions.PROJECT_WRITE and Permissions.WORK_WRITE in granted:
         return True
     # Agent-run control is gated alongside work access (runs are work-scoped), so
-    # anyone who can read/write work can read/control its agent runs.
-    if permission == Permissions.AGENTRUN_READ and Permissions.WORK_READ in granted:
+    # anyone who can read/write work can read/control its agent runs. Workflow
+    # runs orchestrate work the same way, so they follow the same implication.
+    if (
+        permission in (Permissions.AGENTRUN_READ, Permissions.WORKFLOW_READ)
+        and Permissions.WORK_READ in granted
+    ):
         return True
     return (
-        permission == Permissions.AGENTRUN_WRITE and Permissions.WORK_WRITE in granted
+        permission in (Permissions.AGENTRUN_WRITE, Permissions.WORKFLOW_WRITE)
+        and Permissions.WORK_WRITE in granted
     )
 
 

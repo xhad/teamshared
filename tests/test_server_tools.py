@@ -125,6 +125,18 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.work_close = AsyncMock(return_value={"id": "w1", "work_status": "done"})
     facade.work_comment_add = AsyncMock(return_value={"id": "c1", "body_md": "note"})
     facade.work_comment_list = AsyncMock(return_value={"count": 0, "comments": []})
+    facade.workflow_define = AsyncMock(
+        return_value={"id": 1, "name": "wf", "version": 1, "status": "active"}
+    )
+    facade.workflow_start = AsyncMock(
+        return_value={"id": "wr1", "status": "running", "work_item_count": 1}
+    )
+    facade.workflow_advance = AsyncMock(return_value={"id": "wr1", "status": "running"})
+    facade.workflow_cancel = AsyncMock(return_value={"id": "wr1", "status": "cancelled"})
+    facade.workflow_list = AsyncMock(return_value={"count": 0, "runs": []})
+    facade.workflow_status = AsyncMock(
+        return_value={"id": "wr1", "status": "running", "steps": []}
+    )
 
     settings = MagicMock()
     settings.embed_provider = "openai"
@@ -390,6 +402,34 @@ async def test_work_comment_tools(
     state.facade.work_comment_add.assert_awaited_once()
     await _call(mcp, "work_comment_list", work_id="w1")
     state.facade.work_comment_list.assert_awaited_once()
+
+
+async def test_workflow_tools_delegate_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    stages = [
+        {"id": "build", "owner": "agent", "agent": "cursor", "advance": "auto",
+         "on_done": "done"},
+    ]
+    defined = await _call(mcp, "workflow_define", name="wf", stages=stages)
+    assert defined["name"] == "wf"
+    state.facade.workflow_define.assert_awaited_once()
+
+    started = await _call(mcp, "workflow_start", workflow_name="wf", work_ids=["w1"])
+    assert started["status"] == "running"
+    state.facade.workflow_start.assert_awaited_once()
+
+    await _call(mcp, "workflow_advance", step_id="s1", decision="approve")
+    state.facade.workflow_advance.assert_awaited_once()
+    assert state.facade.workflow_advance.await_args.kwargs["decision"] == "approve"
+
+    await _call(mcp, "workflow_list")
+    state.facade.workflow_list.assert_awaited_once()
+    await _call(mcp, "workflow_status", run_id="wr1")
+    state.facade.workflow_status.assert_awaited_once()
+    await _call(mcp, "workflow_cancel", run_id="wr1")
+    state.facade.workflow_cancel.assert_awaited_once()
 
 
 async def test_memory_state_get_and_set(

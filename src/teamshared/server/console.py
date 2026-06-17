@@ -92,6 +92,7 @@ NAV: list[tuple[str, str, str]] = [
     ("/app/strategy", "Strategy", "strategy"),
     ("/app/memory", "Memory", "memory"),
     ("/app/agents", "Agents", "agents"),
+    ("/app/workflows", "Workflows", "workflows"),
     ("/app/people", "People", "people"),
     ("/app/orgs", "Organizations", "orgs"),
     ("/app/keys", "API Keys", "keys"),
@@ -1383,6 +1384,122 @@ def register_console_routes(
             log.warning("agent_run_retry_failed", error=str(exc))
         return RedirectResponse(f"/app/agents/runs/{new_id}", status_code=303)
 
+    def _fmt_workflow_run(run: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": str(run.get("id")),
+            "workflow_name": run.get("workflow_name"),
+            "workflow_version": run.get("workflow_version"),
+            "status": run.get("status"),
+            "iteration": run.get("iteration"),
+            "max_iterations": run.get("max_iterations"),
+            "created": _dt(run.get("created_at")),
+            "completed": _dt(run.get("completed_at")),
+            "error": run.get("error"),
+        }
+
+    async def workflows_page(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "workflows")
+        runs: list[dict[str, Any]] = []
+        playbooks: list[dict[str, Any]] = []
+        note = ""
+        flash = request.query_params.get("flash") or ""
+        try:
+            data = await get_state().facade.workflow_list(
+                principal, status=None, limit=100,
+            )
+            runs = [_fmt_workflow_run(r) for r in data.get("runs") or []]
+            playbooks = await _playbook_options(principal)
+        except Exception as exc:
+            log.warning("workflows_page_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update(
+            {"runs": runs, "playbooks": playbooks, "note": note, "flash": flash}
+        )
+        return _TEMPLATES.TemplateResponse(request, "workflows.html", ctx)
+
+    async def workflow_detail(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "workflows")
+        run: dict[str, Any] | None = None
+        steps: list[dict[str, Any]] = []
+        note = ""
+        try:
+            run_id = str(request.path_params["run_id"])
+            data = await get_state().facade.workflow_status(principal, run_id=run_id)
+            if not data:
+                note = "Workflow run not found."
+            else:
+                run = _fmt_workflow_run(data)
+                steps = [
+                    {
+                        "id": str(s.get("id")),
+                        "stage_id": s.get("stage_id"),
+                        "owner": s.get("owner"),
+                        "status": s.get("status"),
+                        "seq": s.get("seq"),
+                        "work_item_id": str(s.get("work_item_id"))
+                        if s.get("work_item_id") else "",
+                        "note": s.get("note"),
+                        "created": _dt(s.get("created_at")),
+                        "completed": _dt(s.get("completed_at")),
+                    }
+                    for s in data.get("steps") or []
+                ]
+        except Exception as exc:
+            log.warning("workflow_detail_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({"run": run, "steps": steps, "note": note})
+        return _TEMPLATES.TemplateResponse(request, "workflow_detail.html", ctx)
+
+    async def workflow_start_post(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        workflow_name = str(form.get("workflow_name") or "").strip()
+        work_ids_raw = str(form.get("work_ids") or "").strip()
+        work_ids = [w.strip() for w in work_ids_raw.split(",") if w.strip()] or None
+        if not workflow_name:
+            return RedirectResponse("/app/workflows?flash=error", status_code=303)
+        try:
+            await get_state().facade.workflow_start(
+                principal,
+                workflow_name=workflow_name,
+                version=None,
+                work_ids=work_ids,
+                selector=None,
+                max_iterations=None,
+            )
+        except Exception as exc:
+            log.warning("workflow_start_failed", error=str(exc))
+            return RedirectResponse("/app/workflows?flash=error", status_code=303)
+        return RedirectResponse("/app/workflows?flash=started", status_code=303)
+
+    async def workflow_advance_post(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        run_id = str(request.path_params["run_id"])
+        step_id = str(form.get("step_id") or "").strip()
+        decision = str(form.get("decision") or "").strip()
+        try:
+            await get_state().facade.workflow_advance(
+                principal, step_id=step_id, decision=decision,
+            )
+        except Exception as exc:
+            log.warning("workflow_advance_failed", error=str(exc))
+        return RedirectResponse(f"/app/workflows/{run_id}", status_code=303)
+
     async def work_assign_agent(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
@@ -1914,6 +2031,10 @@ def register_console_routes(
         Route("/app/agents/runs/{run_id}/cancel", agent_run_cancel, methods=["POST"]),
         Route("/app/agents/runs/{run_id}/retry", agent_run_retry, methods=["POST"]),
         Route("/app/agents/{agent_id}/status", agent_status, methods=["POST"]),
+        Route("/app/workflows", workflows_page, methods=["GET"]),
+        Route("/app/workflows/start", workflow_start_post, methods=["POST"]),
+        Route("/app/workflows/{run_id}", workflow_detail, methods=["GET"]),
+        Route("/app/workflows/{run_id}/advance", workflow_advance_post, methods=["POST"]),
         Route("/app/people", people_page, methods=["GET"]),
         Route("/app/people/add", people_add, methods=["POST"]),
         Route("/app/people/grant", people_grant, methods=["POST"]),

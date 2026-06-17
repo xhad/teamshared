@@ -193,6 +193,22 @@
           <button type="submit">Queue background run</button>
         </form>
 
+        <h3 style="margin-top:1rem">Start a workflow</h3>
+        <form method="post" action="/app/workflows/start" class="stack-form">
+          {{ cm.csrf_field() }}
+          <input type="hidden" name="work_ids" value="{{ item.id }}" />
+          <div class="field">
+            <label for="workflow-name">Workflow</label>
+            <select id="workflow-name" name="workflow_name" required>
+              <option value="">Select a workflow…</option>
+              {% for p in playbooks %}
+              <option value="{{ p.name }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit">Run workflow on this task</button>
+        </form>
+
         {% if runs %}
         <h3 style="margin-top:1rem">Run history</h3>
         <ul class="work-runs">

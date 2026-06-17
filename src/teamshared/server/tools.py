@@ -886,6 +886,142 @@ def register_tools(mcp: Any) -> None:
         return await state.facade.agent_run_retry(principal, run_id=run_id)
 
     @mcp.tool()
+    async def workflow_define(
+        name: Annotated[
+            str, Field(description="Workflow name (stable id; stored as a procedure)")
+        ],
+        stages: Annotated[
+            list[dict[str, Any]],
+            Field(
+                description=(
+                    "Ordered stage graph. Each stage: {id, owner: agent|human, "
+                    "agent?, playbook?, playbook_version?, advance: auto|manual, "
+                    "on_done?, on_approve?, on_reject?}. Routing targets are a "
+                    "stage id or a terminal sentinel ('done'|'cancelled')."
+                )
+            ),
+        ],
+        loop: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Optional loop spec: {select: {work_status?, project_id?, "
+                    "initiative_id?, limit?}, until: 'all_terminal', max_iterations}"
+                )
+            ),
+        ] = None,
+        description: Annotated[
+            str | None, Field(description="One-line summary")
+        ] = None,
+        steps_md: Annotated[
+            str | None,
+            Field(description="Optional markdown body (auto-rendered from stages if omitted)"),
+        ] = None,
+        tags: Annotated[list[str] | None, Field(description="Tags for discovery")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Define a procedural-loop workflow (a versioned procedure with stages).
+
+        The validated stage graph is stored in the procedure's ``tool_recipe``.
+        Start it over a set of work items with ``workflow_start``. Requires
+        ``workflow:write`` (via ``memory:create``).
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.workflow_define(
+            principal,
+            name=name,
+            stages=stages,
+            loop=loop,
+            description=description,
+            steps_md=steps_md,
+            tags=tags,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def workflow_start(
+        workflow_name: Annotated[str, Field(description="Workflow (procedure) name")],
+        version: Annotated[
+            int | None, Field(description="Pin a specific workflow version (default latest)")
+        ] = None,
+        work_ids: Annotated[
+            list[str] | None,
+            Field(description="Explicit work-item UUIDs to run (overrides the selector)"),
+        ] = None,
+        selector: Annotated[
+            dict[str, Any] | None,
+            Field(
+                description=(
+                    "Resolve the item set when work_ids is omitted: "
+                    "{work_status?, project_id?, initiative_id?, limit?}"
+                )
+            ),
+        ] = None,
+        max_iterations: Annotated[
+            int | None, Field(ge=1, le=1000, description="Override the loop iteration cap")
+        ] = None,
+    ) -> dict[str, Any]:
+        """Start a workflow run over a set of work items (the procedural loop).
+
+        Each item enters the first stage; agent stages dispatch a background run,
+        human stages wait for ``workflow_advance``. Requires ``workflow:write``.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.workflow_start(
+            principal,
+            workflow_name=workflow_name,
+            version=version,
+            work_ids=work_ids,
+            selector=selector,
+            max_iterations=max_iterations,
+        )
+
+    @mcp.tool()
+    async def workflow_advance(
+        step_id: Annotated[str, Field(description="Workflow step run UUID awaiting a human")],
+        decision: Annotated[str, Field(description="approve or reject")],
+    ) -> dict[str, Any]:
+        """Resolve a human-gated workflow step, routing the item forward or back."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.workflow_advance(
+            principal, step_id=step_id, decision=decision,
+        )
+
+    @mcp.tool()
+    async def workflow_cancel(
+        run_id: Annotated[str, Field(description="Workflow run UUID")],
+    ) -> dict[str, Any]:
+        """Cancel a workflow run and skip its open steps."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.workflow_cancel(principal, run_id=run_id)
+
+    @mcp.tool()
+    async def workflow_list(
+        status: Annotated[
+            str | None,
+            Field(description="Filter: running, paused, completed, failed, cancelled"),
+        ] = None,
+        limit: Annotated[int, Field(ge=1, le=200)] = 50,
+    ) -> dict[str, Any]:
+        """List workflow runs in the caller's org (newest first)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.workflow_list(principal, status=status, limit=limit)
+
+    @mcp.tool()
+    async def workflow_status(
+        run_id: Annotated[str, Field(description="Workflow run UUID")],
+    ) -> dict[str, Any]:
+        """Fetch one workflow run with its per-item step history."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.workflow_status(principal, run_id=run_id)
+
+    @mcp.tool()
     async def project_create(
         name: Annotated[str, Field(description="Project name")],
         description_md: Annotated[str | None, Field(description="Optional markdown body")] = None,

@@ -263,3 +263,23 @@ async def test_runner_honours_cancellation(
     mark_statuses = [c.kwargs.get("status") for c in runs.mark.call_args_list]
     assert mark_statuses == ["cancelled"]
     work.add_comment.assert_awaited()
+
+
+async def test_runner_advances_workflow_on_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A completed run wired to a workflow auto-advances its item (the hook)."""
+    playbook = {"name": "ship-pr", "version": 2, "steps_md": "x"}
+    runner, _runs, _work, _ingestion, _captured = _runner(
+        monkeypatch, output="done", playbook=playbook,
+    )
+    orchestrator = MagicMock()
+    orchestrator.on_step_complete = AsyncMock()
+    runner.orchestrator = orchestrator
+
+    await runner.execute(_run_row())
+
+    orchestrator.on_step_complete.assert_awaited_once()
+    _, kwargs = orchestrator.on_step_complete.call_args
+    assert kwargs["success"] is True
+    assert kwargs["agent_run_id"] == RUN_ID

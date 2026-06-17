@@ -34,6 +34,7 @@ from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.types import MemoryKind, MemoryRecord, MemoryScope, RecallResult, TimeRange
 from teamshared.memory.working import WorkingMemory
 from teamshared.server.services import ProductionServices
+from teamshared.workflow.definition import parse_definition
 
 log = get_logger(__name__)
 
@@ -957,6 +958,100 @@ class MemoryFacade:
         run = await self.services.agent_run_service().retry(ctx, UUID(run_id))
         return cast("dict[str, Any]", _serialize_deep(run))
 
+    # -- workflows (procedural loops) -------------------------------------
+
+    async def workflow_define(
+        self,
+        principal: Principal,
+        *,
+        name: str,
+        stages: list[dict[str, Any]],
+        loop: dict[str, Any] | None,
+        description: str | None,
+        steps_md: str | None,
+        tags: list[str] | None,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        tool_recipe: dict[str, Any] = {"stages": stages}
+        if loop is not None:
+            tool_recipe["loop"] = loop
+        # Validate the stage graph before persisting (raises on a bad graph).
+        parse_definition(tool_recipe)
+        body = steps_md or _render_workflow_steps_md(name, stages, loop)
+        return await self.procedure_set(
+            principal,
+            name=name,
+            steps_md=body,
+            description=description or f"Workflow definition: {name}",
+            tool_recipe=tool_recipe,
+            tags=sorted({*(tags or []), "workflow"}),
+            agent_override=agent_override,
+        )
+
+    async def workflow_start(
+        self,
+        principal: Principal,
+        *,
+        workflow_name: str,
+        version: int | None,
+        work_ids: list[str] | None,
+        selector: dict[str, Any] | None,
+        max_iterations: int | None,
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        run = await self.services.workflow_orchestrator().start(
+            ctx,
+            workflow_name=workflow_name,
+            version=version,
+            work_ids=[UUID(w) for w in work_ids] if work_ids else None,
+            selector=selector,
+            max_iterations=max_iterations,
+        )
+        return cast("dict[str, Any]", _serialize_deep(run))
+
+    async def workflow_advance(
+        self, principal: Principal, *, step_id: str, decision: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        run = await self.services.workflow_orchestrator().advance(
+            ctx, step_id=UUID(step_id), decision=decision,
+        )
+        return cast("dict[str, Any]", _serialize_deep(run))
+
+    async def workflow_cancel(
+        self, principal: Principal, *, run_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        run = await self.services.workflow_orchestrator().cancel(
+            ctx, run_id=UUID(run_id),
+        )
+        return cast("dict[str, Any]", _serialize_deep(run))
+
+    async def workflow_list(
+        self, principal: Principal, *, status: str | None, limit: int
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORKFLOW_READ)
+        rows = await self.services.workflow_runs.list_runs(
+            principal.org_id, status=status, limit=limit,  # type: ignore[arg-type]
+        )
+        return {"count": len(rows), "runs": [_serialize_deep(r) for r in rows]}
+
+    async def workflow_status(
+        self, principal: Principal, *, run_id: str
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(ctx.principal, Permissions.WORKFLOW_READ)
+        run = await self.services.workflow_runs.get_run(principal.org_id, UUID(run_id))
+        if run is None:
+            return {}
+        steps = await self.services.workflow_runs.list_steps_for_run(
+            principal.org_id, UUID(run_id),
+        )
+        out = cast("dict[str, Any]", _serialize_deep(run))
+        out["steps"] = [_serialize_deep(s) for s in steps]
+        return out
+
     # -- projects ---------------------------------------------------------
 
     async def project_create(
@@ -1341,6 +1436,39 @@ def _serialize_work(value: dict[str, Any] | None) -> dict[str, Any]:
     for key, val in value.items():
         out[key] = _serialize_value(val)
     return out
+
+
+def _render_workflow_steps_md(
+    name: str, stages: list[dict[str, Any]], loop: dict[str, Any] | None
+) -> str:
+    """Render a readable playbook body from a workflow's stage graph.
+
+    Procedures require a non-empty ``steps_md``; this gives humans (and agents
+    reading the playbook) a plain-language view of the same graph stored in
+    ``tool_recipe``.
+    """
+    lines = [f"# Workflow: {name}", ""]
+    for i, stage in enumerate(stages, start=1):
+        owner = stage.get("owner", "agent")
+        bits = [f"**{stage.get('id')}** ({owner}"]
+        if stage.get("playbook"):
+            bits.append(f", playbook `{stage['playbook']}`")
+        if stage.get("agent"):
+            bits.append(f", agent `{stage['agent']}`")
+        bits.append(")")
+        routing = []
+        for key in ("on_done", "on_approve", "on_reject"):
+            if stage.get(key):
+                routing.append(f"{key} -> {stage[key]}")
+        suffix = f" — {'; '.join(routing)}" if routing else ""
+        lines.append(f"{i}. {''.join(bits)}{suffix}")
+    if loop:
+        lines.append("")
+        lines.append(
+            f"Loop: until {loop.get('until', 'all_terminal')}, "
+            f"max {loop.get('max_iterations', 10)} iterations."
+        )
+    return "\n".join(lines)
 
 
 def _serialize_strategic(value: dict[str, Any] | None) -> dict[str, Any]:
