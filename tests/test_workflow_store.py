@@ -25,6 +25,24 @@ async def _seed_work(db: TenantDb, org_id: uuid.UUID) -> uuid.UUID:
         return (await cur.fetchone())[0]
 
 
+async def _seed_agent_run(
+    db: TenantDb, org_id: uuid.UUID, work_id: uuid.UUID
+) -> uuid.UUID:
+    """An agent + agent_run so step rows can satisfy the agent_run_id FK."""
+    async with db.org(org_id) as conn:
+        cur = await conn.execute(
+            "INSERT INTO agents (org_id, name) VALUES (%s, %s) RETURNING id",
+            (str(org_id), f"worker-{uuid.uuid4().hex[:6]}"),
+        )
+        agent_id = (await cur.fetchone())[0]
+        cur = await conn.execute(
+            "INSERT INTO agent_runs (org_id, work_item_id, agent_id, created_by) "
+            "VALUES (%s, %s, %s, %s) RETURNING id",
+            (str(org_id), str(work_id), str(agent_id), "tester"),
+        )
+        return (await cur.fetchone())[0]
+
+
 @pytest.mark.integration
 async def test_run_and_step_lifecycle() -> None:
     settings = get_settings()
@@ -52,7 +70,7 @@ async def test_run_and_step_lifecycle() -> None:
         assert s0["seq"] == 0
         assert await store.has_open_steps(org.id, run_id) is True
 
-        agent_run = uuid.uuid4()
+        agent_run = await _seed_agent_run(db, org.id, work_id)
         await store.mark_step(
             org.id, uuid.UUID(str(s0["id"])), agent_run_id=agent_run,
         )
