@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}{% if is_new %}New skill{% else %}Edit skill{% endif %}{% endblock %}
+{% block content %}
+  <p class="sub"><a href="/app/skills">&larr; Skills</a></p>
+  <h1>{% if is_new %}New skill{% else %}Edit &ldquo;{{ skill.name }}&rdquo;{% endif %}</h1>
+  {% if not is_new and skill %}
+  <p class="sub">Currently v{{ skill.version }}. Saving stores a new version; older versions are kept.</p>
+  {% endif %}
+
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if is_new or skill %}
+  <form method="post" action="/app/skills/save" class="stack-form" style="margin-top:1rem">
+    {{ cm.csrf_field() }}
+    <div class="field">
+      <label for="sk-name">Name</label>
+      {% if is_new %}
+      <input id="sk-name" name="name" required placeholder="e.g. ship-pr" />
+      {% else %}
+      <input id="sk-name" name="name" value="{{ skill.name }}" readonly />
+      {% endif %}
+    </div>
+    <div class="field">
+      <label for="sk-desc">Description</label>
+      <input id="sk-desc" name="description" value="{{ skill.description or '' if skill else '' }}"
+        placeholder="One-line summary" />
+    </div>
+    <div class="field">
+      <label for="sk-tags">Tags</label>
+      <input id="sk-tags" name="tags"
+        value="{{ (skill.tags or []) | join(', ') if skill else '' }}"
+        placeholder="comma, separated, tags" />
+    </div>
+    <div class="field">
+      <label for="sk-body">Body (Markdown)</label>
+      <textarea id="sk-body" name="body_md" rows="22" class="mono" required
+        placeholder="# Skill&#10;&#10;Instructions the agent reads directly…">{{ skill.body_md if skill else '' }}</textarea>
+    </div>
+    <div class="field">
+      <label for="sk-hints">Tool hints (optional JSON)</label>
+      <textarea id="sk-hints" name="tool_hints" rows="6" class="mono"
+        placeholder='{"prefer": ["memory_recall", "work_list"]}'>{{ skill.tool_hints | tojson(indent=2) if skill and skill.tool_hints else '' }}</textarea>
+      <p class="muted" style="margin:.35rem 0 0;font-size:.85rem">Suggest MCP tools agents should prefer when using this skill.</p>
+    </div>
+    <div>
+      <button type="submit">{% if is_new %}Create skill{% else %}Save new version{% endif %}</button>
+      <a href="/app/skills"><button type="button" class="ghost">Cancel</button></a>
+    </div>
+  </form>
+  {% endif %}
+{% endblock %}

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import secrets
 from pathlib import Path
 from typing import Any
@@ -87,6 +88,7 @@ NAV: list[tuple[str, str, str]] = [
     ("/app", "Home", "home"),
     ("/app/wiki", "Wiki", "wiki"),
     ("/app/playbooks", "Playbooks", "playbooks"),
+    ("/app/skills", "Skills", "skills"),
     ("/app/work", "Work", "work"),
     ("/app/projects", "Projects", "projects"),
     ("/app/strategy", "Strategy", "strategy"),
@@ -737,6 +739,105 @@ def register_console_routes(
             log.warning("playbook_save_failed", error=str(exc))
             return RedirectResponse("/app/playbooks?flash=error", status_code=303)
         return RedirectResponse("/app/playbooks?flash=saved", status_code=303)
+
+    # --- skills (editable atomic instruction blocks) --------------------
+
+    async def skills_page(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "skills")
+        skills: list[dict[str, Any]] = []
+        note = ""
+        try:
+            rows = await services.skills.list_skills(principal.org_id, limit=200)
+            skills = [
+                {
+                    "name": s["name"], "version": s["version"],
+                    "description": s.get("description"), "tags": s.get("tags") or [],
+                    "author": s.get("created_by"),
+                    "updated": _dt(s.get("created_at")),
+                    "body_html": render_markdown_safe(s.get("body_md") or ""),
+                    "search": " ".join(
+                        filter(None, [
+                            s["name"], s.get("description") or "",
+                            " ".join(s.get("tags") or []), s.get("body_md") or "",
+                        ])
+                    ).lower(),
+                }
+                for s in rows
+            ]
+        except Exception as exc:
+            log.warning("skills_page_failed", error=str(exc))
+            note = f"Skills unavailable: {exc}"
+        flash = request.query_params.get("flash") or ""
+        ctx.update({"skills": skills, "note": note, "flash": flash})
+        return _TEMPLATES.TemplateResponse(request, "skills.html", ctx)
+
+    async def skill_new(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "skills")
+        ctx.update({"skill": None, "is_new": True, "note": ""})
+        return _TEMPLATES.TemplateResponse(request, "skill_edit.html", ctx)
+
+    async def skill_edit(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "skills")
+        name = str(request.path_params["name"])
+        skill: dict[str, Any] | None = None
+        note = ""
+        try:
+            skill = await services.skills.get_skill(principal.org_id, name)
+            if skill is None:
+                note = "Skill not found."
+        except Exception as exc:
+            log.warning("skill_edit_failed", error=str(exc))
+            note = f"Skill unavailable: {exc}"
+        ctx.update({"skill": skill, "is_new": False, "note": note})
+        return _TEMPLATES.TemplateResponse(request, "skill_edit.html", ctx)
+
+    async def skill_save(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        name = str(form.get("name") or "").strip()
+        body_md = str(form.get("body_md") or "").strip()
+        description = str(form.get("description") or "").strip() or None
+        tags = [t.strip() for t in str(form.get("tags") or "").split(",") if t.strip()]
+        tool_hints_raw = str(form.get("tool_hints") or "").strip()
+        tool_hints: dict[str, Any] | None = None
+        if tool_hints_raw:
+            try:
+                parsed = json.loads(tool_hints_raw)
+            except json.JSONDecodeError:
+                return RedirectResponse("/app/skills?flash=invalid", status_code=303)
+            if not isinstance(parsed, dict):
+                return RedirectResponse("/app/skills?flash=invalid", status_code=303)
+            tool_hints = parsed
+        if not name or not body_md:
+            return RedirectResponse("/app/skills?flash=invalid", status_code=303)
+        try:
+            await services.ingestion().ingest_skill(
+                _ctx(principal),
+                name=name,
+                body_md=body_md,
+                description=description,
+                tags=tags or None,
+                tool_hints=tool_hints,
+                agent=principal.attribution,
+                source="agent",
+            )
+        except Exception as exc:
+            log.warning("skill_save_failed", error=str(exc))
+            return RedirectResponse("/app/skills?flash=error", status_code=303)
+        return RedirectResponse("/app/skills?flash=saved", status_code=303)
 
     # --- work (org task queue) ------------------------------------------
 
@@ -2018,6 +2119,10 @@ def register_console_routes(
         Route("/app/playbooks/new", playbook_new, methods=["GET"]),
         Route("/app/playbooks/save", playbook_save, methods=["POST"]),
         Route("/app/playbooks/{name}", playbook_edit, methods=["GET"]),
+        Route("/app/skills", skills_page, methods=["GET"]),
+        Route("/app/skills/new", skill_new, methods=["GET"]),
+        Route("/app/skills/save", skill_save, methods=["POST"]),
+        Route("/app/skills/{name}", skill_edit, methods=["GET"]),
         Route("/app/work", work_page, methods=["GET"]),
         Route("/app/work/new", work_new, methods=["GET"]),
         Route("/app/work/save", work_save, methods=["POST"]),

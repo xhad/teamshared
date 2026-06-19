@@ -919,6 +919,101 @@ def test_playbook_save_requires_name_and_steps() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Skills section (editable atomic instruction blocks)
+# --------------------------------------------------------------------------- #
+def test_skills_page_lists_and_sanitizes() -> None:
+    client, services = _build()
+    services.skills.list_skills = AsyncMock(
+        return_value=[
+            {"name": "ship-pr", "version": 2, "description": "How to ship",
+             "tags": ["git"], "created_by": "cursor",
+             "created_at": "2026-05-28T10:00:00",
+             "body_md": "# Ship\n\n1. do **thing**\n\n<script>alert(1)</script>"}
+        ]
+    )
+    _login(client)
+    resp = client.get("/app/skills")
+    assert resp.status_code == 200
+    assert "ship-pr" in resp.text
+    assert "<strong>thing</strong>" in resp.text
+    assert "<script>alert(1)</script>" not in resp.text
+    assert "/app/skills/ship-pr" in resp.text
+    assert "/app/skills/new" in resp.text
+    assert 'id="sk-filter"' in resp.text
+
+
+def test_skill_new_form_renders() -> None:
+    client, _ = _build()
+    _login(client)
+    resp = client.get("/app/skills/new")
+    assert resp.status_code == 200
+    assert 'name="body_md"' in resp.text
+    assert 'name="name"' in resp.text
+
+
+def test_skill_edit_form_prefills() -> None:
+    client, services = _build()
+    services.skills.get_skill = AsyncMock(
+        return_value={"name": "ship-pr", "version": 3, "description": "How to ship",
+                      "tags": ["git", "release"],
+                      "body_md": "# Ship\n\n1. do thing",
+                      "tool_hints": {"prefer": ["memory_recall"]}}
+    )
+    _login(client)
+    resp = client.get("/app/skills/ship-pr")
+    assert resp.status_code == 200
+    assert "ship-pr" in resp.text
+    assert "1. do thing" in resp.text
+    assert "git, release" in resp.text
+    assert "memory_recall" in resp.text
+
+
+def test_skill_save_creates_version_and_redirects() -> None:
+    client, services = _build()
+    services.ingestion.return_value.ingest_skill = AsyncMock(
+        return_value=SimpleNamespace(status="active")
+    )
+    _login(client)
+    resp = _app_post(
+        client, "/app/skills/save",
+        {"name": "ship-pr", "description": "How to ship",
+         "tags": "git, release", "body_md": "# Ship\n\n1. do thing",
+         "tool_hints": '{"prefer": ["work_list"]}'},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/skills?flash=saved"
+    services.ingestion.return_value.ingest_skill.assert_awaited_once()
+    kwargs = services.ingestion.return_value.ingest_skill.await_args.kwargs
+    assert kwargs["name"] == "ship-pr"
+    assert kwargs["body_md"] == "# Ship\n\n1. do thing"
+    assert kwargs["tags"] == ["git", "release"]
+    assert kwargs["tool_hints"] == {"prefer": ["work_list"]}
+
+
+def test_skill_save_requires_name_and_body() -> None:
+    client, services = _build()
+    services.ingestion.return_value.ingest_skill = AsyncMock()
+    _login(client)
+    resp = _app_post(client, "/app/skills/save", {"name": "", "body_md": ""})
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/skills?flash=invalid"
+    services.ingestion.return_value.ingest_skill.assert_not_awaited()
+
+
+def test_skill_save_rejects_invalid_tool_hints() -> None:
+    client, services = _build()
+    services.ingestion.return_value.ingest_skill = AsyncMock()
+    _login(client)
+    resp = _app_post(
+        client, "/app/skills/save",
+        {"name": "x", "body_md": "body", "tool_hints": "not-json"},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/skills?flash=invalid"
+    services.ingestion.return_value.ingest_skill.assert_not_awaited()
+
+
+# --------------------------------------------------------------------------- #
 # Write actions (Phase 5)
 # --------------------------------------------------------------------------- #
 def test_write_action_redirects_when_unauthed() -> None:
