@@ -545,23 +545,6 @@ def test_keys_page_lists_keys() -> None:
     assert "active" in resp.text
 
 
-def test_approvals_page_lists_pending() -> None:
-    client, services = _build()
-    services.approvals.list_pending = AsyncMock(
-        return_value=[
-            {"id": "ap1", "memory_id": "m1", "reason": "pii_detected",
-             "created_at": "2026-05-28T10:00:00", "content": "sensitive note"},
-            {"id": "ap2", "ontology_entity_id": "e1", "reason": "ontology_entity_proposed",
-             "created_at": "2026-06-01T10:00:00", "content": "Acme (Project)"},
-        ]
-    )
-    _login(client)
-    resp = client.get("/app/approvals")
-    assert resp.status_code == 200
-    assert "pii_detected" in resp.text
-    assert "ontology / entity" in resp.text
-
-
 def test_ontology_page_renders() -> None:
     client, _services = _build()
     facade = MagicMock()
@@ -876,7 +859,6 @@ def test_entity_hub_renders(monkeypatch: pytest.MonkeyPatch) -> None:
             "groups": [("fact", [{"content": "prod host is teamshared.com", "agent": "cursor", "tags": []}])],
             "graph_records": [],
             "work_items": [],
-            "approvals": [],
             "episodes": [],
         }
     )
@@ -1130,19 +1112,6 @@ def test_key_revoke_redirects() -> None:
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/keys"
     services.api_keys.revoke.assert_awaited_once()
-
-
-def test_approval_approve_redirects_and_decides() -> None:
-    client, services = _build()
-    services.approvals.decide = AsyncMock(return_value=uuid.uuid4())
-    services.audit.record = AsyncMock()
-    aid = str(uuid.uuid4())
-    _login(client)
-    resp = _app_post(client, f"/app/approvals/{aid}/decide", {"decision": "approve"})
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/approvals"
-    services.approvals.decide.assert_awaited_once()
-    assert services.approvals.decide.await_args.kwargs["approved"] is True
 
 
 def test_people_grant_and_revoke_redirect() -> None:

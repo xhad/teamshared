@@ -61,18 +61,6 @@
   </div>
   {% endif %}
 
-  {% if approvals %}
-  <h2>Pending approvals</h2>
-  <div class="panel">
-    {% for a in approvals %}
-    <div class="entry">
-      <div class="body">{{ a.content }}</div>
-      <div class="prov">{{ a.reason }} &middot; <a href="/app/approvals">review</a></div>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
   {% if episodes %}
   <h2>Timeline</h2>
   <div class="panel">

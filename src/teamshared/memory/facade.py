@@ -532,22 +532,6 @@ class MemoryFacade:
         )
         return {"name": name, "deleted_versions": count, "reason": reason}
 
-    async def approval_status(
-        self,
-        principal: Principal,
-        *,
-        memory_id: str | None = None,
-        procedure_id: str | None = None,
-        skill_id: str | None = None,
-    ) -> dict[str, Any]:
-        row = await self.services.approvals.lookup_write_status(
-            principal.org_id,
-            memory_id=UUID(memory_id) if memory_id else None,
-            procedure_id=int(procedure_id) if procedure_id else None,
-            skill_id=int(skill_id) if skill_id else None,
-        )
-        return row or {"status": "not_found"}
-
     async def session_get(
         self, principal: Principal, *, session_id: str
     ) -> dict[str, Any]:
@@ -867,13 +851,6 @@ class MemoryFacade:
             )
         except OntologyError as exc:
             return {"ok": False, "reason": str(exc)}
-        if row.get("status") == "pending_approval":
-            await self.services.approvals.enqueue_entity(
-                principal.org_id,
-                UUID(str(row["entity_id"])),
-                reason="ontology_entity_proposed",
-                requested_by=principal.id,
-            )
         return {"ok": True, **row}
 
     async def ontology_link_type_set(
@@ -952,16 +929,6 @@ class MemoryFacade:
             self.services.ontology.validate_action_parameters(action, parameters)
         except OntologyError as exc:
             return {"ok": False, "reason": str(exc)}
-
-        if action.get("requires_approval"):
-            return {
-                "ok": False,
-                "reason": "requires_approval",
-                "message": (
-                    f"Action '{action_name}' must be proposed via its direct tool "
-                    "and approved in the console"
-                ),
-            }
 
         tool = action.get("wrapper_tool") or ""
         result: dict[str, Any] | None = None
@@ -1074,7 +1041,7 @@ class MemoryFacade:
         }
 
     async def entity_view(self, principal: Principal, *, slug: str) -> dict[str, Any]:
-        """Bundle wiki, memories, graph, work, and approvals for an entity slug."""
+        """Bundle wiki, memories, graph, and work for an entity slug."""
         org_id = principal.org_id
         entity = await self.services.ontology.get_entity_by_slug(org_id, slug)
         subject: str | None = None
@@ -1091,7 +1058,6 @@ class MemoryFacade:
         curated: dict[str, Any] | None = None
         graph_records: list[MemoryRecord] = []
         work_items: list[dict[str, Any]] = []
-        approvals: list[dict[str, Any]] = []
         episodes: list[dict[str, Any]] = []
 
         if subject:
@@ -1141,19 +1107,6 @@ class MemoryFacade:
                 log.warning("entity_view_work_failed", error=str(exc))
 
             try:
-                pending = await self.services.approvals.list_pending(org_id, limit=50)
-                approvals = [
-                    {
-                        "content": p.get("content") or "",
-                        "reason": p.get("reason") or "pending",
-                    }
-                    for p in pending
-                    if needle in (p.get("content") or "").lower()
-                ][:10]
-            except Exception as exc:
-                log.warning("entity_view_approvals_failed", error=str(exc))
-
-            try:
                 eps = await self.services.vector_store.list_episodes(org_id=org_id, limit=30)
                 episodes = [
                     {
@@ -1182,7 +1135,6 @@ class MemoryFacade:
             ],
             "graph_records": [r.model_dump(mode="json") for r in graph_records],
             "work_items": work_items,
-            "approvals": approvals,
             "episodes": episodes,
         }
 
@@ -1585,7 +1537,7 @@ class MemoryFacade:
             )
             if skill is None:
                 raise ValueError(
-                    f"Skill {skill_name!r} is unavailable (missing, pending approval, "
+                    f"Skill {skill_name!r} is unavailable (missing or soft-deleted). "
                     "or quarantined)."
                 )
             effective_playbook = f"__skill__:{skill_name}"

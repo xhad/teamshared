@@ -20,7 +20,6 @@ from teamshared.identity.accounts import AccountStore
 from teamshared.identity.api_keys import ApiKeyStore
 from teamshared.identity.rbac import Authorizer
 from teamshared.identity.roles import RoleStore
-from teamshared.ingestion.approvals import ApprovalQueue
 from teamshared.ingestion.consent import ConsentStore
 from teamshared.ingestion.pipeline import IngestionPipeline
 from teamshared.logging import get_logger
@@ -65,7 +64,6 @@ class ProductionServices:
     ontology: OntologyStore
     audit: AuditLog
     memory_service: MemoryService
-    approvals: ApprovalQueue
     api_keys: ApiKeyStore
     roles: RoleStore
     accounts: AccountStore
@@ -85,7 +83,6 @@ class ProductionServices:
     def ingestion(self) -> IngestionPipeline:
         return IngestionPipeline(
             self.vector_store,
-            self.approvals,
             self.audit,
             self.procedural,
             self.skills,
@@ -125,7 +122,6 @@ def make_services(settings: Settings) -> ProductionServices:
     vector_store = VectorStore(tenant_db, embedder, cache=hnsw_cache)
     audit = AuditLog(tenant_db)
     memory_service = MemoryService(vector_store, audit)
-    approvals = ApprovalQueue(tenant_db)
     roles = RoleStore(tenant_db)
     ontology = OntologyStore(tenant_db)
     services = ProductionServices(
@@ -149,7 +145,6 @@ def make_services(settings: Settings) -> ProductionServices:
         ontology=ontology,
         audit=audit,
         memory_service=memory_service,
-        approvals=approvals,
         api_keys=ApiKeyStore(tenant_db),
         roles=roles,
         accounts=AccountStore(tenant_db),
@@ -159,7 +154,6 @@ def make_services(settings: Settings) -> ProductionServices:
             TokenVault(settings.connector_encryption_key),
             ingestion_factory=lambda: IngestionPipeline(
                 vector_store,
-                approvals,
                 audit,
                 OrgProceduralStore(tenant_db),
                 OrgSkillStore(tenant_db),

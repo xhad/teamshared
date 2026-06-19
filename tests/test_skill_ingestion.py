@@ -28,7 +28,7 @@ def _ctx() -> RequestContext:
     return RequestContext(principal=principal, db=MagicMock(), authorizer=authorizer)
 
 
-def _pipeline() -> tuple[IngestionPipeline, AsyncMock, AsyncMock]:
+def _pipeline() -> tuple[IngestionPipeline, AsyncMock]:
     skills = MagicMock()
     skills.set_skill = AsyncMock(
         return_value={
@@ -44,24 +44,21 @@ def _pipeline() -> tuple[IngestionPipeline, AsyncMock, AsyncMock]:
             "status": "active",
         }
     )
-    approvals = MagicMock()
-    approvals.enqueue_skill = AsyncMock(return_value=UUID(int=0))
     audit = MagicMock()
     audit.record = AsyncMock()
     pipe = IngestionPipeline(
         MagicMock(),
-        approvals,
         audit,
         MagicMock(),
         skills,
         MagicMock(),
         MagicMock(),
     )
-    return pipe, skills, approvals
+    return pipe, skills
 
 
 async def test_ingest_skill_active() -> None:
-    pipe, skills, approvals = _pipeline()
+    pipe, skills = _pipeline()
     result = await pipe.ingest_skill(
         _ctx(),
         name="ship-pr",
@@ -71,11 +68,10 @@ async def test_ingest_skill_active() -> None:
     assert result.status == "active"
     assert result.skill["version"] == 1
     skills.set_skill.assert_awaited_once()
-    approvals.enqueue_skill.assert_not_awaited()
 
 
 async def test_ingest_skill_rejects_hard_secret() -> None:
-    pipe, skills, _ = _pipeline()
+    pipe, skills = _pipeline()
     with pytest.raises(IngestionRejected, match="hard secret"):
         await pipe.ingest_skill(
             _ctx(),

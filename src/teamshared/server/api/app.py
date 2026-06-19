@@ -244,28 +244,6 @@ def build_api_app(
         )
         return JSONResponse({"shared": ok})
 
-    async def list_approvals(request: Request) -> JSONResponse:
-        ctx = _ctx(request, services)
-        await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_APPROVE)
-        pending = await services.approvals.list_pending(ctx.org_id, _limit(request, 50))
-        return JSONResponse({"pending": pending})
-
-    async def decide_approval(request: Request) -> JSONResponse:
-        ctx = _ctx(request, services)
-        await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_APPROVE)
-        body = await _json(request)
-        memory_id = await services.approvals.decide(
-            ctx.org_id, UUID(request.path_params["approval_id"]),
-            approved=bool(body.get("approved", False)), decided_by=ctx.principal.id,
-        )
-        await services.audit.record(
-            agent=ctx.principal.attribution, action="memory.approve",
-            org_id=ctx.org_id, actor_type=ctx.principal.type, actor_id=ctx.principal.id,
-            resource_type="memory", target_id=str(memory_id) if memory_id else None,
-            request_id=ctx.request_id, after={"approved": bool(body.get("approved", False))},
-        )
-        return JSONResponse({"memory_id": str(memory_id) if memory_id else None})
-
     async def list_audit(request: Request) -> JSONResponse:
         ctx = _ctx(request, services)
         await ctx.authorizer.require(ctx.principal, Permissions.AUDIT_READ)
@@ -403,8 +381,6 @@ def build_api_app(
         Route("/v1/memory/{memory_id}", patch_memory, methods=["PATCH"]),
         Route("/v1/memory/{memory_id}", delete_memory, methods=["DELETE"]),
         Route("/v1/memory/{memory_id}/share", share_memory, methods=["POST"]),
-        Route("/v1/approvals", list_approvals, methods=["GET"]),
-        Route("/v1/approvals/{approval_id}/decide", decide_approval, methods=["POST"]),
         Route("/v1/audit", list_audit, methods=["GET"]),
         Route("/v1/connectors", list_connectors, methods=["GET"]),
         Route("/v1/connectors", create_connector, methods=["POST"]),

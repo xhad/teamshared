@@ -135,12 +135,11 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.skill_resolve = AsyncMock(return_value=None)
     facade.forget_procedure = AsyncMock(return_value={"name": "p", "deleted_versions": 1})
     facade.forget_skill = AsyncMock(return_value={"name": "s", "deleted_versions": 1})
-    facade.approval_status = AsyncMock(return_value={"status": "active"})
     facade.session_get = AsyncMock(return_value={"session_id": "sess_abc", "turns": []})
     facade.strategic_entity_get = AsyncMock(return_value=None)
     facade.strategic_statement_get = AsyncMock(return_value=None)
     facade.strategic_statement_set = AsyncMock(
-        return_value={"kind": "vision", "status": "pending_approval", "id": "s1"}
+        return_value={"kind": "vision", "status": "active", "id": "s1"}
     )
     facade.strategic_plan_list = AsyncMock(return_value={"count": 0, "plans": []})
     facade.graph_relate = AsyncMock(return_value={"ok": False, "reason": "graph_disabled"})
@@ -148,7 +147,7 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.entity_view = AsyncMock(return_value={"slug": "teamshared", "subject": "teamshared", "groups": []})
     facade.ontology_list = AsyncMock(return_value={"link_types": [], "object_kinds": []})
     facade.ontology_propose_entity = AsyncMock(
-        return_value={"ok": True, "entity_id": "e1", "slug": "acme", "status": "pending_approval"}
+        return_value={"ok": True, "entity_id": "e1", "slug": "acme", "status": "active"}
     )
     facade.action_apply = AsyncMock(
         return_value={"ok": True, "action": "link_entities", "status": "applied", "log_id": "l1"}

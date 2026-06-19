@@ -10,8 +10,8 @@
     <button type="button" class="ghost" onclick="document.getElementById('propose-modal').showModal()">Propose statement</button>
   </div>
   {% if note %}
-    {% if note == 'pending' %}
-      <div class="flash-pending">Proposal submitted — awaiting approval.</div>
+    {% if note == 'saved' %}
+      <div class="flash-ok">Statement saved.</div>
     {% elif note == 'invalid' or note == 'error' %}
       <div class="unavailable">{{ note }}</div>
     {% else %}

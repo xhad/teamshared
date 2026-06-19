@@ -13,7 +13,7 @@ TeamShared is a shared memory MCP server for engineering teams and their agents.
 Engineering leads, developers, and ops teammates who:
 
 - Review wiki topics and entity rollups
-- Triage the work queue and approvals
+- Triage the work queue
 - Mint API keys and manage org membership
 - Inspect memory, agents, and audit trails
 

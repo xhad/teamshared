@@ -30,7 +30,7 @@ class OrgStrategicStore:
         content_md: str,
         *,
         agent: str,
-        status: str = "pending_approval",
+        status: str = "active",
     ) -> dict[str, Any]:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
@@ -79,7 +79,7 @@ class OrgStrategicStore:
         period_start: date,
         period_end: date,
         agent: str,
-        status: str = "pending_approval",
+        status: str = "active",
     ) -> dict[str, Any]:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
@@ -202,7 +202,7 @@ class OrgStrategicStore:
         owner_id: UUID | None,
         sort_order: int,
         agent: str,
-        status: str = "pending_approval",
+        status: str = "active",
     ) -> dict[str, Any]:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
@@ -237,7 +237,7 @@ class OrgStrategicStore:
         metric_unit: str | None,
         track_status: str,
         agent: str,
-        status: str = "pending_approval",
+        status: str = "active",
     ) -> dict[str, Any]:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
@@ -269,7 +269,7 @@ class OrgStrategicStore:
         objective_id: UUID | None,
         key_result_id: UUID | None,
         agent: str,
-        status: str = "pending_approval",
+        status: str = "active",
     ) -> dict[str, Any]:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(

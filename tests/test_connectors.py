@@ -53,7 +53,7 @@ class _FakeConnector(Connector):
 
 
 @pytest.mark.integration
-async def test_connector_sync_imports_to_approval_queue() -> None:
+async def test_connector_sync_imports_active_memories() -> None:
     from teamshared.config import get_settings
     from teamshared.identity.rbac import Authorizer
     from teamshared.memory.request_context import RequestContext
@@ -81,8 +81,7 @@ async def test_connector_sync_imports_to_approval_queue() -> None:
         report = await services.connectors.sync(ctx, cid, connector=_FakeConnector({}))
         assert report.fetched == 2
         assert report.imported == 2
-        # Connector-sourced memory must be pending approval, not active.
-        pending = await services.approvals.list_pending(ctx.org_id)
-        assert len(pending) >= 2
+        subjects = await services.vector_store.list_subjects(ctx.org_id, limit=10)
+        assert len(subjects) >= 2
     finally:
         await services.tenant_db.close()

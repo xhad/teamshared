@@ -92,7 +92,7 @@ STARTER_ACTION_TYPES: list[tuple[str, str, str, dict[str, Any], bool]] = [
     ),
     (
         "propose_strategy",
-        "Propose a strategic statement (requires approval)",
+        "Propose a strategic statement",
         "memory_strategic_statement_set",
         {
             "required": ["kind", "content"],
@@ -101,6 +101,6 @@ STARTER_ACTION_TYPES: list[tuple[str, str, str, dict[str, Any], bool]] = [
                 "content": {"type": "string"},
             },
         },
-        True,
+        False,
     ),
 ]

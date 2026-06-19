@@ -98,8 +98,6 @@ NAV: list[tuple[str, str, str]] = [
     ("/app/people", "People", "people"),
     ("/app/orgs", "Organizations", "orgs"),
     ("/app/keys", "API Keys", "keys"),
-    ("/app/approvals", "Approvals", "approvals"),
-    ("/app/ontology", "Ontology", "ontology"),
     ("/app/consent", "Consent", "consent"),
     ("/app/audit", "Audit", "audit"),
     ("/app/settings", "Settings", "settings"),
@@ -132,7 +130,6 @@ NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
             ("/app/people", "People", "people"),
             ("/app/orgs", "Organizations", "orgs"),
             ("/app/keys", "API Keys", "keys"),
-            ("/app/approvals", "Approvals", "approvals"),
             ("/app/ontology", "Ontology", "ontology"),
             ("/app/consent", "Consent", "consent"),
             ("/app/audit", "Audit", "audit"),
@@ -253,7 +250,6 @@ async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
         "strategic_objectives": strat.get("objectives", 0),
         "work_open": work.get("open", 0),
         "work_blocked": work.get("blocked", 0),
-        "work_pending": work.get("pending_approval", 0),
         "by_agent": by_agent,
         "by_agent_max": by_agent_max,
         "recent": events if isinstance(events, list) else [],
@@ -527,7 +523,7 @@ def register_console_routes(
             ctx.update(await _home_context(get_state(), principal.org_id))
         except RuntimeError:
             ctx.update({"working_active": 0, "working_total": 0,
-                        "work_open": 0, "work_blocked": 0, "work_pending": 0,
+                        "work_open": 0, "work_blocked": 0,
                         "semantic": 0, "episodic": 0, "procedural": 0,
                         "procedural_versions": 0, "by_agent": [], "by_agent_max": 1, "recent": []})
         return _TEMPLATES.TemplateResponse(request, "console_home.html", ctx)
@@ -678,7 +674,6 @@ def register_console_routes(
         curated: dict[str, Any] | None = None
         graph_records: list[Any] = []
         work_items: list[dict[str, Any]] = []
-        approvals: list[dict[str, Any]] = []
         episodes: list[dict[str, Any]] = []
         entity: dict[str, Any] | None = None
         note = ""
@@ -694,7 +689,6 @@ def register_console_routes(
             groups = pack.get("groups") or []
             graph_records = pack.get("graph_records") or []
             work_items = pack.get("work_items") or []
-            approvals = pack.get("approvals") or []
             episodes = pack.get("episodes") or []
         except Exception as exc:
             log.warning("entity_hub_failed", error=str(exc))
@@ -711,7 +705,6 @@ def register_console_routes(
                 "curated_updated": _dt(curated.get("updated_at")) if curated else "",
                 "graph_records": graph_records,
                 "work_items": work_items,
-                "approvals": approvals,
                 "episodes": episodes,
             }
         )
@@ -2032,7 +2025,7 @@ def register_console_routes(
         except Exception as exc:
             log.warning("strategy_statement_propose_failed", error=str(exc))
             return RedirectResponse("/app/strategy?flash=error", status_code=303)
-        return RedirectResponse("/app/strategy?flash=pending", status_code=303)
+        return RedirectResponse("/app/strategy?flash=saved", status_code=303)
 
     async def strategy_plan_detail(request: Request) -> Response:
         principal = _session(request)
@@ -2051,55 +2044,6 @@ def register_console_routes(
             note = f"Unavailable: {exc}"
         ctx.update({"tree": tree, "note": note})
         return _TEMPLATES.TemplateResponse(request, "strategy_plan.html", ctx)
-
-    async def approvals_page(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        ctx = await _shell(request, principal, "approvals")
-        pending: list[dict[str, Any]] = []
-        note = ""
-        try:
-            data = await services.approvals.list_pending(principal.org_id)
-            pending = [
-                {"id": d.get("id"), "created": _dt(d.get("created_at")),
-                 "reason": d.get("reason") or "\u2014",
-                 "content": d.get("content") or "",
-                 "strategic_type": d.get("strategic_entity_type"),
-                 "work_item_id": d.get("work_item_id"),
-                 "ontology_entity_id": d.get("ontology_entity_id")}
-                for d in data
-            ]
-        except Exception as exc:
-            log.warning("approvals_page_failed", error=str(exc))
-            note = f"Unavailable: {exc}"
-        ctx.update({"pending": pending, "note": note})
-        return _TEMPLATES.TemplateResponse(request, "approvals.html", ctx)
-
-    async def approval_decide(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        approved = str(form.get("decision") or "").strip() == "approve"
-        try:
-            ctx = _ctx(principal)
-            await ctx.authorizer.require(principal, Permissions.MEMORY_APPROVE)
-            memory_id = await services.approvals.decide(
-                principal.org_id, UUID(str(request.path_params["approval_id"])),
-                approved=approved, decided_by=principal.id,
-            )
-            await services.audit.record(
-                agent=principal.attribution, action="memory.approve", org_id=principal.org_id,
-                actor_type=principal.type, actor_id=principal.id, resource_type="memory",
-                target_id=str(memory_id) if memory_id else None, request_id=ctx.request_id,
-                after={"approved": approved},
-            )
-        except Exception as exc:
-            log.warning("approval_decide_failed", error=str(exc))
-        return RedirectResponse("/app/approvals", status_code=303)
 
     async def ontology_page(request: Request) -> Response:
         principal = _session(request)
@@ -2288,8 +2232,6 @@ def register_console_routes(
         Route("/app/keys", keys_page, methods=["GET"]),
         Route("/app/keys/mint", key_mint, methods=["POST"]),
         Route("/app/keys/{key_id}/revoke", key_revoke, methods=["POST"]),
-        Route("/app/approvals", approvals_page, methods=["GET"]),
-        Route("/app/approvals/{approval_id}/decide", approval_decide, methods=["POST"]),
         Route("/app/ontology", ontology_page, methods=["GET"]),
         Route("/app/audit", audit_page, methods=["GET"]),
         Route("/app/consent", consent_page, methods=["GET"]),

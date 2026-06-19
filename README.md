@@ -156,7 +156,6 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | `memory_session_close`      | Close + enqueue for distillation                             |
 | `memory_session_get`        | Read session metadata and turns                              |
 | `memory_episodes_list`      | Browse the episodic timeline                                 |
-| `memory_approval_status`    | Check pending_approval/quarantined write status              |
 | `memory_procedure_get`      | Fetch a stored playbook (`expand_skills` inlines skills)     |
 | `memory_procedure_set`      | Store a new version of a playbook                            |
 | `memory_procedures_list`      | List playbooks (summaries by default)                        |
@@ -247,7 +246,6 @@ between them and a **New org** action to create more.
   (they sign in with their own OTP and land in this org), and grant/revoke roles.
 - **Organizations** (`/app/orgs`) — list the orgs your account belongs to, switch
   between them, and create a new one.
-- **Approvals** (`/app/approvals`) — approve/reject captured memory before it goes live.
 - **Consent** (`/app/consent`) — grant/revoke the capture scopes that gate ingestion.
 
 Each new org is isolated by RLS, so opening signup only lets people create their own

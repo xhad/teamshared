@@ -2,10 +2,8 @@
 
 ``IngestionPipeline.ingest`` is the single funnel for creating durable memory.
 It enforces the create permission, dedupes by content hash, blocks hard
-secrets, redacts other PII, screens for prompt injection, routes risky or
-review-required items to the approval queue (stored ``quarantined`` /
-``pending_approval`` so they are invisible to retrieval until approved), embeds
-+ stores, and audits.
+secrets, redacts other PII, screens for prompt injection (audit-only),
+embeds + stores as ``active``, and audits.
 """
 
 from __future__ import annotations
@@ -17,7 +15,6 @@ from typing import Any
 from uuid import UUID
 
 from teamshared.identity.rbac import Permissions
-from teamshared.ingestion.approvals import ApprovalQueue
 from teamshared.ingestion.injection import InjectionVerdict, screen_injection
 from teamshared.ingestion.pii import PIIFinding, has_hard_secret, redact_pii, scan_pii
 from teamshared.logging import get_logger
@@ -86,7 +83,6 @@ class IngestionPipeline:
     def __init__(
         self,
         vector_store: VectorStore,
-        approvals: ApprovalQueue,
         audit: AuditLog,
         procedural: OrgProceduralStore,
         skills: OrgSkillStore,
@@ -97,7 +93,6 @@ class IngestionPipeline:
         ontology: OntologyStore | None = None,
     ) -> None:
         self.vector_store = vector_store
-        self.approvals = approvals
         self.audit = audit
         self.procedural = procedural
         self.skills = skills
@@ -114,6 +109,12 @@ class IngestionPipeline:
         if not link_types:
             return None
         return frozenset(lt["name"] for lt in link_types)
+
+    @staticmethod
+    def _store_status(verdict: InjectionVerdict) -> str:
+        """All guarded writes land active; injection screening is audit-only."""
+        _ = verdict
+        return "active"
 
     async def ingest(
         self,
@@ -134,6 +135,7 @@ class IngestionPipeline:
         require_approval: bool = False,
     ) -> IngestionResult:
         await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
+        _ = require_approval
 
         # Dedup.
         dup = await self.vector_store.find_duplicate(ctx.org_id, content)
@@ -152,18 +154,11 @@ class IngestionPipeline:
             raise IngestionRejected("content contains a hard secret and was not stored")
         safe_content = redact_pii(content) if findings else content
 
-        # Injection screening.
+        # Injection screening (logged; does not block storage).
         verdict = screen_injection(safe_content)
-
-        # Decide status.
-        # Connector/extraction sources and explicit flags route to review.
-        needs_review = require_approval or source in {"connector", "extraction"}
+        status = self._store_status(verdict)
         if verdict.quarantine:
-            status = "quarantined"
-        elif needs_review:
-            status = "pending_approval"
-        else:
-            status = "active"
+            METRICS.ingestion_quarantined.inc(status=status, reason="prompt_injection_suspected")
 
         owner_type = ctx.principal.type if ctx.principal.type in {"user", "agent"} else None
         memory_id = await self.vector_store.add(
@@ -186,13 +181,6 @@ class IngestionPipeline:
             creator_id=ctx.principal.id,
             status=status,
         )
-
-        if status != "active":
-            reason = "prompt_injection_suspected" if verdict.quarantine else "review_required"
-            METRICS.ingestion_quarantined.inc(status=status, reason=reason)
-            await self.approvals.enqueue(
-                ctx.org_id, memory_id, reason=reason, requested_by=ctx.principal.id
-            )
 
         await self.audit.record(
             agent=ctx.principal.attribution, action="memory.create",
@@ -261,13 +249,9 @@ class IngestionPipeline:
             safe_description = description
 
         verdict = screen_injection(screen_text)
-        needs_review = source in {"connector", "extraction"}
+        status = self._store_status(verdict)
         if verdict.quarantine:
-            status = "quarantined"
-        elif needs_review:
-            status = "pending_approval"
-        else:
-            status = "active"
+            METRICS.ingestion_quarantined.inc(status=status, reason="prompt_injection_suspected")
 
         row = await self.procedural.set_procedure(
             ctx.org_id,
@@ -279,16 +263,6 @@ class IngestionPipeline:
             description=safe_description,
             status=status,
         )
-
-        if status != "active":
-            reason = "prompt_injection_suspected" if verdict.quarantine else "review_required"
-            METRICS.ingestion_quarantined.inc(status=status, reason=reason)
-            await self.approvals.enqueue_procedure(
-                ctx.org_id,
-                int(row["id"]),
-                reason=reason,
-                requested_by=ctx.principal.id,
-            )
 
         await self.audit.record(
             agent=ctx.principal.attribution,
@@ -347,13 +321,9 @@ class IngestionPipeline:
             safe_description = description
 
         verdict = screen_injection(screen_text)
-        needs_review = source in {"connector", "extraction"}
+        status = self._store_status(verdict)
         if verdict.quarantine:
-            status = "quarantined"
-        elif needs_review:
-            status = "pending_approval"
-        else:
-            status = "active"
+            METRICS.ingestion_quarantined.inc(status=status, reason="prompt_injection_suspected")
 
         row = await self.skills.set_skill(
             ctx.org_id,
@@ -365,16 +335,6 @@ class IngestionPipeline:
             description=safe_description,
             status=status,
         )
-
-        if status != "active":
-            reason = "prompt_injection_suspected" if verdict.quarantine else "review_required"
-            METRICS.ingestion_quarantined.inc(status=status, reason=reason)
-            await self.approvals.enqueue_skill(
-                ctx.org_id,
-                int(row["id"]),
-                reason=reason,
-                requested_by=ctx.principal.id,
-            )
 
         await self.audit.record(
             agent=ctx.principal.attribution,
@@ -561,18 +521,10 @@ class IngestionPipeline:
             raise IngestionRejected("content contains a hard secret and was not stored")
 
         verdict = screen_injection(screen_text)
-        status = "quarantined" if verdict.quarantine else "pending_approval"
+        status = self._store_status(verdict)
+        if verdict.quarantine:
+            METRICS.ingestion_quarantined.inc(status=status, reason="prompt_injection_suspected")
         row = await create(status)
-
-        reason = "prompt_injection_suspected" if verdict.quarantine else "strategic_review_required"
-        METRICS.ingestion_quarantined.inc(status=status, reason=reason)
-        await self.approvals.enqueue_strategic(
-            ctx.org_id,
-            entity_type,
-            UUID(str(row["id"])),
-            reason=reason,
-            requested_by=ctx.principal.id,
-        )
 
         await self.audit.record(
             agent=ctx.principal.attribution,
@@ -608,7 +560,7 @@ class IngestionPipeline:
         repo: str | None,
         github: str | None,
         agent: str,
-        require_approval: bool = True,
+        require_approval: bool = False,
         project_id: UUID | None = None,
         section_id: UUID | None = None,
         parent_id: UUID | None = None,
@@ -632,12 +584,10 @@ class IngestionPipeline:
             raise IngestionRejected("content contains a hard secret and was not stored")
 
         verdict = screen_injection(screen_text)
+        _ = require_approval
+        status = self._store_status(verdict)
         if verdict.quarantine:
-            status = "quarantined"
-        elif require_approval:
-            status = "pending_approval"
-        else:
-            status = "active"
+            METRICS.ingestion_quarantined.inc(status=status, reason="prompt_injection_suspected")
 
         row = await self.work.create(
             ctx.org_id,
@@ -665,16 +615,6 @@ class IngestionPipeline:
         if project_id is not None:
             await self.work.add_to_project(
                 ctx.org_id, UUID(str(row["id"])), project_id, section_id=section_id,
-            )
-
-        if status in {"pending_approval", "quarantined"}:
-            reason = "prompt_injection_suspected" if verdict.quarantine else "work_review_required"
-            METRICS.ingestion_quarantined.inc(status=status, reason=reason)
-            await self.approvals.enqueue_work(
-                ctx.org_id,
-                UUID(str(row["id"])),
-                reason=reason,
-                requested_by=ctx.principal.id,
             )
 
         await self.audit.record(

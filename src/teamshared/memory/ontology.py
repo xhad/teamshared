@@ -499,10 +499,11 @@ class OntologyStore:
         name: str,
         properties: dict[str, Any] | None,
         created_by: str,
-        auto_approve: bool = False,
+        auto_approve: bool = True,
     ) -> dict[str, Any]:
+        _ = auto_approve
         slug = slugify(name)
-        status = "active" if auto_approve else "pending_approval"
+        status = "active"
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
                 "SELECT id FROM ontology_object_kinds WHERE org_id = %s AND name = %s",

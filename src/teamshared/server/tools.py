@@ -204,7 +204,7 @@ def register_tools(mcp: Any) -> None:
         episodic. ``procedure`` / ``skill`` -> rejected; use ``memory_procedure_set`` /
         ``memory_skill_set``.
         Routed through the guarded ingestion pipeline (dedup, PII, injection
-        screening, approval routing) under RLS. When ``repo`` / ``github`` are
+        screening) under RLS. When ``repo`` / ``github`` are
         given the memory is tagged ``repo:<slug>`` / ``github:<owner>/<repo>``.
         """
         if kind == "procedure":
@@ -570,8 +570,7 @@ def register_tools(mcp: Any) -> None:
         """Insert a new version of a procedure. Each call creates a new version.
 
         Routed through the guarded ingestion pipeline (PII redaction, injection
-        screening, approval queue). Returns ``status`` (``active``,
-        ``pending_approval``, or ``quarantined``); only ``active`` playbooks are
+        screening). Returns ``status`` (``active`` or ``duplicate``); only ``active`` playbooks are
         visible to recall and ``memory_procedure_get``.
         """
         state = get_state()
@@ -747,19 +746,6 @@ def register_tools(mcp: Any) -> None:
         return await state.facade.forget_skill(principal, name=name, reason=reason)
 
     @mcp.tool()
-    async def memory_approval_status(
-        memory_id: Annotated[str | None, Field(description="memory_items UUID")] = None,
-        procedure_id: Annotated[str | None, Field(description="Procedure row id from a write")] = None,
-        skill_id: Annotated[str | None, Field(description="Skill row id from a write")] = None,
-    ) -> dict[str, Any]:
-        """Check approval-queue status for a guarded write (pending/quarantined)."""
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.approval_status(
-            principal, memory_id=memory_id, procedure_id=procedure_id, skill_id=skill_id,
-        )
-
-    @mcp.tool()
     async def memory_strategic_statement_get(
         kind: Annotated[
             StrategicStatementKind,
@@ -777,7 +763,7 @@ def register_tools(mcp: Any) -> None:
         content_md: Annotated[str, Field(description="Markdown body")],
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Propose a new version of vision, mission, or purpose (requires approval)."""
+        """Propose a new version of vision, mission, or purpose."""
         state = get_state()
         principal = await _principal()
         return await state.facade.strategic_statement_set(
@@ -817,7 +803,7 @@ def register_tools(mcp: Any) -> None:
         period_end: Annotated[date, Field(description="Inclusive end date")],
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Propose a new OKR cycle (requires approval)."""
+        """Propose a new OKR cycle."""
         state = get_state()
         principal = await _principal()
         return await state.facade.strategic_plan_set(
@@ -838,7 +824,7 @@ def register_tools(mcp: Any) -> None:
         sort_order: Annotated[int, Field(description="Display order")] = 0,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Propose an objective under a plan (requires approval)."""
+        """Propose an objective under a plan."""
         state = get_state()
         principal = await _principal()
         return await state.facade.strategic_objective_set(
@@ -865,7 +851,7 @@ def register_tools(mcp: Any) -> None:
         ] = "on_track",
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Propose a key result under an objective (requires approval)."""
+        """Propose a key result under an objective."""
         state = get_state()
         principal = await _principal()
         return await state.facade.strategic_key_result_set(
@@ -889,7 +875,7 @@ def register_tools(mcp: Any) -> None:
         key_result_id: Annotated[str | None, Field(description="Aligned key result UUID")] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Propose a strategic initiative (requires approval)."""
+        """Propose a strategic initiative."""
         state = get_state()
         principal = await _principal()
         return await state.facade.strategic_initiative_set(
@@ -1631,7 +1617,7 @@ def register_tools(mcp: Any) -> None:
     async def memory_entity_view(
         slug: Annotated[str, Field(description="Entity slug (wiki topic slug or ontology entity slug)")],
     ) -> dict[str, Any]:
-        """Roll up wiki, memories, graph neighbors, work, and approvals for one entity."""
+        """Roll up wiki, memories, graph neighbors, and work for one entity."""
         state = get_state()
         principal = await _principal()
         return await state.facade.entity_view(principal, slug=slug)
@@ -1653,7 +1639,7 @@ def register_tools(mcp: Any) -> None:
         ] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Propose a typed ontology entity (pending approval unless auto-approved)."""
+        """Propose a typed ontology entity (active immediately)."""
         state = get_state()
         principal = await _principal()
         return await state.facade.ontology_propose_entity(

@@ -1,15 +1,14 @@
-"""Strategic memory pillar: store, ingestion, and approval lifecycle."""
+"""Strategic memory pillar: store and ingestion."""
 
 from __future__ import annotations
 
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 
 from teamshared.identity.principal import Principal
-from teamshared.ingestion.approvals import ApprovalQueue
 from teamshared.ingestion.pipeline import IngestionPipeline, IngestionRejected
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.strategic import OrgStrategicStore
@@ -32,7 +31,7 @@ def _ctx() -> RequestContext:
     return RequestContext(principal=principal, db=MagicMock(), authorizer=authorizer)
 
 
-def _strategic_pipeline() -> tuple[IngestionPipeline, AsyncMock, AsyncMock]:
+def _strategic_pipeline() -> tuple[IngestionPipeline, AsyncMock]:
     strategic = MagicMock()
     strategic.set_statement = AsyncMock(
         return_value={
@@ -41,35 +40,31 @@ def _strategic_pipeline() -> tuple[IngestionPipeline, AsyncMock, AsyncMock]:
             "kind": "vision",
             "content_md": "Build the team brain",
             "version": 1,
-            "status": "pending_approval",
+            "status": "active",
             "created_by": "cursor",
             "created_at": "2026-01-01T00:00:00+00:00",
         }
     )
-    approvals = MagicMock()
-    approvals.enqueue_strategic = AsyncMock(return_value=UUID(int=1))
     audit = MagicMock()
     audit.record = AsyncMock()
-    pipe = IngestionPipeline(MagicMock(), approvals, audit, MagicMock(), MagicMock(), strategic, MagicMock())
-    return pipe, strategic, approvals
+    pipe = IngestionPipeline(MagicMock(), audit, MagicMock(), MagicMock(), strategic, MagicMock())
+    return pipe, strategic
 
 
-async def test_ingest_strategic_statement_always_pending() -> None:
-    pipe, strategic, approvals = _strategic_pipeline()
+async def test_ingest_strategic_statement_active() -> None:
+    pipe, strategic = _strategic_pipeline()
     result = await pipe.ingest_strategic_statement(
         _ctx(), kind="vision", content_md="Build the team brain", agent="cursor",
     )
-    assert result.status == "pending_approval"
+    assert result.status == "active"
     assert result.entity_type == "statement"
     strategic.set_statement.assert_awaited_once()
     kwargs = strategic.set_statement.await_args.kwargs
-    assert kwargs["status"] == "pending_approval"
-    approvals.enqueue_strategic.assert_awaited_once()
-    assert approvals.enqueue_strategic.await_args.args[1] == "statement"
+    assert kwargs["status"] == "active"
 
 
 async def test_ingest_strategic_statement_rejects_secret() -> None:
-    pipe, strategic, _ = _strategic_pipeline()
+    pipe, strategic = _strategic_pipeline()
     with pytest.raises(IngestionRejected, match="hard secret"):
         await pipe.ingest_strategic_statement(
             _ctx(),
@@ -80,8 +75,8 @@ async def test_ingest_strategic_statement_rejects_secret() -> None:
     strategic.set_statement.assert_not_awaited()
 
 
-async def test_ingest_strategic_plan_pending() -> None:
-    pipe, strategic, approvals = _strategic_pipeline()
+async def test_ingest_strategic_plan_active() -> None:
+    pipe, strategic = _strategic_pipeline()
     strategic.create_plan = AsyncMock(
         return_value={
             "id": ENTITY_ID,
@@ -89,7 +84,7 @@ async def test_ingest_strategic_plan_pending() -> None:
             "name": "2026 Q2",
             "period_start": date(2026, 4, 1),
             "period_end": date(2026, 6, 30),
-            "status": "pending_approval",
+            "status": "active",
             "created_by": "cursor",
             "created_at": "2026-01-01T00:00:00+00:00",
         }
@@ -101,9 +96,8 @@ async def test_ingest_strategic_plan_pending() -> None:
         period_end=date(2026, 6, 30),
         agent="cursor",
     )
-    assert result.status == "pending_approval"
+    assert result.status == "active"
     assert result.entity_type == "plan"
-    approvals.enqueue_strategic.assert_awaited_once()
 
 
 async def test_activate_statement_supersedes_prior() -> None:
@@ -158,20 +152,3 @@ async def test_search_maps_to_memory_records() -> None:
     assert len(records) == 1
     assert records[0].pillar == "strategic"
     assert "vision" in records[0].content.lower()
-
-
-async def test_approval_queue_enqueue_strategic() -> None:
-    db = MagicMock()
-    conn = MagicMock()
-    cur = MagicMock()
-    cur.fetchone = AsyncMock(return_value=(uuid4(),))
-    conn.execute = AsyncMock(return_value=cur)
-    conn.__aenter__ = AsyncMock(return_value=conn)
-    conn.__aexit__ = AsyncMock(return_value=False)
-    db.org = MagicMock(return_value=conn)
-
-    queue = ApprovalQueue(db)
-    aid = await queue.enqueue_strategic(ORG, "plan", ENTITY_ID, reason="strategic_review_required")
-    assert aid is not None
-    sql = conn.execute.await_args.args[0]
-    assert "strategic_entity_type" in sql
