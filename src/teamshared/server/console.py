@@ -642,6 +642,8 @@ def register_console_routes(
         curated_html = ""
         curated: dict[str, Any] | None = None
         entity: dict[str, Any] | None = None
+        related_skills: list[dict[str, Any]] = []
+        related_playbooks: list[dict[str, Any]] = []
         note = ""
         try:
             vs = services.vector_store
@@ -660,6 +662,14 @@ def register_console_routes(
                 curated = await services.wiki.get_page(principal.org_id, slug)
                 if curated:
                     curated_html = render_markdown_safe(curated.get("body_md") or "")
+                if subject or entity:
+                    related_skills, related_playbooks = (
+                        await get_state().facade.related_skills_playbooks(
+                            principal.org_id,
+                            slug=slug,
+                            subject=subject,
+                        )
+                    )
         except Exception as exc:
             log.warning("wiki_topic_failed", error=str(exc))
             note = f"Wiki unavailable: {exc}"
@@ -673,6 +683,8 @@ def register_console_routes(
                 "curated_html": curated_html,
                 "curated_version": curated.get("version") if curated else None,
                 "curated_updated": _dt(curated.get("updated_at")) if curated else "",
+                "related_skills": related_skills,
+                "related_playbooks": related_playbooks,
             }
         )
         return _TEMPLATES.TemplateResponse(request, "wiki_topic.html", ctx)
@@ -690,6 +702,8 @@ def register_console_routes(
         graph_records: list[Any] = []
         work_items: list[dict[str, Any]] = []
         episodes: list[dict[str, Any]] = []
+        related_skills: list[dict[str, Any]] = []
+        related_playbooks: list[dict[str, Any]] = []
         entity: dict[str, Any] | None = None
         note = ""
         try:
@@ -705,6 +719,8 @@ def register_console_routes(
             graph_records = pack.get("graph_records") or []
             work_items = pack.get("work_items") or []
             episodes = pack.get("episodes") or []
+            related_skills = pack.get("skills") or []
+            related_playbooks = pack.get("playbooks") or []
         except Exception as exc:
             log.warning("entity_hub_failed", error=str(exc))
             note = f"Entity hub unavailable: {exc}"
@@ -721,6 +737,8 @@ def register_console_routes(
                 "graph_records": graph_records,
                 "work_items": work_items,
                 "episodes": episodes,
+                "related_skills": related_skills,
+                "related_playbooks": related_playbooks,
             }
         )
         return _TEMPLATES.TemplateResponse(request, "entity_hub.html", ctx)

@@ -1,0 +1,31 @@
+{% if related_skills or related_playbooks %}
+<section class="panel gap-before">
+  <h2>Related skills &amp; playbooks</h2>
+  {% if related_skills %}
+  <div class="kb-kind">Skills</div>
+  <ul class="catalog-links">
+    {% for s in related_skills %}
+    <li>
+      <a href="/app/skills/{{ s.name }}">{{ s.name }}</a>{% if s.version %} <span class="ver">v{{ s.version }}</span>{% endif %}
+      {% if s.description %}<span class="muted"> — {{ s.description | truncate(100) }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if related_playbooks %}
+  <div class="kb-kind">Playbooks</div>
+  <ul class="catalog-links">
+    {% for p in related_playbooks %}
+    <li>
+      <a href="/app/playbooks/{{ p.name }}">{{ p.name }}</a>{% if p.version %} <span class="ver">v{{ p.version }}</span>{% endif %}
+      {% if p.skills %}
+      <span class="muted"> — {% for sk in p.skills %}<a href="/app/skills/{{ sk }}">{{ sk }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+      {% elif p.description %}
+      <span class="muted"> — {{ p.description | truncate(100) }}</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}

@@ -877,6 +877,36 @@ def test_wiki_topic_prefers_curated_page() -> None:
     assert "prod host is teamshared.com" in resp.text
 
 
+def test_wiki_topic_links_ontology_entity_and_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, services = _build()
+    services.vector_store.list_subjects = AsyncMock(
+        return_value=[{"subject": "teamshared", "count": 1, "updated_at": "2026-05-28T10:00:00"}]
+    )
+    services.vector_store.list_by_subject = AsyncMock(return_value=[])
+    services.wiki.get_page = AsyncMock(return_value=None)
+    services.ontology.get_entity_by_slug = AsyncMock(
+        return_value={"kind": "Project", "name": "teamshared", "status": "active"}
+    )
+    facade = MagicMock()
+    facade.related_skills_playbooks = AsyncMock(
+        return_value=(
+            [{"name": "teamshared.start-of-task", "version": 1, "description": "Ritual"}],
+            [],
+        )
+    )
+    set_state(SimpleNamespace(facade=facade))
+    try:
+        _login(client)
+        resp = client.get("/app/wiki/topic/teamshared")
+        assert resp.status_code == 200
+        assert "Entity hub" in resp.text
+        assert "Ontology" in resp.text
+        assert "teamshared.start-of-task" in resp.text
+        facade.related_skills_playbooks.assert_awaited_once()
+    finally:
+        clear_state()
+
+
 def test_wiki_playbooks_redirects_to_dedicated_section() -> None:
     # The old Wiki tab now redirects to the editable top-level Playbooks section.
     client, _ = _build()
@@ -900,6 +930,8 @@ def test_entity_hub_renders(monkeypatch: pytest.MonkeyPatch) -> None:
             "graph_records": [],
             "work_items": [],
             "episodes": [],
+            "skills": [{"name": "teamshared.start-of-task", "version": 1, "description": "Ritual"}],
+            "playbooks": [{"name": "ship-pr", "version": 2, "description": "Release flow", "skills": ["lint"]}],
         }
     )
     set_state(SimpleNamespace(facade=facade))
@@ -910,6 +942,8 @@ def test_entity_hub_renders(monkeypatch: pytest.MonkeyPatch) -> None:
         assert "teamshared" in resp.text
         assert "prod host is teamshared.com" in resp.text
         assert "Ontology entity" in resp.text
+        assert "teamshared.start-of-task" in resp.text
+        assert "ship-pr" in resp.text
     finally:
         clear_state()
 

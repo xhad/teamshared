@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from teamshared.memory.eval_bench import (
-    NAMED_THING_BENCH_MIN_MEAN_P_AT_5,
+    NAMED_THING_BENCH_MIN_MEAN_HIT_AT_5,
     run_named_thing_bench,
 )
 from teamshared.memory.hybrid import hit_at_k, merge_vector_keyword, precision_at_k
@@ -49,7 +49,7 @@ def test_bench_vector_only_baseline() -> None:
 
 
 def test_named_thing_bench_ci_gate() -> None:
-    """CI hard gate — mean P@5 on the synthetic NamedThingBench fixture."""
+    """CI hard gate — mean Hit@5 on the synthetic NamedThingBench fixture."""
     report = run_named_thing_bench(_FIXTURE)
     assert report["case_count"] >= 10
-    assert report["mean_p_at_5"] >= NAMED_THING_BENCH_MIN_MEAN_P_AT_5
+    assert report["mean_hit_at_5"] >= NAMED_THING_BENCH_MIN_MEAN_HIT_AT_5

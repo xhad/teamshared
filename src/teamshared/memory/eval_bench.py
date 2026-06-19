@@ -13,7 +13,10 @@ from typing import Any
 from teamshared.memory.hybrid import hit_at_k, merge_vector_keyword, precision_at_k
 from teamshared.memory.types import MemoryRecord
 
-# GBrain gap Phase 3 target; raise as real recall eval replaces merge proxy.
+# GBrain gap Phase 3: gate Hit@5 (each case has one expected id in top-5).
+# Mean P@5 caps at 0.2 for single-relevant cases with k=5 — use hit rate for CI.
+NAMED_THING_BENCH_MIN_MEAN_HIT_AT_5 = 1.0
+# Informational only; not used as CI gate for single-relevant fixtures.
 NAMED_THING_BENCH_MIN_MEAN_P_AT_5 = 0.40
 
 _DEFAULT_FIXTURE = (
@@ -62,4 +65,6 @@ def run_named_thing_bench(
         "mean_hit_at_5": sum(hit_at_k_scores) / count,
         "case_count": len(results),
         "fixture": str(path),
+        "gate_metric": "mean_hit_at_5",
+        "gate_floor": NAMED_THING_BENCH_MIN_MEAN_HIT_AT_5,
     }

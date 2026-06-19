@@ -1127,6 +1127,10 @@ class MemoryFacade:
         if not subject and not entity and not curated:
             note = note or "Entity not found."
 
+        skills, playbooks = await self.related_skills_playbooks(
+            org_id, slug=slug, subject=subject
+        )
+
         return {
             "slug": slug,
             "subject": subject,
@@ -1140,7 +1144,67 @@ class MemoryFacade:
             "graph_records": [r.model_dump(mode="json") for r in graph_records],
             "work_items": work_items,
             "episodes": episodes,
+            "skills": skills,
+            "playbooks": playbooks,
         }
+
+    async def related_skills_playbooks(
+        self,
+        org_id: UUID,
+        *,
+        slug: str,
+        subject: str | None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Lexical match of skills/playbooks to an entity slug or wiki subject."""
+        needles: set[str] = {slug.lower()}
+        slug_words = slug.replace("-", " ").strip()
+        if slug_words:
+            needles.add(slug_words)
+        if subject:
+            needles.add(subject.lower())
+
+        skills_out: list[dict[str, Any]] = []
+        query = subject or slug_words or slug
+        try:
+            for rec in await self.skills.search_skills(org_id, query, limit=8):
+                meta = rec.metadata or {}
+                skills_out.append(
+                    {
+                        "name": str(meta.get("name") or ""),
+                        "version": meta.get("version"),
+                        "description": (rec.content or "")[:160],
+                    }
+                )
+        except Exception as exc:
+            log.warning("related_skills_failed", error=str(exc))
+
+        playbooks_out: list[dict[str, Any]] = []
+        try:
+            rows = await self.procedural.list_procedures(org_id, limit=200)
+            for row in rows:
+                recipe = row.get("tool_recipe") or {}
+                recipe_skills = (
+                    recipe.get("skills") if isinstance(recipe, dict) else None
+                ) or []
+                blob = " ".join(
+                    str(row.get(k) or "") for k in ("name", "description", "steps_md")
+                ).lower()
+                blob += " " + " ".join(str(s) for s in recipe_skills).lower()
+                if any(n in blob for n in needles):
+                    playbooks_out.append(
+                        {
+                            "name": row["name"],
+                            "version": row.get("version"),
+                            "description": row.get("description") or "",
+                            "skills": list(recipe_skills),
+                        }
+                    )
+                if len(playbooks_out) >= 8:
+                    break
+        except Exception as exc:
+            log.warning("related_playbooks_failed", error=str(exc))
+
+        return skills_out[:8], playbooks_out[:8]
 
     async def state_get(
         self, principal: Principal, *, state_id: str, repo: str, key: str
