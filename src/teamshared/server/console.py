@@ -628,6 +628,57 @@ def register_console_routes(
         )
         return _TEMPLATES.TemplateResponse(request, "wiki_topic.html", ctx)
 
+    async def entity_hub(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "wiki")
+        slug = str(request.path_params["slug"])
+        subject: str | None = None
+        groups: list[tuple[str, list[Any]]] = []
+        curated_html = ""
+        curated: dict[str, Any] | None = None
+        graph_records: list[Any] = []
+        work_items: list[dict[str, Any]] = []
+        approvals: list[dict[str, Any]] = []
+        episodes: list[dict[str, Any]] = []
+        entity: dict[str, Any] | None = None
+        note = ""
+        try:
+            pack = await get_state().facade.entity_view(principal, slug=slug)
+            subject = pack.get("subject")
+            note = pack.get("note") or ""
+            entity = pack.get("entity")
+            wiki = pack.get("wiki") or {}
+            curated = wiki.get("curated")
+            if curated:
+                curated_html = render_markdown_safe(curated.get("body_md") or "")
+            groups = pack.get("groups") or []
+            graph_records = pack.get("graph_records") or []
+            work_items = pack.get("work_items") or []
+            approvals = pack.get("approvals") or []
+            episodes = pack.get("episodes") or []
+        except Exception as exc:
+            log.warning("entity_hub_failed", error=str(exc))
+            note = f"Entity hub unavailable: {exc}"
+        ctx.update(
+            {
+                "slug": slug,
+                "subject": subject,
+                "entity": entity,
+                "groups": groups,
+                "note": note,
+                "curated_html": curated_html,
+                "curated_version": curated.get("version") if curated else None,
+                "curated_updated": _dt(curated.get("updated_at")) if curated else "",
+                "graph_records": graph_records,
+                "work_items": work_items,
+                "approvals": approvals,
+                "episodes": episodes,
+            }
+        )
+        return _TEMPLATES.TemplateResponse(request, "entity_hub.html", ctx)
+
     async def wiki_timeline(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
@@ -2115,6 +2166,8 @@ def register_console_routes(
         Route("/app/wiki/timeline", wiki_timeline, methods=["GET"]),
         Route("/app/wiki/playbooks", wiki_playbooks, methods=["GET"]),
         Route("/app/wiki/topic/{slug}", wiki_topic, methods=["GET"]),
+        Route("/app/wiki/entity/{slug}", entity_hub, methods=["GET"]),
+        Route("/app/entity/{slug}", entity_hub, methods=["GET"]),
         Route("/app/playbooks", playbooks_page, methods=["GET"]),
         Route("/app/playbooks/new", playbook_new, methods=["GET"]),
         Route("/app/playbooks/save", playbook_save, methods=["POST"]),

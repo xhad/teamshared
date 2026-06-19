@@ -17,7 +17,7 @@ read paths default to the shared brain (no agent filter).
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from pydantic import Field
 
@@ -544,7 +544,7 @@ def register_tools(mcp: Any) -> None:
         expand_skills: Annotated[bool, Field(description="Inline composed skills")] = False,
     ) -> dict[str, Any] | None:
         """Alias for ``memory_procedure_get``."""
-        return await memory_procedure_get(name=name, version=version, expand_skills=expand_skills)
+        return cast(dict[str, Any] | None, await memory_procedure_get(name=name, version=version, expand_skills=expand_skills))
 
     @mcp.tool()
     async def memory_procedure_set(
@@ -597,9 +597,12 @@ def register_tools(mcp: Any) -> None:
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
         """Alias for ``memory_procedure_set``."""
-        return await memory_procedure_set(
+        return cast(
+            dict[str, Any],
+            await memory_procedure_set(
             name=name, steps_md=steps_md, description=description,
             tool_recipe=tool_recipe, tags=tags, agent=agent,
+            ),
         )
 
     @mcp.tool()
@@ -631,8 +634,11 @@ def register_tools(mcp: Any) -> None:
         include_body: Annotated[bool, Field(description="Include full steps_md")] = False,
     ) -> dict[str, Any]:
         """Alias for ``memory_procedures_list``."""
-        return await memory_procedures_list(
+        return cast(
+            dict[str, Any],
+            await memory_procedures_list(
             tag=tag, limit=limit, offset=offset, include_body=include_body,
+            ),
         )
 
     @mcp.tool()
@@ -1620,6 +1626,43 @@ def register_tools(mcp: Any) -> None:
         state = get_state()
         principal = await _principal()
         return await state.facade.graph_related(principal, name=name, depth=depth, limit=limit)
+
+    @mcp.tool()
+    async def memory_entity_view(
+        slug: Annotated[str, Field(description="Entity slug (wiki topic slug or ontology entity slug)")],
+    ) -> dict[str, Any]:
+        """Roll up wiki, memories, graph neighbors, work, and approvals for one entity."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.entity_view(principal, slug=slug)
+
+    @mcp.tool()
+    async def memory_ontology_list() -> dict[str, Any]:
+        """List org ontology schema: link types, object kinds, interfaces, action types."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.ontology_list(principal)
+
+    @mcp.tool()
+    async def memory_ontology_propose_entity(
+        kind_name: Annotated[str, Field(description="Registered object kind, e.g. Person or Project")],
+        name: Annotated[str, Field(description="Display name for the entity")],
+        properties: Annotated[
+            dict[str, Any] | None,
+            Field(description="Optional JSON properties matching the kind schema"),
+        ] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Propose a typed ontology entity (pending approval unless auto-approved)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.ontology_propose_entity(
+            principal,
+            kind_name=kind_name,
+            name=name,
+            properties=properties,
+            agent_override=agent,
+        )
 
     @mcp.tool()
     async def memory_forget(

@@ -200,12 +200,13 @@ class AgentRunner:
                 "tool_recipe": None,
             }
         else:
-            pb = await self.procedural.get_procedure(rc.org_id, name, version)
-            if pb is None:
+            procedure = await self.procedural.get_procedure(rc.org_id, name, version)
+            if procedure is None:
                 raise PlaybookUnavailableError(
                     f"Playbook '{name}' is unavailable (missing, pending approval, "
                     "or quarantined)."
                 )
+            pb = procedure
         await self.runs.mark(
             rc.org_id, rc.run_id,
             playbook_name=pb["name"], playbook_version=pb["version"],

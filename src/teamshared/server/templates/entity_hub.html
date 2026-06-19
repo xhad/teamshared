@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ subject or 'Entity' }}{% endblock %}
+{% block content %}
+  <h1>{{ subject or 'Entity' }}</h1>
+  <p class="sub">
+    <a href="/app/wiki">&larr; Wiki</a>
+    {% if subject %} &middot; <a href="/app/wiki/topic/{{ slug }}">Topic view</a>{% endif %}
+  </p>
+
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  {% if entity %}
+  <div class="panel">
+    <div class="kb-kind">
+      Ontology entity &middot; {{ entity.kind }}
+      {% if entity.interfaces %} &middot; {{ entity.interfaces | join(', ') }}{% endif %}
+      &middot; {{ entity.status }}
+    </div>
+    {% if entity.properties %}
+    <pre class="muted">{{ entity.properties }}</pre>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if curated_html %}
+  <div class="panel">
+    <div class="kb-kind">Curated article &middot; v{{ curated_version }} &middot; updated {{ curated_updated }}</div>
+    <div class="prose">{{ curated_html | safe }}</div>
+  </div>
+  {% endif %}
+
+  {% if graph_records %}
+  <h2>Graph neighbors</h2>
+  <div class="panel">
+    {% for r in graph_records %}
+    <div class="entry">
+      <div class="body">{{ r.content }}</div>
+      {% if r.metadata and r.metadata.predicates %}
+      <div class="prov">{{ r.metadata.predicates | join(' → ') }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if work_items %}
+  <h2>Related work</h2>
+  <div class="panel">
+    {% for w in work_items %}
+    <div class="entry">
+      <div class="body"><a href="/app/work/{{ w.work_id }}">{{ w.title or w.content }}</a></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if approvals %}
+  <h2>Pending approvals</h2>
+  <div class="panel">
+    {% for a in approvals %}
+    <div class="entry">
+      <div class="body">{{ a.content }}</div>
+      <div class="prov">{{ a.reason }} &middot; <a href="/app/approvals">review</a></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if episodes %}
+  <h2>Timeline</h2>
+  <div class="panel">
+    {% for e in episodes %}
+    <div class="entry">
+      <div class="body">{{ e.content }}</div>
+      <div class="prov">{{ e.agent or 'unknown' }} &middot; {{ (e.created_at or '')[:16] | replace('T', ' ') }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if groups %}
+  <h2>{% if curated_html %}Source records{% else %}Memories{% endif %}</h2>
+  <div class="panel">
+    {% for kind, entries in groups %}
+    <div class="kb-kind">{{ kind }}</div>
+    {% for e in entries %}
+    <div class="entry">
+      <div class="body">{{ e.content }}</div>
+      <div class="prov">
+        {{ e.agent or 'unknown' }} &middot; {{ (e.created_at | string)[:16] | replace('T', ' ') }}
+        {% if e.tags %}&middot; {% for t in e.tags %}<span class="tag">{{ t }}</span> {% endfor %}{% endif %}
+        &middot; <a href="/app/memory/{{ e.id }}">source</a>
+      </div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+  </div>
+  {% elif not note and not curated_html and not graph_records and not work_items %}
+  <p class="muted">No data for this entity yet.</p>
+  {% endif %}
+{% endblock %}

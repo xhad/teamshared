@@ -146,7 +146,7 @@ def make_services(settings: Settings) -> ProductionServices:
         workflow_runs=WorkflowRunStore(tenant_db),
         projects=ProjectStore(tenant_db),
         wiki=WikiStore(tenant_db),
-        ontology=OntologyStore(tenant_db),
+        ontology=ontology,
         audit=audit,
         memory_service=memory_service,
         approvals=approvals,

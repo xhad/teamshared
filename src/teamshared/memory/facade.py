@@ -28,6 +28,8 @@ from teamshared.memory.context_assembler import (
     ContextPack,
 )
 from teamshared.memory.graph import GraphStore
+from teamshared.memory.graph_pg import PostgresGraphStore
+from teamshared.memory.ontology import OntologyError
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.skills import OrgSkillStore
@@ -42,6 +44,7 @@ from teamshared.memory.types import (
     ThinkResult,
     TimeRange,
 )
+from teamshared.memory.wiki import slugify
 from teamshared.memory.working import WorkingMemory
 from teamshared.playbook.compose import expand_playbook_skills, parse_skill_refs
 from teamshared.server.services import ProductionServices
@@ -77,7 +80,7 @@ class MemoryFacade:
         procedural: OrgProceduralStore,
         skills: OrgSkillStore,
         strategic: OrgStrategicStore,
-        graph: GraphStore | None,
+        graph: GraphStore | PostgresGraphStore | None,
     ) -> None:
         self.services = services
         self.resolver = resolver
@@ -784,6 +787,10 @@ class MemoryFacade:
     ) -> dict[str, Any]:
         if self.graph is None:
             return {"ok": False, "reason": "graph_disabled"}
+        try:
+            await self.services.ontology.validate_predicate(principal.org_id, predicate)
+        except OntologyError as exc:
+            return {"ok": False, "reason": "invalid_predicate", "message": str(exc)}
         caller_ctx = self._ctx(principal)
         writer = await self._write_principal(
             principal,
@@ -806,6 +813,158 @@ class MemoryFacade:
             name, org_id=str(principal.org_id), depth=depth, limit=limit
         )
         return {"count": len(records), "records": [r.model_dump(mode="json") for r in records]}
+
+    async def ontology_list(self, principal: Principal) -> dict[str, Any]:
+        return await self.services.ontology.list_schema(principal.org_id)
+
+    async def ontology_list_by_interface(
+        self, principal: Principal, *, interface_name: str, limit: int = 50
+    ) -> dict[str, Any]:
+        kinds = await self.services.ontology.list_by_interface(
+            principal.org_id, interface_name, limit=limit
+        )
+        return {"interface": interface_name, "count": len(kinds), "kinds": kinds}
+
+    async def ontology_propose_entity(
+        self,
+        principal: Principal,
+        *,
+        kind_name: str,
+        name: str,
+        properties: dict[str, Any] | None,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal,
+            agent_override,
+            operation="ontology_propose_entity",
+            request_id=caller_ctx.request_id,
+        )
+        try:
+            row = await self.services.ontology.propose_entity(
+                principal.org_id,
+                kind_name=kind_name,
+                name=name,
+                properties=properties,
+                created_by=writer.display or writer.attribution,
+            )
+        except OntologyError as exc:
+            return {"ok": False, "reason": str(exc)}
+        return {"ok": True, **row}
+
+    async def entity_view(self, principal: Principal, *, slug: str) -> dict[str, Any]:
+        """Bundle wiki, memories, graph, work, and approvals for an entity slug."""
+        org_id = principal.org_id
+        entity = await self.services.ontology.get_entity_by_slug(org_id, slug)
+        subject: str | None = None
+        note = ""
+        try:
+            subjects = await self.services.vector_store.list_subjects(org_id, limit=500)
+            slug_map = {slugify(s["subject"]): s["subject"] for s in subjects}
+            subject = slug_map.get(slug) or (entity["name"] if entity else None)
+        except Exception as exc:
+            log.warning("entity_view_subjects_failed", error=str(exc))
+            note = f"Subjects unavailable: {exc}"
+
+        groups: list[tuple[str, list[MemoryRecord]]] = []
+        curated: dict[str, Any] | None = None
+        graph_records: list[MemoryRecord] = []
+        work_items: list[dict[str, Any]] = []
+        approvals: list[dict[str, Any]] = []
+        episodes: list[dict[str, Any]] = []
+
+        if subject:
+            try:
+                records = await self.services.vector_store.list_by_subject(
+                    org_id, subject, limit=200
+                )
+                by_kind: dict[str, list[MemoryRecord]] = {}
+                for rec in records:
+                    key = rec.kind or "note"
+                    by_kind.setdefault(key, []).append(rec)
+                groups = list(by_kind.items())
+            except Exception as exc:
+                log.warning("entity_view_memories_failed", error=str(exc))
+                if not note:
+                    note = f"Memories unavailable: {exc}"
+
+        try:
+            curated = await self.services.wiki.get_page(org_id, slug)
+        except Exception as exc:
+            log.warning("entity_view_wiki_failed", error=str(exc))
+
+        lookup = subject or slug
+        if self.graph is not None and lookup:
+            try:
+                graph_records = await self.graph.related(
+                    lookup, org_id=str(org_id), depth=2, limit=20
+                )
+            except Exception as exc:
+                log.warning("entity_view_graph_failed", error=str(exc))
+
+        if subject:
+            needle = subject.lower()
+            try:
+                rows = await self.services.work.list_items(org_id, limit=100)
+                work_items = [
+                    {
+                        "work_id": str(w["id"]),
+                        "title": w.get("title"),
+                        "content": w.get("description_md") or w.get("title"),
+                    }
+                    for w in rows
+                    if needle in (w.get("title") or "").lower()
+                    or needle in (w.get("description_md") or "").lower()
+                ][:20]
+            except Exception as exc:
+                log.warning("entity_view_work_failed", error=str(exc))
+
+            try:
+                pending = await self.services.approvals.list_pending(org_id, limit=50)
+                approvals = [
+                    {
+                        "content": p.get("content") or "",
+                        "reason": p.get("reason") or "pending",
+                    }
+                    for p in pending
+                    if needle in (p.get("content") or "").lower()
+                ][:10]
+            except Exception as exc:
+                log.warning("entity_view_approvals_failed", error=str(exc))
+
+            try:
+                eps = await self.services.vector_store.list_episodes(org_id=org_id, limit=30)
+                episodes = [
+                    {
+                        "content": e.content or "",
+                        "agent": e.agent,
+                        "created_at": e.created_at,
+                    }
+                    for e in eps
+                    if needle in (e.content or "").lower()
+                ][:15]
+            except Exception as exc:
+                log.warning("entity_view_episodes_failed", error=str(exc))
+
+        if not subject and not entity and not curated:
+            note = note or "Entity not found."
+
+        return {
+            "slug": slug,
+            "subject": subject,
+            "entity": entity,
+            "note": note,
+            "wiki": {"curated": curated},
+            "groups": [
+                (kind, [r.model_dump(mode="json") for r in recs])
+                for kind, recs in groups
+            ],
+            "graph_records": [r.model_dump(mode="json") for r in graph_records],
+            "work_items": work_items,
+            "approvals": approvals,
+            "episodes": episodes,
+        }
 
     async def state_get(
         self, principal: Principal, *, state_id: str, repo: str, key: str

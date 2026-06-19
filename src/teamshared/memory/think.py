@@ -46,7 +46,7 @@ def detect_gaps(
 
     dated = [r for r in records if r.created_at is not None]
     if dated:
-        newest = max(dated, key=lambda r: r.created_at)  # type: ignore[arg-type]
+        newest = max(dated, key=lambda r: r.created_at or datetime.min.replace(tzinfo=UTC))
         assert newest.created_at is not None
         age = now - newest.created_at
         if age > timedelta(days=stale_days):

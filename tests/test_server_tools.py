@@ -145,6 +145,11 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.strategic_plan_list = AsyncMock(return_value={"count": 0, "plans": []})
     facade.graph_relate = AsyncMock(return_value={"ok": False, "reason": "graph_disabled"})
     facade.graph_related = AsyncMock(return_value={"records": [], "reason": "graph_disabled"})
+    facade.entity_view = AsyncMock(return_value={"slug": "teamshared", "subject": "teamshared", "groups": []})
+    facade.ontology_list = AsyncMock(return_value={"link_types": [], "object_kinds": []})
+    facade.ontology_propose_entity = AsyncMock(
+        return_value={"ok": True, "entity_id": "e1", "slug": "acme", "status": "pending_approval"}
+    )
     facade.forget = AsyncMock(return_value={"memory_id": "m1", "deleted": True})
     facade.state_get = AsyncMock(return_value={"repo": "r", "key": "k", "value": None})
     facade.state_set = AsyncMock(return_value={"repo": "r", "key": "k", "stored": True})
@@ -401,6 +406,23 @@ async def test_memory_graph_tools_noop_when_disabled(
     )
     assert relate["ok"] is False
     assert relate["reason"] == "graph_disabled"
+
+
+async def test_memory_entity_view_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    out = await _call(mcp, "memory_entity_view", slug="teamshared")
+    assert out["subject"] == "teamshared"
+    state.facade.entity_view.assert_awaited_once()
+
+
+async def test_memory_ontology_list_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "memory_ontology_list")
+    state.facade.ontology_list.assert_awaited_once()
 
 
 async def test_memory_procedure_set_and_get(

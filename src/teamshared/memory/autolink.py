@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from teamshared.logging import get_logger
 
@@ -25,7 +25,7 @@ class GraphBackend(Protocol):
 
     async def related(
         self, name: str, *, org_id: str, depth: int = 2, limit: int = 20
-    ) -> list: ...
+    ) -> list[Any]: ...
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]]*)?\]\]")
 _AT_MENTION_RE = re.compile(r"(?<!\w)@([a-zA-Z][\w.-]{1,63})")

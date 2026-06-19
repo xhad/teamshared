@@ -839,6 +839,35 @@ def test_wiki_playbooks_redirects_to_dedicated_section() -> None:
     assert resp.headers["location"] == "/app/playbooks"
 
 
+def test_entity_hub_renders(monkeypatch: pytest.MonkeyPatch) -> None:
+    client, _ = _build()
+    facade = MagicMock()
+    facade.entity_view = AsyncMock(
+        return_value={
+            "slug": "teamshared",
+            "subject": "teamshared",
+            "note": "",
+            "entity": {"kind": "Project", "name": "teamshared", "status": "active", "interfaces": []},
+            "wiki": {"curated": None},
+            "groups": [("fact", [{"content": "prod host is teamshared.com", "agent": "cursor", "tags": []}])],
+            "graph_records": [],
+            "work_items": [],
+            "approvals": [],
+            "episodes": [],
+        }
+    )
+    set_state(SimpleNamespace(facade=facade))
+    try:
+        _login(client)
+        resp = client.get("/app/wiki/entity/teamshared")
+        assert resp.status_code == 200
+        assert "teamshared" in resp.text
+        assert "prod host is teamshared.com" in resp.text
+        assert "Ontology entity" in resp.text
+    finally:
+        clear_state()
+
+
 # --------------------------------------------------------------------------- #
 # Playbooks section (editable procedural memory)
 # --------------------------------------------------------------------------- #
