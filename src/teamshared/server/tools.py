@@ -1665,6 +1665,81 @@ def register_tools(mcp: Any) -> None:
         )
 
     @mcp.tool()
+    async def memory_ontology_link_type_set(
+        name: Annotated[str, Field(description="Link predicate name, e.g. depends_on")],
+        description: Annotated[str | None, Field(description="Human-readable description")] = None,
+        from_kinds: Annotated[
+            list[str] | None, Field(description="Allowed subject kinds (empty = any)")
+        ] = None,
+        to_kinds: Annotated[
+            list[str] | None, Field(description="Allowed object kinds (empty = any)")
+        ] = None,
+        cardinality: Annotated[str, Field(description="one_to_many | many_to_many")] = "many_to_many",
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Register or update a custom org link type."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.ontology_link_type_set(
+            principal,
+            name=name,
+            description=description,
+            from_kinds=from_kinds,
+            to_kinds=to_kinds,
+            cardinality=cardinality,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def memory_ontology_object_kind_set(
+        name: Annotated[str, Field(description="Object kind name, e.g. Vendor")],
+        description: Annotated[str | None, Field(description="Human-readable description")] = None,
+        properties_schema: Annotated[
+            dict[str, Any] | None, Field(description="JSON schema for entity properties")
+        ] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Register or update a custom org object kind."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.ontology_object_kind_set(
+            principal,
+            name=name,
+            description=description,
+            properties_schema=properties_schema,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def memory_action_apply(
+        action_name: Annotated[
+            str, Field(description="Registered action type name, e.g. link_entities")
+        ],
+        parameters: Annotated[
+            dict[str, Any], Field(description="Parameters matching the action schema")
+        ],
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Execute a governed ontology action and write an audit log entry."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.action_apply(
+            principal,
+            action_name=action_name,
+            parameters=parameters,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def memory_action_log_list(
+        limit: Annotated[int, Field(ge=1, le=200)] = 20,
+    ) -> dict[str, Any]:
+        """List recent governed action executions for the org."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.action_log_list(principal, limit=limit)
+
+    @mcp.tool()
     async def memory_forget(
         memory_id: Annotated[str, Field(description="memory_items UUID from a previous recall")],
         reason: Annotated[str, Field(description="Audit reason; required")],

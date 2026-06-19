@@ -788,7 +788,23 @@ class MemoryFacade:
         if self.graph is None:
             return {"ok": False, "reason": "graph_disabled"}
         try:
-            await self.services.ontology.validate_predicate(principal.org_id, predicate)
+            check = await self.services.ontology.validate_link(
+                principal.org_id, predicate, subject, object_
+            )
+            if not check.allowed:
+                return {
+                    "ok": False,
+                    "reason": "kind_mismatch",
+                    "message": check.error or "link kind constraint failed",
+                }
+            if check.warning:
+                log.warning(
+                    "graph_relate_kind_warn",
+                    predicate=predicate,
+                    subject=subject,
+                    object=object_,
+                    warning=check.warning,
+                )
         except OntologyError as exc:
             return {"ok": False, "reason": "invalid_predicate", "message": str(exc)}
         caller_ctx = self._ctx(principal)
@@ -851,7 +867,211 @@ class MemoryFacade:
             )
         except OntologyError as exc:
             return {"ok": False, "reason": str(exc)}
+        if row.get("status") == "pending_approval":
+            await self.services.approvals.enqueue_entity(
+                principal.org_id,
+                UUID(str(row["entity_id"])),
+                reason="ontology_entity_proposed",
+                requested_by=principal.id,
+            )
         return {"ok": True, **row}
+
+    async def ontology_link_type_set(
+        self,
+        principal: Principal,
+        *,
+        name: str,
+        description: str | None,
+        from_kinds: list[str] | None,
+        to_kinds: list[str] | None,
+        cardinality: str,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal,
+            agent_override,
+            operation="ontology_link_type_set",
+            request_id=caller_ctx.request_id,
+        )
+        _ = writer
+        return await self.services.ontology.upsert_link_type(
+            principal.org_id,
+            name=name,
+            description=description,
+            from_kinds=from_kinds,
+            to_kinds=to_kinds,
+            cardinality=cardinality,
+        )
+
+    async def ontology_object_kind_set(
+        self,
+        principal: Principal,
+        *,
+        name: str,
+        description: str | None,
+        properties_schema: dict[str, Any] | None,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal,
+            agent_override,
+            operation="ontology_object_kind_set",
+            request_id=caller_ctx.request_id,
+        )
+        _ = writer
+        return await self.services.ontology.upsert_object_kind(
+            principal.org_id,
+            name=name,
+            description=description,
+            properties_schema=properties_schema,
+        )
+
+    async def action_apply(
+        self,
+        principal: Principal,
+        *,
+        action_name: str,
+        parameters: dict[str, Any],
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        """Execute a governed ontology action type and log the outcome."""
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal,
+            agent_override,
+            operation="action_apply",
+            request_id=caller_ctx.request_id,
+        )
+        actor = writer.display or writer.attribution
+        action = await self.services.ontology.get_action_type(principal.org_id, action_name)
+        if action is None:
+            return {"ok": False, "reason": f"unknown action type '{action_name}'"}
+        try:
+            self.services.ontology.validate_action_parameters(action, parameters)
+        except OntologyError as exc:
+            return {"ok": False, "reason": str(exc)}
+
+        if action.get("requires_approval"):
+            return {
+                "ok": False,
+                "reason": "requires_approval",
+                "message": (
+                    f"Action '{action_name}' must be proposed via its direct tool "
+                    "and approved in the console"
+                ),
+            }
+
+        tool = action.get("wrapper_tool") or ""
+        result: dict[str, Any] | None = None
+        status = "applied"
+        try:
+            result = await self._dispatch_action_tool(
+                principal, tool=tool, parameters=parameters, agent_override=agent_override
+            )
+            if isinstance(result, dict) and result.get("ok") is False:
+                status = "failed"
+        except Exception as exc:
+            status = "failed"
+            result = {"error": str(exc)}
+            log.warning("action_apply_failed", action=action_name, error=str(exc))
+
+        log_id = await self.services.ontology.log_action(
+            principal.org_id,
+            action_type_id=UUID(str(action["id"])),
+            parameters=parameters,
+            result=result,
+            status=status,
+            actor=actor,
+            request_id=caller_ctx.request_id,
+        )
+        return {
+            "ok": status == "applied",
+            "action": action_name,
+            "status": status,
+            "result": result,
+            "log_id": log_id,
+        }
+
+    async def action_log_list(
+        self, principal: Principal, *, limit: int = 20
+    ) -> dict[str, Any]:
+        rows = await self.services.ontology.list_action_log(principal.org_id, limit=limit)
+        return {"count": len(rows), "entries": rows}
+
+    async def _dispatch_action_tool(
+        self,
+        principal: Principal,
+        *,
+        tool: str,
+        parameters: dict[str, Any],
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        if tool == "memory_remember":
+            kind_raw = str(parameters.get("kind") or "note")
+            kind = cast(
+                MemoryKind,
+                kind_raw if kind_raw in {"fact", "preference", "event", "note"} else "note",
+            )
+            return await self.remember(
+                principal,
+                content=str(parameters["content"]),
+                kind=kind,
+                subject=parameters.get("subject"),
+                tags=parameters.get("tags"),
+                agent_override=agent_override,
+                repo=parameters.get("repo"),
+                github=parameters.get("github"),
+            )
+        if tool == "memory_graph_relate":
+            return await self.graph_relate(
+                principal,
+                subject=str(parameters["subject"]),
+                predicate=str(parameters["predicate"]),
+                object_=str(parameters.get("object_entity") or parameters.get("object")),
+                weight=float(parameters.get("weight") or 1.0),
+                agent_override=agent_override,
+            )
+        if tool == "work_update":
+            return await self.work_update(
+                principal,
+                work_id=str(parameters["work_id"]),
+                title=None,
+                description_md=None,
+                tags=None,
+                work_status=parameters.get("work_status"),
+                priority=None,
+                blocked_reason=None,
+                assignee_type=None,
+                assignee_id=None,
+                assignee_agent=parameters.get("assignee_agent"),
+                assignee_email=parameters.get("assignee_email"),
+                initiative_id=None,
+                due_at=None,
+                repo=None,
+                github=None,
+                agent_override=agent_override,
+            ) or {"ok": False, "reason": "work_not_found"}
+        if tool == "memory_strategic_statement_set":
+            return await self.strategic_statement_set(
+                principal,
+                kind=str(parameters["kind"]),
+                content_md=str(parameters.get("content") or parameters.get("content_md")),
+                agent_override=agent_override,
+            )
+        raise OntologyError(f"Unsupported wrapper tool '{tool}'")
+
+    async def ontology_admin_view(self, principal: Principal) -> dict[str, Any]:
+        org_id = principal.org_id
+        schema = await self.services.ontology.list_schema(org_id)
+        entities = await self.services.ontology.list_entities(org_id, limit=200)
+        action_log = await self.services.ontology.list_action_log(org_id, limit=100)
+        return {
+            "schema": schema,
+            "entities": entities,
+            "action_log": action_log,
+        }
 
     async def entity_view(self, principal: Principal, *, slug: str) -> dict[str, Any]:
         """Bundle wiki, memories, graph, work, and approvals for an entity slug."""

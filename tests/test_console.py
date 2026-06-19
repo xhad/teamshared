@@ -550,13 +550,37 @@ def test_approvals_page_lists_pending() -> None:
     services.approvals.list_pending = AsyncMock(
         return_value=[
             {"id": "ap1", "memory_id": "m1", "reason": "pii_detected",
-             "created_at": "2026-05-28T10:00:00", "content": "sensitive note"}
+             "created_at": "2026-05-28T10:00:00", "content": "sensitive note"},
+            {"id": "ap2", "ontology_entity_id": "e1", "reason": "ontology_entity_proposed",
+             "created_at": "2026-06-01T10:00:00", "content": "Acme (Project)"},
         ]
     )
     _login(client)
     resp = client.get("/app/approvals")
     assert resp.status_code == 200
     assert "pii_detected" in resp.text
+    assert "ontology / entity" in resp.text
+
+
+def test_ontology_page_renders() -> None:
+    client, _services = _build()
+    facade = MagicMock()
+    facade.ontology_admin_view = AsyncMock(return_value={
+        "schema": {
+            "link_types": [{"name": "mentions", "from_kinds": [], "to_kinds": [], "cardinality": "many_to_many"}],
+            "object_kinds": [{"name": "Person", "interfaces": [], "description": "human"}],
+            "interfaces": [],
+            "action_types": [{"name": "link_entities", "requires_approval": False}],
+        },
+        "entities": [{"slug": "alice", "name": "Alice", "kind": "Person", "status": "active", "created_by": "cursor"}],
+        "action_log": [],
+    })
+    set_state(SimpleNamespace(facade=facade))
+    _login(client)
+    resp = client.get("/app/ontology")
+    assert resp.status_code == 200
+    assert "mentions" in resp.text
+    assert "alice" in resp.text
 
 
 def test_work_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:

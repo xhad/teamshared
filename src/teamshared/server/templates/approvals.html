@@ -3,7 +3,7 @@
 {% block title %}Approvals{% endblock %}
 {% block content %}
   <h1>Pending approvals</h1>
-  <p class="sub">Memories, playbooks, work items, and strategic proposals awaiting human review.</p>
+  <p class="sub">Memories, playbooks, ontology entities, work items, and strategic proposals awaiting human review.</p>
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   <div class="panel">
@@ -15,7 +15,8 @@
         <tr>
           <td>{{ p.created }}</td>
           <td>
-            {% if p.work_item_id %}work
+            {% if p.ontology_entity_id %}ontology / entity
+            {% elif p.work_item_id %}work
             {% elif p.strategic_type %}strategic / {{ p.strategic_type }}
             {% else %}memory{% endif %}
           </td>

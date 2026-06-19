@@ -202,6 +202,9 @@ class IngestionPipeline:
         )
         if status == "active" and self.graph is not None and self.autolink_enabled:
             allowed = await self._autolink_allowed_predicates(ctx.org_id)
+            validator = (
+                self.ontology.validate_link if self.ontology is not None else None
+            )
             await apply_autolink(
                 self.graph,
                 content=safe_content,
@@ -210,6 +213,7 @@ class IngestionPipeline:
                 org_id=str(ctx.org_id),
                 agent=ctx.principal.attribution,
                 allowed_predicates=allowed,
+                link_validator=validator,
             )
         return IngestionResult(
             memory_id=memory_id, status=status, pii=findings, injection=verdict

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Ontology{% endblock %}
+{% block content %}
+  <h1>Org ontology</h1>
+  <p class="sub">Registered link types, object kinds, entities, and governed action audit log.</p>
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  <section class="panel">
+    <h2>Link types</h2>
+    {% if link_types %}
+    <table>
+      <thead><tr><th>Name</th><th>From kinds</th><th>To kinds</th><th>Cardinality</th></tr></thead>
+      <tbody>
+        {% for lt in link_types %}
+        <tr>
+          <td><strong>{{ lt.name }}</strong>{% if lt.description %}<br><span class="muted">{{ lt.description }}</span>{% endif %}</td>
+          <td>{{ (lt.from_kinds or []) | join(', ') or '—' }}</td>
+          <td>{{ (lt.to_kinds or []) | join(', ') or '—' }}</td>
+          <td>{{ lt.cardinality }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No link types registered.</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Object kinds</h2>
+    {% if object_kinds %}
+    <table>
+      <thead><tr><th>Kind</th><th>Interfaces</th><th>Description</th></tr></thead>
+      <tbody>
+        {% for k in object_kinds %}
+        <tr>
+          <td><strong>{{ k.name }}</strong></td>
+          <td>{{ (k.interfaces or []) | join(', ') or '—' }}</td>
+          <td>{{ k.description or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No object kinds registered.</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Entities</h2>
+    {% if entities %}
+    <table>
+      <thead><tr><th>Slug</th><th>Name</th><th>Kind</th><th>Status</th><th>Created by</th></tr></thead>
+      <tbody>
+        {% for e in entities %}
+        <tr>
+          <td><a href="/app/wiki/entity/{{ e.slug }}">{{ e.slug }}</a></td>
+          <td>{{ e.name }}</td>
+          <td>{{ e.kind }}</td>
+          <td>{{ e.status }}</td>
+          <td>{{ e.created_by or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <p class="muted">No entities yet. Agents can propose them with <code>memory_ontology_propose_entity</code> or run <code>teamshared ontology backfill</code>.</p>
+    </div>
+    {% endif %}
+    <p class="muted"><a href="/app/approvals">Pending entity proposals</a> appear in Approvals.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Action log</h2>
+    {% if action_log %}
+    <table>
+      <thead><tr><th>When</th><th>Action</th><th>Status</th><th>Actor</th></tr></thead>
+      <tbody>
+        {% for row in action_log %}
+        <tr>
+          <td>{{ row.created }}</td>
+          <td>{{ row.action }}</td>
+          <td>{{ row.status }}</td>
+          <td>{{ row.actor }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="muted">No governed actions executed yet.</p>{% endif %}
+  </section>
+{% endblock %}

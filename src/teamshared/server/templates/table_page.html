@@ -17,7 +17,10 @@
     </table>
     </div>
     {% elif not note %}
-    <p class="muted">Nothing here yet.</p>
+    <div class="empty-state">
+      <h3>Nothing here yet</h3>
+      <p>Activity will show up in this log as your team uses the console and agents write memory.</p>
+    </div>
     {% endif %}
   </div>
 {% endblock %}

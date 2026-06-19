@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 
 from teamshared.memory.autolink import apply_autolink
-from teamshared.memory.ontology import OntologyError, OntologyStore
+from teamshared.memory.ontology import LinkValidationResult, OntologyError, OntologyStore
 
 ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
@@ -100,3 +101,59 @@ async def test_autolink_filters_unregistered_predicates() -> None:
     mock_graph.add_relation.assert_awaited_once()
     call = mock_graph.add_relation.await_args
     assert call.args[1] == "mentions"
+
+
+@pytest.mark.asyncio
+async def test_validate_link_rejects_kind_mismatch() -> None:
+    conn = _Conn([
+        _Cur(one=(1,)),  # registry exists
+        _Cur(one=("works_at", "desc", ["Person"], ["Organization"], "many_to_many")),
+        _Cur(one=("Alice", "Person", "active")),  # subject entity
+        _Cur(one=("Acme", "Project", "active")),  # object entity wrong kind
+    ])
+    store = OntologyStore(_DB(conn))  # type: ignore[arg-type]
+    store.get_entity_by_slug = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            {"name": "Alice", "kind": "Person", "status": "active"},
+            {"name": "Acme", "kind": "Project", "status": "active"},
+        ]
+    )
+    result = await store.validate_link(ORG, "works_at", "Alice", "Acme")
+    assert not result.allowed
+    assert result.error and "to_kinds" in result.error
+
+
+@pytest.mark.asyncio
+async def test_validate_link_warns_when_entity_missing() -> None:
+    conn = _Conn([
+        _Cur(one=(1,)),
+        _Cur(one=("works_at", "desc", ["Person"], ["Organization"], "many_to_many")),
+    ])
+    store = OntologyStore(_DB(conn))  # type: ignore[arg-type]
+    store.get_entity_by_slug = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    result = await store.validate_link(ORG, "works_at", "Alice", "Acme")
+    assert result.allowed
+    assert result.warning
+
+
+@pytest.mark.asyncio
+async def test_autolink_skips_kind_mismatch() -> None:
+    from unittest.mock import AsyncMock
+
+    mock_graph = AsyncMock()
+
+    async def reject(_org: object, _pred: str, _sub: str, _obj: str) -> LinkValidationResult:
+        return LinkValidationResult(allowed=False, error="kind mismatch")
+
+    count = await apply_autolink(
+        mock_graph,
+        content="[[alice]] works at Acme",
+        subject="note",
+        tags=None,
+        org_id=str(ORG),
+        agent="cursor",
+        allowed_predicates=frozenset({"mentions", "works_at"}),
+        link_validator=reject,
+    )
+    assert count == 0
+    mock_graph.add_relation.assert_not_awaited()

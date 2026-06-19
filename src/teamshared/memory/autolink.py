@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any, Protocol
+from uuid import UUID
 
 from teamshared.logging import get_logger
 
@@ -102,15 +103,36 @@ async def apply_autolink(
     org_id: str,
     agent: str,
     allowed_predicates: frozenset[str] | None = None,
+    link_validator: Any | None = None,
 ) -> int:
     """Write inferred edges to the graph store. Returns edge count."""
     if graph is None:
         return 0
     refs = extract_entity_refs(content, subject=subject, tags=tags)
     count = 0
+    org_uuid = UUID(org_id)
     for ref in refs:
         if allowed_predicates is not None and ref.predicate not in allowed_predicates:
             continue
+        if link_validator is not None:
+            check = await link_validator(org_uuid, ref.predicate, ref.subject, ref.object_)
+            if not check.allowed:
+                log.warning(
+                    "autolink_edge_kind_rejected",
+                    subject=ref.subject,
+                    predicate=ref.predicate,
+                    object=ref.object_,
+                    error=check.error,
+                )
+                continue
+            if check.warning:
+                log.warning(
+                    "autolink_edge_kind_warn",
+                    subject=ref.subject,
+                    predicate=ref.predicate,
+                    object=ref.object_,
+                    warning=check.warning,
+                )
         try:
             await graph.add_relation(
                 ref.subject,

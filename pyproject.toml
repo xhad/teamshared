@@ -1,6 +1,6 @@
 [project]
 name = "teamshared"
-version = "0.2.0"
+version = "0.3.0"
 description = "Multi-pillar agent memory exposed as an MCP server. Shared brain for Cursor, Hermes, OpenClaw, and any MCP-aware agent."
 readme = "README.md"
 requires-python = ">=3.11"

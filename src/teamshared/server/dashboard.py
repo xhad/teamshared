@@ -39,7 +39,7 @@ _DASHBOARD_CSS = """
   --muted: #9aa0b4;
   --faint: #6b7180;
   --accent: #6366f1;
-  --success: #818cf8;
+  --success: #4ade80;
   --danger: #f87171;
   --warn: #fbbf24;
   --warn-soft: rgba(251,191,36,0.14);

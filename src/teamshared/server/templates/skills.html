@@ -1,25 +1,6 @@
 {% extends "base.html" %}
 {% import "console_macros.html" as cm with context %}
 {% block title %}Skills{% endblock %}
-{% block head %}
-  <style>
-    .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-    .page-head .sub { margin-bottom: 0; }
-    .sk .sk-actions { margin-top: .75rem; display: flex; gap: .5rem; }
-    .sk .meta { font-size: .78rem; color: var(--faint); margin: .15rem 0 .4rem; }
-    .sk-search { position: relative; margin: 1rem 0 1.25rem; }
-    .sk-search input { width: 100%; padding: .6rem .8rem .6rem 2.2rem;
-      border: 1px solid var(--border-strong); border-radius: 10px; font-size: .95rem;
-      background: var(--panel-2); color: var(--text); }
-    .sk-search input:focus { outline: none; border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-ring); }
-    .sk-search .icon { position: absolute; left: .75rem; top: 50%; transform: translateY(-50%);
-      color: var(--faint); pointer-events: none; }
-    .sk-search .count { position: absolute; right: .75rem; top: 50%; transform: translateY(-50%);
-      color: var(--faint); font-size: .8rem; pointer-events: none; }
-    #sk-empty { display: none; }
-  </style>
-{% endblock %}
 {% block content %}
   <div class="page-head">
     <div>
@@ -35,54 +16,36 @@
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   {% if skills %}
-  <div class="sk-search">
+  <div class="catalog-search">
     <span class="icon" aria-hidden="true">&#128269;</span>
     <input type="search" id="sk-filter" placeholder="Search skills by name, description, tags, or body&hellip;"
-      autocomplete="off" aria-label="Search skills" />
+      autocomplete="off" aria-label="Search skills" data-catalog-filter data-catalog-list="#sk-list"
+      data-catalog-card=".catalog-card" data-catalog-empty="#sk-empty" data-catalog-count="#sk-count" />
     <span class="count" id="sk-count"></span>
   </div>
 
   <div id="sk-list">
   {% for s in skills %}
-  <div class="sk panel" data-search="{{ s.search }}">
+  <div class="catalog-card panel" data-search="{{ s.search }}">
     <div class="head">
-      <h3 style="margin:0">{{ s.name }}</h3>
+      <h3>{{ s.name }}</h3>
       <span class="ver">v{{ s.version }}</span>
     </div>
     {% if s.description %}<p class="sub">{{ s.description }}</p>{% endif %}
     <p class="meta">Updated {{ s.updated }}{% if s.author %} &middot; {{ s.author }}{% endif %}</p>
-    {% if s.tags %}<div class="tagcloud" style="margin:.4rem 0">{% for t in s.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>{% endif %}
+    {% if s.tags %}<div class="tagcloud">{% for t in s.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>{% endif %}
     <div class="prose">{{ s.body_html | safe }}</div>
-    <div class="sk-actions">
+    <div class="actions">
       <a href="/app/skills/{{ s.name }}"><button type="button" class="ghost">Edit</button></a>
     </div>
   </div>
   {% endfor %}
   </div>
-  <p class="muted" id="sk-empty">No skills match your search.</p>
-
-  <script>
-    (function () {
-      var input = document.getElementById('sk-filter');
-      var cards = Array.prototype.slice.call(
-        document.querySelectorAll('#sk-list .sk'));
-      var empty = document.getElementById('sk-empty');
-      var count = document.getElementById('sk-count');
-      function apply() {
-        var q = input.value.trim().toLowerCase();
-        var shown = 0;
-        cards.forEach(function (card) {
-          var hit = !q || (card.getAttribute('data-search') || '').indexOf(q) !== -1;
-          card.style.display = hit ? '' : 'none';
-          if (hit) shown++;
-        });
-        empty.style.display = shown === 0 ? '' : 'none';
-        count.textContent = q ? shown + ' / ' + cards.length : '';
-      }
-      input.addEventListener('input', apply);
-    })();
-  </script>
+  <p class="muted catalog-empty" id="sk-empty">No skills match your search.</p>
   {% elif not note %}
-  <p class="muted">No skills yet. Create one above, or agents can add them with <code>memory_skill_set</code>.</p>
+  <div class="empty-state panel">
+    <h3>No skills yet</h3>
+    <p>Create one above, or agents can add them with <code>memory_skill_set</code>.</p>
+  </div>
   {% endif %}
 {% endblock %}

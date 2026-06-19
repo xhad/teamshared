@@ -99,9 +99,46 @@ NAV: list[tuple[str, str, str]] = [
     ("/app/orgs", "Organizations", "orgs"),
     ("/app/keys", "API Keys", "keys"),
     ("/app/approvals", "Approvals", "approvals"),
+    ("/app/ontology", "Ontology", "ontology"),
     ("/app/consent", "Consent", "consent"),
     ("/app/audit", "Audit", "audit"),
     ("/app/settings", "Settings", "settings"),
+]
+
+NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
+    (None, [("/app", "Home", "home")]),
+    (
+        "Memory",
+        [
+            ("/app/wiki", "Wiki", "wiki"),
+            ("/app/playbooks", "Playbooks", "playbooks"),
+            ("/app/skills", "Skills", "skills"),
+            ("/app/memory", "Explorer", "memory"),
+        ],
+    ),
+    (
+        "Work",
+        [
+            ("/app/work", "Tasks", "work"),
+            ("/app/projects", "Projects", "projects"),
+            ("/app/strategy", "Strategy", "strategy"),
+            ("/app/workflows", "Workflows", "workflows"),
+        ],
+    ),
+    (
+        "Admin",
+        [
+            ("/app/agents", "Agents", "agents"),
+            ("/app/people", "People", "people"),
+            ("/app/orgs", "Organizations", "orgs"),
+            ("/app/keys", "API Keys", "keys"),
+            ("/app/approvals", "Approvals", "approvals"),
+            ("/app/ontology", "Ontology", "ontology"),
+            ("/app/consent", "Consent", "consent"),
+            ("/app/audit", "Audit", "audit"),
+            ("/app/settings", "Settings", "settings"),
+        ],
+    ),
 ]
 
 # Sections not yet built: rendered as a placeholder through the shell.
@@ -262,6 +299,7 @@ def register_console_routes(
         """Common template context for the console shell, incl. the org switcher."""
         ctx: dict[str, Any] = {
             "nav": NAV,
+            "nav_groups": NAV_GROUPS,
             "active": active,
             "who": principal.display or str(principal.id),
             "org_name": _ORG_NAME,
@@ -281,7 +319,7 @@ def register_console_routes(
         return _TEMPLATES.TemplateResponse(
             request,
             "csrf_failed.html",
-            {"nav": NAV, "active": "", "csrf_token": ""},
+            {"nav": NAV, "nav_groups": NAV_GROUPS, "active": "", "csrf_token": ""},
             status_code=403,
         )
 
@@ -2028,7 +2066,8 @@ def register_console_routes(
                  "reason": d.get("reason") or "\u2014",
                  "content": d.get("content") or "",
                  "strategic_type": d.get("strategic_entity_type"),
-                 "work_item_id": d.get("work_item_id")}
+                 "work_item_id": d.get("work_item_id"),
+                 "ontology_entity_id": d.get("ontology_entity_id")}
                 for d in data
             ]
         except Exception as exc:
@@ -2061,6 +2100,43 @@ def register_console_routes(
         except Exception as exc:
             log.warning("approval_decide_failed", error=str(exc))
         return RedirectResponse("/app/approvals", status_code=303)
+
+    async def ontology_page(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "ontology")
+        note = ""
+        schema: dict[str, Any] = {}
+        entities: list[dict[str, Any]] = []
+        action_log: list[dict[str, Any]] = []
+        try:
+            data = await get_state().facade.ontology_admin_view(principal)
+            schema = data.get("schema") or {}
+            entities = data.get("entities") or []
+            action_log = [
+                {
+                    "id": e.get("id"),
+                    "action": e.get("action_type"),
+                    "status": e.get("status"),
+                    "actor": e.get("actor") or "\u2014",
+                    "created": _dt(e.get("created_at")),
+                }
+                for e in (data.get("action_log") or [])
+            ]
+        except Exception as exc:
+            log.warning("ontology_page_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({
+            "note": note,
+            "link_types": schema.get("link_types") or [],
+            "object_kinds": schema.get("object_kinds") or [],
+            "interfaces": schema.get("interfaces") or [],
+            "action_types": schema.get("action_types") or [],
+            "entities": entities,
+            "action_log": action_log,
+        })
+        return _TEMPLATES.TemplateResponse(request, "ontology.html", ctx)
 
     async def audit_page(request: Request) -> Response:
         principal = _session(request)
@@ -2214,6 +2290,7 @@ def register_console_routes(
         Route("/app/keys/{key_id}/revoke", key_revoke, methods=["POST"]),
         Route("/app/approvals", approvals_page, methods=["GET"]),
         Route("/app/approvals/{approval_id}/decide", approval_decide, methods=["POST"]),
+        Route("/app/ontology", ontology_page, methods=["GET"]),
         Route("/app/audit", audit_page, methods=["GET"]),
         Route("/app/consent", consent_page, methods=["GET"]),
         Route("/app/consent/grant", consent_grant, methods=["POST"]),

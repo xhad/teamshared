@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+from teamshared.memory.ontology import OntologyStore
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.types import StrategicEntityType
 from teamshared.memory.work import WorkStore
@@ -113,24 +114,51 @@ class ApprovalQueue:
         approval_id: UUID = row[0]
         return approval_id
 
+    async def enqueue_entity(
+        self,
+        org_id: UUID,
+        entity_id: UUID,
+        *,
+        reason: str,
+        requested_by: UUID | None = None,
+    ) -> UUID:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                "INSERT INTO approval_queue (org_id, ontology_entity_id, reason, requested_by) "
+                "VALUES (%s,%s,%s,%s) RETURNING id",
+                (
+                    str(org_id), str(entity_id), reason,
+                    str(requested_by) if requested_by else None,
+                ),
+            )
+            row = await cur.fetchone()
+        assert row is not None
+        approval_id: UUID = row[0]
+        return approval_id
+
     async def list_pending(self, org_id: UUID, limit: int = 50) -> list[dict[str, Any]]:
         strategic = OrgStrategicStore(self.db)
         work = WorkStore(self.db)
+        ontology = OntologyStore(self.db)
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
                 """
                 SELECT aq.id, aq.memory_id, aq.procedure_id, aq.skill_id,
                        aq.strategic_entity_type, aq.strategic_entity_id, aq.work_item_id,
+                       aq.ontology_entity_id,
                        aq.reason, aq.created_at,
                        COALESCE(
                            mi.content,
                            pr.name || ' v' || pr.version::text || ': ' || pr.steps_md,
-                           sk.name || ' v' || sk.version::text || ': ' || sk.body_md
+                           sk.name || ' v' || sk.version::text || ': ' || sk.body_md,
+                           oe.name || ' (' || ok.name || ')'
                        )
                 FROM approval_queue aq
                 LEFT JOIN memory_items mi ON mi.id = aq.memory_id
                 LEFT JOIN procedures pr ON pr.id = aq.procedure_id
                 LEFT JOIN skills sk ON sk.id = aq.skill_id
+                LEFT JOIN ontology_entities oe ON oe.id = aq.ontology_entity_id
+                LEFT JOIN ontology_object_kinds ok ON ok.id = oe.kind_id
                 WHERE aq.status = 'pending'
                 ORDER BY aq.created_at
                 LIMIT %s
@@ -140,10 +168,11 @@ class ApprovalQueue:
             rows = await cur.fetchall()
         out: list[dict[str, Any]] = []
         for r in rows:
-            content = r[9]
+            content = r[10]
             entity_type = r[4]
             entity_id = r[5]
             work_item_id = r[6]
+            ontology_entity_id = r[7]
             if work_item_id and not content:
                 preview = await work.preview(org_id, UUID(str(work_item_id)))
                 content = preview or f"work item {work_item_id}"
@@ -152,6 +181,11 @@ class ApprovalQueue:
                     org_id, entity_type, UUID(str(entity_id))
                 )
                 content = preview or f"strategic {entity_type} {entity_id}"
+            elif ontology_entity_id and not content:
+                preview = await ontology.preview_entity(
+                    org_id, UUID(str(ontology_entity_id))
+                )
+                content = preview or f"ontology entity {ontology_entity_id}"
             out.append(
                 {
                     "id": str(r[0]),
@@ -161,8 +195,9 @@ class ApprovalQueue:
                     "strategic_entity_type": entity_type,
                     "strategic_entity_id": str(entity_id) if entity_id else None,
                     "work_item_id": str(work_item_id) if work_item_id else None,
-                    "reason": r[7],
-                    "created_at": r[8].isoformat() if r[8] else None,
+                    "ontology_entity_id": str(ontology_entity_id) if ontology_entity_id else None,
+                    "reason": r[8],
+                    "created_at": r[9].isoformat() if r[9] else None,
                     "content": content,
                 }
             )
@@ -224,15 +259,23 @@ class ApprovalQueue:
                 "UPDATE approval_queue SET status = %s, decided_by = %s, decided_at = now() "
                 "WHERE id = %s AND status = 'pending' "
                 "RETURNING memory_id, procedure_id, skill_id, strategic_entity_type, "
-                "strategic_entity_id, work_item_id",
+                "strategic_entity_id, work_item_id, ontology_entity_id",
                 (status, str(decided_by) if decided_by else None, str(approval_id)),
             )
             row = await cur.fetchone()
             if row is None:
                 return None
-            memory_id, procedure_id, skill_id, entity_type, entity_id, work_item_id = (
-                row[0], row[1], row[2], row[3], row[4], row[5],
+            memory_id, procedure_id, skill_id, entity_type, entity_id, work_item_id, ontology_entity_id = (
+                row[0], row[1], row[2], row[3], row[4], row[5], row[6],
             )
+            if ontology_entity_id:
+                ont = OntologyStore(self.db)
+                eid = UUID(str(ontology_entity_id))
+                if approved:
+                    await ont.approve_entity(org_id, eid)
+                else:
+                    await ont.reject_entity(org_id, eid)
+                return None
             if work_item_id:
                 wid = UUID(str(work_item_id))
                 if approved:

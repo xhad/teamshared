@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +23,15 @@ log = get_logger(__name__)
 
 class OntologyError(Exception):
     """Raised when ontology validation fails."""
+
+
+@dataclass(frozen=True)
+class LinkValidationResult:
+    """Outcome of ``validate_link`` — hard reject, warn-only, or clean pass."""
+
+    allowed: bool
+    warning: str | None = None
+    error: str | None = None
 
 
 class OntologyStore:
@@ -170,6 +180,161 @@ class OntologyStore:
                 raise OntologyError(
                     f"Unknown link predicate '{predicate}'. Registered: {', '.join(names)}"
                 )
+
+    async def get_link_type(self, org_id: UUID, predicate: str) -> dict[str, Any] | None:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT name, description, from_kinds, to_kinds, cardinality
+                FROM ontology_link_types
+                WHERE org_id = %s AND name = %s
+                """,
+                (str(org_id), predicate),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "name": row[0],
+            "description": row[1],
+            "from_kinds": list(row[2] or []),
+            "to_kinds": list(row[3] or []),
+            "cardinality": row[4],
+        }
+
+    async def resolve_entity_kind(self, org_id: UUID, name: str) -> str | None:
+        """Return the kind of an active ontology entity resolved by slugified name."""
+        entity = await self.get_entity_by_slug(org_id, slugify(name))
+        if entity is None or entity.get("status") != "active":
+            return None
+        kind = entity.get("kind")
+        return str(kind) if kind else None
+
+    async def validate_link(
+        self,
+        org_id: UUID,
+        predicate: str,
+        subject: str,
+        object_: str,
+    ) -> LinkValidationResult:
+        """Enforce predicate registry and optional endpoint kind constraints."""
+        try:
+            await self.validate_predicate(org_id, predicate)
+        except OntologyError as exc:
+            return LinkValidationResult(allowed=False, error=str(exc))
+
+        link = await self.get_link_type(org_id, predicate)
+        if link is None:
+            return LinkValidationResult(allowed=True)
+
+        from_kinds = link["from_kinds"]
+        to_kinds = link["to_kinds"]
+        if not from_kinds and not to_kinds:
+            return LinkValidationResult(allowed=True)
+
+        subject_kind = await self.resolve_entity_kind(org_id, subject)
+        object_kind = await self.resolve_entity_kind(org_id, object_)
+
+        if from_kinds:
+            if subject_kind is None:
+                log.warning(
+                    "ontology.validate_link.unresolved_subject",
+                    predicate=predicate,
+                    subject=subject,
+                    required_kinds=from_kinds,
+                )
+                return LinkValidationResult(
+                    allowed=True,
+                    warning=f"subject '{subject}' has no active entity; kind constraint not enforced",
+                )
+            if subject_kind not in from_kinds:
+                return LinkValidationResult(
+                    allowed=False,
+                    error=(
+                        f"subject '{subject}' is kind '{subject_kind}' but "
+                        f"'{predicate}' requires from_kinds {from_kinds}"
+                    ),
+                )
+
+        if to_kinds:
+            if object_kind is None:
+                log.warning(
+                    "ontology.validate_link.unresolved_object",
+                    predicate=predicate,
+                    object=object_,
+                    required_kinds=to_kinds,
+                )
+                return LinkValidationResult(
+                    allowed=True,
+                    warning=f"object '{object_}' has no active entity; kind constraint not enforced",
+                )
+            if object_kind not in to_kinds:
+                return LinkValidationResult(
+                    allowed=False,
+                    error=(
+                        f"object '{object_}' is kind '{object_kind}' but "
+                        f"'{predicate}' requires to_kinds {to_kinds}"
+                    ),
+                )
+
+        return LinkValidationResult(allowed=True)
+
+    async def upsert_link_type(
+        self,
+        org_id: UUID,
+        *,
+        name: str,
+        description: str | None = None,
+        from_kinds: list[str] | None = None,
+        to_kinds: list[str] | None = None,
+        cardinality: str = "many_to_many",
+    ) -> dict[str, Any]:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                INSERT INTO ontology_link_types
+                    (org_id, name, description, from_kinds, to_kinds, cardinality)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (org_id, name) DO UPDATE SET
+                    description = EXCLUDED.description,
+                    from_kinds = EXCLUDED.from_kinds,
+                    to_kinds = EXCLUDED.to_kinds,
+                    cardinality = EXCLUDED.cardinality
+                RETURNING name
+                """,
+                (
+                    str(org_id), name, description,
+                    from_kinds or [], to_kinds or [], cardinality,
+                ),
+            )
+            row = await cur.fetchone()
+        assert row is not None
+        return {"name": row[0], "updated": True}
+
+    async def upsert_object_kind(
+        self,
+        org_id: UUID,
+        *,
+        name: str,
+        description: str | None = None,
+        properties_schema: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                INSERT INTO ontology_object_kinds
+                    (org_id, name, description, properties_schema)
+                VALUES (%s, %s, %s, %s::jsonb)
+                ON CONFLICT (org_id, name) DO UPDATE SET
+                    description = EXCLUDED.description,
+                    properties_schema = EXCLUDED.properties_schema
+                RETURNING name
+                """,
+                (str(org_id), name, description, _json(properties_schema or {})),
+            )
+            row = await cur.fetchone()
+        assert row is not None
+        return {"name": row[0], "updated": True}
 
     async def list_schema(self, org_id: UUID) -> dict[str, Any]:
         """Return link types, object kinds, interfaces, and action types."""
@@ -368,6 +533,76 @@ class OntologyStore:
             row = await cur.fetchone()
         assert row is not None
         return {"entity_id": str(row[0]), "slug": row[1], "status": row[2], "kind": kind_name}
+
+    async def set_entity_status(self, org_id: UUID, entity_id: UUID, *, status: str) -> bool:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                UPDATE ontology_entities
+                SET status = %s
+                WHERE id = %s AND org_id = %s
+                RETURNING id
+                """,
+                (status, str(entity_id), str(org_id)),
+            )
+            row = await cur.fetchone()
+        return row is not None
+
+    async def approve_entity(self, org_id: UUID, entity_id: UUID) -> bool:
+        return await self.set_entity_status(org_id, entity_id, status="active")
+
+    async def reject_entity(self, org_id: UUID, entity_id: UUID) -> bool:
+        return await self.set_entity_status(org_id, entity_id, status="rejected")
+
+    async def preview_entity(self, org_id: UUID, entity_id: UUID) -> str | None:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT e.name, k.name
+                FROM ontology_entities e
+                JOIN ontology_object_kinds k ON k.id = e.kind_id
+                WHERE e.org_id = %s AND e.id = %s
+                """,
+                (str(org_id), str(entity_id)),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        return f"{row[0]} ({row[1]})"
+
+    async def list_entities(
+        self, org_id: UUID, *, limit: int = 200, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        clauses = ["e.org_id = %s"]
+        params: list[Any] = [str(org_id)]
+        if status:
+            clauses.append("e.status = %s")
+            params.append(status)
+        params.append(limit)
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                f"""
+                SELECT e.slug, e.name, k.name, e.status, e.created_by, e.created_at
+                FROM ontology_entities e
+                JOIN ontology_object_kinds k ON k.id = e.kind_id
+                WHERE {' AND '.join(clauses)}
+                ORDER BY e.created_at DESC
+                LIMIT %s
+                """,
+                tuple(params),
+            )
+            rows = await cur.fetchall()
+        return [
+            {
+                "slug": r[0],
+                "name": r[1],
+                "kind": r[2],
+                "status": r[3],
+                "created_by": r[4],
+                "created_at": r[5].isoformat() if r[5] else None,
+            }
+            for r in rows
+        ]
 
     async def list_by_interface(
         self, org_id: UUID, interface_name: str, *, limit: int = 50

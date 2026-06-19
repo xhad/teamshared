@@ -10,20 +10,27 @@
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   {% if entity %}
-  <div class="panel">
+  <div class="panel gap-before">
     <div class="kb-kind">
       Ontology entity &middot; {{ entity.kind }}
       {% if entity.interfaces %} &middot; {{ entity.interfaces | join(', ') }}{% endif %}
       &middot; {{ entity.status }}
     </div>
     {% if entity.properties %}
-    <pre class="muted">{{ entity.properties }}</pre>
+    <dl class="entity-kv">
+      {% for key, value in entity.properties.items() %}
+      <div>
+        <dt>{{ key }}</dt>
+        <dd>{{ value }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
     {% endif %}
   </div>
   {% endif %}
 
   {% if curated_html %}
-  <div class="panel">
+  <div class="panel gap-before">
     <div class="kb-kind">Curated article &middot; v{{ curated_version }} &middot; updated {{ curated_updated }}</div>
     <div class="prose">{{ curated_html | safe }}</div>
   </div>
@@ -96,6 +103,9 @@
     {% endfor %}
   </div>
   {% elif not note and not curated_html and not graph_records and not work_items %}
-  <p class="muted">No data for this entity yet.</p>
+  <div class="empty-state panel">
+    <h3>No data for this entity yet</h3>
+    <p>Memories, graph links, and work items mentioning <strong>{{ slug }}</strong> will appear here.</p>
+  </div>
   {% endif %}
 {% endblock %}

@@ -150,6 +150,12 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.ontology_propose_entity = AsyncMock(
         return_value={"ok": True, "entity_id": "e1", "slug": "acme", "status": "pending_approval"}
     )
+    facade.action_apply = AsyncMock(
+        return_value={"ok": True, "action": "link_entities", "status": "applied", "log_id": "l1"}
+    )
+    facade.action_log_list = AsyncMock(return_value={"count": 0, "entries": []})
+    facade.ontology_link_type_set = AsyncMock(return_value={"name": "depends_on", "updated": True})
+    facade.ontology_object_kind_set = AsyncMock(return_value={"name": "Vendor", "updated": True})
     facade.forget = AsyncMock(return_value={"memory_id": "m1", "deleted": True})
     facade.state_get = AsyncMock(return_value={"repo": "r", "key": "k", "value": None})
     facade.state_set = AsyncMock(return_value={"repo": "r", "key": "k", "stored": True})
@@ -423,6 +429,26 @@ async def test_memory_ontology_list_delegates_to_facade(
     mcp, state = mcp_with_mocks
     await _call(mcp, "memory_ontology_list")
     state.facade.ontology_list.assert_awaited_once()
+
+
+async def test_memory_action_apply_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    out = await _call(
+        mcp, "memory_action_apply", action_name="link_entities",
+        parameters={"subject": "a", "predicate": "mentions", "object_entity": "b"},
+    )
+    assert out["ok"] is True
+    state.facade.action_apply.assert_awaited_once()
+
+
+async def test_memory_action_log_list_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "memory_action_log_list", limit=5)
+    state.facade.action_log_list.assert_awaited_once()
 
 
 async def test_memory_procedure_set_and_get(

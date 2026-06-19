@@ -17,6 +17,7 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <button type="button" class="sidebar-overlay" data-nav-overlay aria-label="Close navigation"></button>
   <div class="layout">
     <aside class="sidebar" aria-label="Main navigation">
@@ -26,8 +27,11 @@
         {% if app_version %}<a class="ver" href="/health" target="_blank" rel="noopener" title="Server health">v{{ app_version }}</a>{% endif %}
       </div>
       <nav>
-        {% for href, label, key in nav %}
-        <a href="{{ href }}"{% if key == active %} class="active"{% endif %}>{{ label }}</a>
+        {% for section_label, items in nav_groups %}
+        {% if section_label %}<div class="nav-section-label">{{ section_label }}</div>{% endif %}
+        {% for href, label, key in items %}
+        <a href="{{ href }}"{% if key == active %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
         {% endfor %}
       </nav>
     </aside>
@@ -57,7 +61,7 @@
         </div>
         <span class="who"><span>{{ who }}</span><a href="/logout">Sign out</a></span>
       </header>
-      <main class="content">
+      <main class="content" id="main-content">
         {% block content %}{% endblock %}
       </main>
     </div>

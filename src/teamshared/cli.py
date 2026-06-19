@@ -40,8 +40,10 @@ from teamshared.server.token_api import invite_mint_path, invite_redeem_curl, in
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="teamshared memory CLI")
 token_app = typer.Typer(no_args_is_help=True, help="Bearer-token management")
 config_app = typer.Typer(no_args_is_help=True, help="Inspect runtime configuration")
+ontology_app = typer.Typer(no_args_is_help=True, help="Org ontology maintenance")
 app.add_typer(token_app, name="token")
 app.add_typer(config_app, name="config")
+app.add_typer(ontology_app, name="ontology")
 
 console = Console()
 
@@ -177,6 +179,50 @@ def seed(
                     console.print(f"  [yellow]procedure[/yellow] {name} v{proc['version']}")
         finally:
             await db.close()
+
+    asyncio.run(_run())
+
+
+@ontology_app.command("backfill")
+def ontology_backfill(
+    org_id: str | None = typer.Option(
+        None, "--org-id", help="Target org UUID (default: TEAMSHARED_DEFAULT_ORG_ID)."
+    ),
+    dry_run: bool = typer.Option(
+        True, "--dry-run/--apply", help="Preview candidates or write entities."
+    ),
+    subject_limit: int = typer.Option(
+        500, "--subject-limit", help="Max wiki subjects to scan."
+    ),
+) -> None:
+    """Hydrate ontology_entities from existing wiki subjects (idempotent on slug)."""
+
+    async def _run() -> None:
+        from uuid import UUID
+
+        from teamshared.seed.ontology_backfill import run_backfill
+
+        settings = get_settings()
+        target_org = UUID(org_id) if org_id else settings.default_org_id
+        services = make_services(settings)
+        await services.tenant_db.connect()
+        try:
+            counts = await run_backfill(
+                ontology=services.ontology,
+                vector_store=services.vector_store,
+                org_id=target_org,
+                dry_run=dry_run,
+                subject_limit=subject_limit,
+            )
+        finally:
+            await services.tenant_db.close()
+        mode = "dry-run" if dry_run else "applied"
+        console.print(
+            f"[bold green]Ontology backfill ({mode})[/bold green]: "
+            f"candidates={counts['candidates']} "
+            f"{'would_create' if dry_run else 'created'}={counts['created']} "
+            f"skipped={counts['skipped']}"
+        )
 
     asyncio.run(_run())
 
