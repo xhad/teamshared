@@ -2,14 +2,32 @@
 {% block title %}{{ subject or 'Topic' }}{% endblock %}
 {% block content %}
   <h1>{{ subject or 'Topic' }}</h1>
-  <p class="sub"><a href="/app/wiki">&larr; All topics</a></p>
+  <p class="sub">
+    <a href="/app/wiki">&larr; All topics</a>
+    {% if entity or subject %}
+    &middot; <a href="/app/wiki/entity/{{ slug }}">Entity hub</a>
+    {% endif %}
+    {% if entity %}
+    &middot; <a href="/app/ontology">Ontology</a>
+    {% endif %}
+  </p>
   {% set active_tab = 'topics' %}
   {% include "_wiki_tabs.html" %}
+
+  {% if entity %}
+  <div class="panel">
+    <div class="kb-kind">
+      Ontology &middot; {{ entity.kind }}
+      {% if entity.status %} &middot; {{ entity.status }}{% endif %}
+    </div>
+    <p class="muted">Registered entity <strong>{{ entity.name }}</strong> — open the entity hub for graph neighbors, work, and timeline rollups.</p>
+  </div>
+  {% endif %}
 
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   {% if curated_html %}
-  <div class="panel">
+  <div class="panel gap-before">
     <div class="kb-kind">Curated article &middot; v{{ curated_version }} &middot; updated {{ curated_updated }}</div>
     <div class="prose">{{ curated_html | safe }}</div>
   </div>
@@ -32,7 +50,12 @@
     {% endfor %}
     {% endfor %}
   </div>
-  {% elif not note %}
-  <p class="muted">No records for this topic.</p>
+  {% elif not note and not curated_html %}
+  <div class="empty-state panel">
+    <p class="muted">No source records for this topic yet.</p>
+    {% if entity %}
+    <p class="muted">The entity is registered — curated wiki content and memories will appear as the brain grows.</p>
+    {% endif %}
+  </div>
   {% endif %}
 {% endblock %}

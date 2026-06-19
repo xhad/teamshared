@@ -207,6 +207,13 @@ def ontology_backfill(
         services = make_services(settings)
         await services.tenant_db.connect()
         try:
+            seeded = await services.ontology.seed_defaults(target_org)
+            if any(seeded.values()):
+                console.print(
+                    f"  [cyan]ontology seed[/cyan] "
+                    f"links={seeded['link_types']} kinds={seeded['object_kinds']} "
+                    f"ifaces={seeded['interfaces']} actions={seeded['action_types']}"
+                )
             counts = await run_backfill(
                 ontology=services.ontology,
                 vector_store=services.vector_store,

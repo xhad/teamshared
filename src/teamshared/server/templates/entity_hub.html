@@ -5,6 +5,7 @@
   <p class="sub">
     <a href="/app/wiki">&larr; Wiki</a>
     {% if subject %} &middot; <a href="/app/wiki/topic/{{ slug }}">Topic view</a>{% endif %}
+    {% if entity %} &middot; <a href="/app/ontology">Ontology</a>{% endif %}
   </p>
 
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}

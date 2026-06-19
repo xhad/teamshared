@@ -114,6 +114,7 @@ NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
         "Memory",
         [
             ("/app/wiki", "Wiki", "wiki"),
+            ("/app/ontology", "Ontology", "ontology"),
             ("/app/playbooks", "Playbooks", "playbooks"),
             ("/app/skills", "Skills", "skills"),
             ("/app/memory", "Explorer", "memory"),
@@ -640,17 +641,22 @@ def register_console_routes(
         groups: list[tuple[str, list[Any]]] = []
         curated_html = ""
         curated: dict[str, Any] | None = None
+        entity: dict[str, Any] | None = None
         note = ""
         try:
             vs = services.vector_store
+            entity = await services.ontology.get_entity_by_slug(principal.org_id, slug)
             subjects = await vs.list_subjects(principal.org_id, limit=500)
             slug_map = {slugify(s["subject"]): s["subject"] for s in subjects}
             subject = slug_map.get(slug)
-            if subject is None:
+            if subject is None and entity is not None:
+                subject = str(entity.get("name") or slug)
+            if subject is None and entity is None:
                 note = "Topic not found."
             else:
-                records = await vs.list_by_subject(principal.org_id, subject, limit=200)
-                groups = _group_by_kind(records)
+                if subject is not None:
+                    records = await vs.list_by_subject(principal.org_id, subject, limit=200)
+                    groups = _group_by_kind(records)
                 curated = await services.wiki.get_page(principal.org_id, slug)
                 if curated:
                     curated_html = render_markdown_safe(curated.get("body_md") or "")
@@ -659,7 +665,11 @@ def register_console_routes(
             note = f"Wiki unavailable: {exc}"
         ctx.update(
             {
-                "subject": subject, "groups": groups, "note": note,
+                "slug": slug,
+                "subject": subject,
+                "entity": entity,
+                "groups": groups,
+                "note": note,
                 "curated_html": curated_html,
                 "curated_version": curated.get("version") if curated else None,
                 "curated_updated": _dt(curated.get("updated_at")) if curated else "",

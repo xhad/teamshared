@@ -2,7 +2,11 @@
 {% block title %}Ontology{% endblock %}
 {% block content %}
   <h1>Org ontology</h1>
-  <p class="sub">Registered link types, object kinds, entities, and governed action audit log.</p>
+  <p class="sub">
+    Registered link types, object kinds, entities, and governed action audit log.
+    {% if entities %}<strong>{{ entities | length }}</strong> entities{% endif %}
+    &middot; <a href="/app/wiki">Wiki topics</a>
+  </p>
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   <section class="panel">
@@ -46,25 +50,28 @@
     <h2>Entities</h2>
     {% if entities %}
     <table>
-      <thead><tr><th>Slug</th><th>Name</th><th>Kind</th><th>Status</th><th>Created by</th></tr></thead>
+      <thead><tr><th>Slug</th><th>Name</th><th>Kind</th><th>Status</th><th>Views</th></tr></thead>
       <tbody>
         {% for e in entities %}
         <tr>
-          <td><a href="/app/wiki/entity/{{ e.slug }}">{{ e.slug }}</a></td>
+          <td><code>{{ e.slug }}</code></td>
           <td>{{ e.name }}</td>
           <td>{{ e.kind }}</td>
           <td>{{ e.status }}</td>
-          <td>{{ e.created_by or '—' }}</td>
+          <td>
+            <a href="/app/wiki/entity/{{ e.slug }}">Hub</a>
+            &middot;
+            <a href="/app/wiki/topic/{{ e.slug }}">Topic</a>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% else %}
     <div class="empty-state">
-      <p class="muted">No entities yet. Agents can propose them with <code>memory_ontology_propose_entity</code> or run <code>teamshared ontology backfill</code>.</p>
+      <p class="muted">No entities yet. Run <code>teamshared ontology backfill --apply</code> or propose via <code>memory_ontology_propose_entity</code>.</p>
     </div>
     {% endif %}
-    <p class="muted">Agents can propose entities with <code>memory_ontology_propose_entity</code> or run <code>teamshared ontology backfill</code>.</p>
   </section>
 
   <section class="panel">

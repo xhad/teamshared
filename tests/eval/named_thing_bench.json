@@ -1,5 +1,5 @@
 {
-  "description": "Named-entity retrieval bench — hard-gates title/subject matches.",
+  "description": "Named-entity retrieval bench — hard-gates title/subject matches via RRF merge proxy.",
   "cases": [
     {
       "name": "subject_exact_match",
@@ -21,6 +21,73 @@
       "query": "teamshared postgres port",
       "candidates": ["mem-teamshared-ops", "mem-generic-db"],
       "expected_ids": ["mem-teamshared-ops"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "person_name_in_subject",
+      "query": "Bob platform architect",
+      "candidates": ["mem-bob-role", "mem-bob-unrelated", "mem-charlie"],
+      "expected_ids": ["mem-bob-role"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "company_name_phrase",
+      "query": "Sapien treasury policy",
+      "candidates": ["mem-sapien-treasury", "mem-random-finance", "mem-other"],
+      "keyword_only": ["mem-sapien-treasury"],
+      "expected_ids": ["mem-sapien-treasury"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "github_repo_subject",
+      "query": "xhad/teamshared deployment",
+      "candidates": ["mem-github-teamshared", "mem-github-other", "mem-unrelated"],
+      "expected_ids": ["mem-github-teamshared"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "project_codename",
+      "query": "Project Helios launch date",
+      "candidates": ["mem-helios-launch", "mem-helios-notes", "mem-unrelated"],
+      "expected_ids": ["mem-helios-launch"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "keyword_only_rescue_deep_list",
+      "query": "Neo4j bolt connection string",
+      "candidates": ["mem-a", "mem-b", "mem-c", "mem-d", "mem-neo4j-ops"],
+      "keyword_only": ["mem-neo4j-ops"],
+      "expected_ids": ["mem-neo4j-ops"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "dual_signal_winner",
+      "query": "OpenRouter credit top-up",
+      "candidates": ["mem-openrouter-ops", "mem-llm-generic", "mem-billing"],
+      "keyword_only": ["mem-openrouter-ops"],
+      "expected_ids": ["mem-openrouter-ops"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "ontology_entity_slug",
+      "query": "teamshared ontology backfill",
+      "candidates": ["mem-ontology-backfill", "mem-wiki-plan", "mem-unrelated"],
+      "expected_ids": ["mem-ontology-backfill"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "skill_name_match",
+      "query": "teamshared.start-of-task ritual",
+      "candidates": ["mem-skill-start", "mem-skill-end", "mem-unrelated"],
+      "keyword_only": ["mem-skill-start"],
+      "expected_ids": ["mem-skill-start"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "work_item_title",
+      "query": "NamedThingBench CI gate",
+      "candidates": ["mem-work-eval", "mem-work-console", "mem-unrelated"],
+      "expected_ids": ["mem-work-eval"],
       "min_hit_at_5": 1.0
     }
   ]

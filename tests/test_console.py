@@ -600,6 +600,7 @@ def test_ontology_page_renders() -> None:
     assert resp.status_code == 200
     assert "mentions" in resp.text
     assert "alice" in resp.text
+    assert "Entity hub" in resp.text or "Hub" in resp.text
 
 
 def test_work_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -815,6 +816,7 @@ def test_wiki_topic_groups_records_by_kind() -> None:
         ]
     )
     services.wiki.get_page = AsyncMock(return_value=None)
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
     _login(client)
     resp = client.get("/app/wiki/topic/teamshared-infra")
     assert resp.status_code == 200
@@ -828,6 +830,7 @@ def test_wiki_topic_groups_records_by_kind() -> None:
 def test_wiki_topic_not_found_for_unknown_slug() -> None:
     client, services = _build()
     services.vector_store.list_subjects = AsyncMock(return_value=[])
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
     _login(client)
     resp = client.get("/app/wiki/topic/nope")
     assert resp.status_code == 200
@@ -864,6 +867,7 @@ def test_wiki_topic_prefers_curated_page() -> None:
         return_value={"body_md": "# Infra\n\nProd runs on **Spark**.", "version": 3,
                       "updated_at": "2026-05-28T11:00:00"}
     )
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
     _login(client)
     resp = client.get("/app/wiki/topic/teamshared-infra")
     assert resp.status_code == 200

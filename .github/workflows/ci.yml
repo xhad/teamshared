@@ -27,6 +27,8 @@ jobs:
         run: python -m mypy src
       - name: Unit tests with coverage
         run: python -m pytest -q --cov=src/teamshared --cov-report=term
+      - name: NamedThingBench eval gate
+        run: python scripts/eval_replay.py
 
   integration:
     name: Integration tests (Postgres + Redis)
