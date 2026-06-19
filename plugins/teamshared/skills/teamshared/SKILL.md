@@ -20,7 +20,9 @@ Follow the **every turn checklist** in `teamshared.mdc`:
    `gh repo view --json nameWithOwner` when available → `github=`.
 4. On pivot: close session, open new one, update state — same turn.
 5. On append failure: reopen session, update state, retry once.
-6. For repeatable playbooks: `memory_procedure_set` / `memory_procedure_get`.
+6. For repeatable playbooks: split atomic steps with `memory_skill_set`, compose
+   orchestrators with `memory_playbook_set` + `tool_recipe.skills`, fetch with
+   `memory_playbook_get(expand_skills=true)`.
 
 ## Tool chooser
 
@@ -28,8 +30,9 @@ Follow the **every turn checklist** in `teamshared.mdc`:
 |---|---|
 | Search all pillars | `memory_recall` |
 | Store preference/fact/event/note | `memory_remember` |
+| Store atomic skill (how-to block) | `memory_skill_set` |
+| Store playbook orchestrator | `memory_playbook_set` |
 | Log every chat + distillation | `memory_session_*` |
-| Versioned how-to | `memory_procedure_set` |
 | Browse timeline | `memory_episodes_list` |
 | Explicit relationships (Neo4j on) | `memory_graph_*` |
 | Active session bookkeeping | `memory_state_get` / `memory_state_set` |

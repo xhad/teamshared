@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.5.0
+version: 1.5.1
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.5.0 -->
+<!-- teamshared-rule-version: 1.5.1 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.5.0`).
+This rule is versioned (`version` in the frontmatter above, currently `1.5.1`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
    versions), call the `version` tool with this rule's frontmatter `version`
-   (`1.5.0`) as `installed_rule_version`. Do not call `version` every turn.
+   (`1.5.1`) as `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
    `~/.cursor/rules/teamshared.mdc`; repo / Cloud Agents:
@@ -70,6 +70,11 @@ only, lint fixes with no architecture questions).
 | Multi-stage agent loop | `workflow_define` / `workflow_start` + `tool_recipe.stages` | `workflow_status` |
 
 Bundled rituals (`teamshared.start-of-task`, etc.) are **skills**, not playbooks.
+
+**Split a monolithic playbook:** store each atomic step with `memory_skill_set`
+(tag `skill`), then compose with `memory_playbook_set` and
+`tool_recipe: {"skills": ["step-a", "step-b"], ...}`. Fetch the full flow via
+`memory_playbook_get(expand_skills=true)`.
 
 ## Core workflows
 
@@ -320,8 +325,10 @@ Soft-delete semantic/episodic by `memory_id`. **Only when the user explicitly as
 
 ## Quick chooser
 
-**Tiers:** `core` = every session; `extended` = writes/debug; `human` = workflows.
-Call `memory_tools_catalog(scope="memory", tier="core")` when unsure.
+**Tiers:** `core` = every session (includes `memory_skill_set` and
+`memory_playbook_set` writes); `extended` = graph, strategic, forget, debug;
+`human` = workflows. Call `memory_tools_catalog(scope="memory", tier="core")`
+when unsure.
 
 | Need | Tool |
 |---|---|
@@ -332,6 +339,8 @@ Call `memory_tools_catalog(scope="memory", tier="core")` when unsure.
 | **Search** raw records / debug retrieval | `memory_recall` (`explain=true`) |
 | Token-budgeted context pack | `memory_assemble_context` |
 | Store preference/fact/event/note | `memory_remember` |
+| Store atomic skill (how-to block) | `memory_skill_set` |
+| Store playbook orchestrator | `memory_playbook_set` |
 | Log every chat + distillation | `memory_session_*` |
 | Read session turns | `memory_session_get` |
 | Browse timeline | `memory_episodes_list` |

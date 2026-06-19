@@ -16,7 +16,9 @@ def test_catalog_groups_memory_tools() -> None:
     names = {e["name"] for group in out["groups"].values() for e in group}
     assert "memory_recall" in names
     assert "memory_skill_get" in names
+    assert "memory_skill_set" in names
     assert "memory_playbook_get" in names
+    assert "memory_playbook_set" in names
     assert "memory_tools_catalog" in names
 
 

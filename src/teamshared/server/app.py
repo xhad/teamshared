@@ -102,9 +102,11 @@ def build_mcp(settings: Settings | None = None) -> FastMCP:
     mcp: FastMCP = FastMCP(
         name="teamshared",
         instructions=(
-            "Multi-pillar agent memory. Use `memory_recall` early in a task to "
-            "pull relevant facts, episodes, and procedures. Use `memory_remember` "
-            "to persist durable facts and `memory_session_*` for working memory."
+            "Multi-pillar agent memory. Use `memory_recall` or `memory_think` early "
+            "in a task. Store facts with `memory_remember`; store atomic how-to "
+            "blocks with `memory_skill_set`; compose playbooks from skills via "
+            "`memory_playbook_set` + `tool_recipe.skills`. Log chats with "
+            "`memory_session_*`."
         ),
     )
     register_tools(mcp)
