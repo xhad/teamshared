@@ -1,4 +1,4 @@
-# teamshared conversation capture — merge under `hooks:` in ~/.hermes/config.yaml.
+# teamshared conversation capture — merge under `hooks:` in ./.hermes/config.yaml.
 # Fires once per turn (post_llm_call) and forwards the user/assistant turns to
 # teamshared's POST /sessions/turns sink via agent-hooks/teamshared-capture.py.
 #
@@ -7,5 +7,5 @@
 # non-TTY gateway/cron runs). Verify with `hermes hooks list`.
 hooks:
   post_llm_call:
-    - command: "python3 ~/.hermes/agent-hooks/teamshared-capture.py"
+    - command: "python3 .hermes/agent-hooks/teamshared-capture.py"
       timeout: 15

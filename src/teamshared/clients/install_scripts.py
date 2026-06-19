@@ -10,14 +10,19 @@ _REPO_PLUGIN = None  # set lazily in install_api
 _REPO_ASSETS = None
 
 # Placeholders substituted when the script is served (request base URL).
+# Every harness installs under the directory where the script is run (pwd) —
+# never under $HOME. Run from your project root:
+#   cd /path/to/your/repo && curl -fsSL __BASE__/install.sh | bash
 _INSTALL_SH = r"""#!/usr/bin/env bash
-# teamshared unified installer
+# teamshared unified installer (project-local only)
+#   cd /path/to/your/repo
 #   curl -fsSL __BASE__/install.sh | bash
 set -euo pipefail
 
 TEAMSHARED_BASE_URL="${TEAMSHARED_BASE_URL:-__BASE__}"
 TEAMSHARED_MCP_URL="${TEAMSHARED_MCP_URL:-__MCP_URL__}"
 ASSETS="${TEAMSHARED_BASE_URL}/install/assets"
+INSTALL_ROOT="$(pwd)"
 
 _ts_die() { echo "teamshared install: $*" >&2; exit 1; }
 
@@ -63,6 +68,7 @@ _ts_read_secret() {
 
 _ts_choose_harness() {
   _ts_tty $'\nSelect agent harness:\n  1) cursor   — Cursor IDE (plugin, rules, MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n\n'
+  _ts_tty "Install root: ${INSTALL_ROOT}\n"
   local choice
   while true; do
     _ts_tty 'Enter choice [1-5]: '
@@ -152,27 +158,10 @@ _ts_finish() {
   echo "MCP URL: ${TEAMSHARED_MCP_URL}"
 }
 
-# Cursor can load the plugin globally (~/.cursor, every project) or from a
-# single repo's ./.cursor (that project only). Sets CURSOR_ROOT + CURSOR_SCOPE.
-_ts_choose_cursor_scope() {
-  _ts_tty $'\nInstall the Cursor plugin where?\n  1) global — ~/.cursor (all projects)\n  2) local  — ./.cursor (this repo only)\n\n'
-  local choice
-  while true; do
-    _ts_tty 'Enter choice [1-2]: '
-    _ts_read choice
-    case "$choice" in
-      1|global) CURSOR_ROOT="${HOME}"; CURSOR_SCOPE=global; break ;;
-      2|local) CURSOR_ROOT="$(pwd)"; CURSOR_SCOPE=local; break ;;
-      *) _ts_tty 'Invalid choice. Enter 1 or 2.\n' ;;
-    esac
-  done
-  _ts_tty "Cursor plugin scope: ${CURSOR_SCOPE} (${CURSOR_ROOT}/.cursor)\n"
-}
-
+# Cursor: plugin + rule + MCP under ./.cursor (this repo only).
 _ts_install_cursor() {
   _ts_need_cmd curl
-  _ts_choose_cursor_scope
-  local cursor_dir="${CURSOR_ROOT}/.cursor"
+  local cursor_dir="${INSTALL_ROOT}/.cursor"
   local plugin_dir="${cursor_dir}/plugins/local/teamshared"
   local rule_path="${cursor_dir}/rules/teamshared.mdc"
   local bundle_url="${TEAMSHARED_BASE_URL}/install/plugin/teamshared.tar.gz"
@@ -196,27 +185,24 @@ _ts_install_cursor() {
   fi
   echo "  plugin → ${plugin_dir}"
 
-  local mcp_snippet="${HOME}/.config/teamshared/cursor-mcp.json"
+  local mcp_snippet="${cursor_dir}/teamshared-mcp.snippet.json"
   local mcp_config="${cursor_dir}/mcp.json"
-  mkdir -p "$(dirname "${mcp_snippet}")"
   _ts_fetch "${mcp_snippet}" "${ASSETS}/cursor/mcp.json"
   _ts_apply_token "${mcp_snippet}"
   _ts_merge_json_mcp "${mcp_snippet}" "${mcp_config}"
   echo "  MCP config → ${mcp_config}"
-  if [[ "${CURSOR_SCOPE}" == "local" ]]; then
-    echo ""
-    echo "NOTE: ${mcp_config} now contains your bearer token."
-    echo "      Add '.cursor/mcp.json' to this repo's .gitignore so it isn't committed."
-  fi
+  echo ""
+  echo "NOTE: ${mcp_config} contains your bearer token."
+  echo "      Add '.cursor/mcp.json' to this repo's .gitignore so it isn't committed."
   echo ""
   echo "Optional: install Bun (https://bun.sh) for continual-learning hooks."
 }
 
 _ts_install_codex() {
   _ts_need_cmd curl
-  local dest="${HOME}/.codex/config.toml"
-  local snippet="${HOME}/.codex/teamshared-mcp.toml"
-  mkdir -p "${HOME}/.codex"
+  local dest="${INSTALL_ROOT}/.codex/config.toml"
+  local snippet="${INSTALL_ROOT}/.codex/teamshared-mcp.toml"
+  mkdir -p "${INSTALL_ROOT}/.codex"
   _ts_fetch "${snippet}" "${ASSETS}/codex/mcp.toml"
   _ts_apply_token "${snippet}"
 
@@ -231,13 +217,14 @@ _ts_install_codex() {
     echo "Wrote ${dest}"
   fi
   echo "  snippet kept at ${snippet}"
+  echo "  Run Codex from ${INSTALL_ROOT} so it picks up ./.codex/config.toml"
 }
 
 _ts_install_hermes() {
   _ts_need_cmd curl
-  local dest="${HOME}/.hermes/config.yaml"
-  local snippet="${HOME}/.hermes/teamshared-mcp.yaml"
-  mkdir -p "${HOME}/.hermes"
+  local dest="${INSTALL_ROOT}/.hermes/config.yaml"
+  local snippet="${INSTALL_ROOT}/.hermes/teamshared-mcp.yaml"
+  mkdir -p "${INSTALL_ROOT}/.hermes"
   _ts_fetch "${snippet}" "${ASSETS}/hermes/mcp.yaml"
   _ts_apply_token "${snippet}"
 
@@ -279,8 +266,10 @@ PY
     cat "${snippet}" >>"${dest}"
     echo "Wrote ${dest}"
   fi
-  _ts_fetch "${HOME}/.hermes/teamshared-protocol.md" "${ASSETS}/hermes/protocol.md" 2>/dev/null || true
+  _ts_fetch "${INSTALL_ROOT}/.hermes/teamshared-protocol.md" "${ASSETS}/hermes/protocol.md" 2>/dev/null || true
+  echo "  protocol → ${INSTALL_ROOT}/.hermes/teamshared-protocol.md"
   echo "  snippet → ${snippet}"
+  echo "  Merge protocol into .hermes/SOUL.md if your harness loads it."
 
   _ts_install_hermes_hook "${dest}"
 }
@@ -288,7 +277,7 @@ PY
 # Deploy the conversation-capture shell hook and register it on post_llm_call.
 _ts_install_hermes_hook() {
   local config_path="$1"
-  local hook_dir="${HOME}/.hermes/agent-hooks"
+  local hook_dir="${INSTALL_ROOT}/.hermes/agent-hooks"
   local hook_script="${hook_dir}/teamshared-capture.py"
   local hook_creds="${hook_dir}/teamshared-capture.json"
   mkdir -p "${hook_dir}"
@@ -333,47 +322,48 @@ PY
 _ts_install_claude() {
   _ts_need_cmd curl
   _ts_need_cmd python3
-  local snippet="${HOME}/.config/teamshared/claude-mcp.json"
-  mkdir -p "$(dirname "${snippet}")"
+  local claude_dir="${INSTALL_ROOT}/.claude"
+  local snippet="${claude_dir}/teamshared-mcp.snippet.json"
+  local config="${claude_dir}/claude_desktop_config.json"
+  mkdir -p "${claude_dir}"
   _ts_fetch "${snippet}" "${ASSETS}/claude/mcp.json"
   _ts_apply_token "${snippet}"
 
-  case "$(uname -s)" in
-    Darwin)
-      local config="${HOME}/Library/Application Support/Claude/claude_desktop_config.json"
-      ;;
-    *)
-      local config="${HOME}/.config/Claude/claude_desktop_config.json"
-      ;;
-  esac
-
-  mkdir -p "$(dirname "${config}")"
   _ts_merge_json_mcp "${snippet}" "${config}"
   echo "  MCP config → ${config}"
   echo "  snippet → ${snippet}"
+  echo "  Point Claude Desktop at ${config} or merge into your global config."
+  echo "  Add '.claude/' to .gitignore if it contains your bearer token."
 }
 
 _ts_install_openclaw() {
   _ts_need_cmd curl
-  local cmds="${HOME}/.config/teamshared/openclaw-teamshared.sh"
-  mkdir -p "$(dirname "${cmds}")"
+  local openclaw_dir="${INSTALL_ROOT}/.openclaw"
+  mkdir -p "${openclaw_dir}"
+  local snippet="${openclaw_dir}/teamshared-mcp.yaml"
+  cat >"${snippet}" <<EOF
+# Merge under mcp_servers: in your OpenClaw config for this project.
+teamshared:
+  url: ${TEAMSHARED_MCP_URL}
+  headers:
+    Authorization: "Bearer ${TEAMSHARED_TOKEN}"
+  timeout: 30
+EOF
+  local cmds="${openclaw_dir}/apply-teamshared.sh"
   cat >"${cmds}" <<EOF
 #!/usr/bin/env bash
+# Project-local teamshared MCP snippet for OpenClaw.
+# Merge ${snippet} into your OpenClaw config, or run from ${INSTALL_ROOT}:
 set -euo pipefail
-openclaw config set 'mcp_servers.teamshared.url' '${TEAMSHARED_MCP_URL}'
-openclaw config set 'mcp_servers.teamshared.headers.Authorization' "Bearer ${TEAMSHARED_TOKEN}"
-openclaw config set 'mcp_servers.teamshared.timeout' 30
-openclaw daemon restart
-openclaw mcp list
+echo "OpenClaw config fragment:"
+cat "${snippet}"
+echo ""
+echo "After merging, restart: openclaw daemon restart && openclaw mcp list"
 EOF
   chmod +x "${cmds}"
-
-  if command -v openclaw >/dev/null 2>&1; then
-    bash "${cmds}"
-  else
-    echo "openclaw not on PATH. After installing OpenClaw, run:"
-    echo "  bash ${cmds}"
-  fi
+  echo "  MCP fragment → ${snippet}"
+  echo "  helper → ${cmds}"
+  echo "  OpenClaw has no standard per-repo config path — merge manually or via your project's OpenClaw setup."
 }
 
 _ts_need_cmd curl
@@ -406,9 +396,12 @@ def unified_install_script(*, base_url: str) -> str:
 # the user's config is preserved); TOML/YAML blocks the installer appended are
 # stripped out the same way.
 _UNINSTALL_SH = r"""#!/usr/bin/env bash
-# teamshared unified uninstaller
+# teamshared unified uninstaller (project-local only)
+#   cd /path/to/your/repo
 #   curl -fsSL __BASE__/uninstall.sh | bash
 set -euo pipefail
+
+INSTALL_ROOT="$(pwd)"
 
 _ts_die() { echo "teamshared uninstall: $*" >&2; exit 1; }
 
@@ -437,6 +430,7 @@ _ts_read() {
 
 _ts_choose_harness() {
   _ts_tty $'\nSelect agent harness to remove teamshared from:\n  1) cursor   — Cursor IDE (plugin, rules, MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n  6) all      — every harness above\n\n'
+  _ts_tty "Uninstall root: ${INSTALL_ROOT}\n"
   local choice
   while true; do
     _ts_tty 'Enter choice [1-6]: '
@@ -545,68 +539,39 @@ PY
 }
 
 _ts_uninstall_cursor() {
-  echo "Removing Cursor integration"
-  # Clean both the global (~/.cursor) and current-repo (./.cursor) installs;
-  # the helpers no-op when a path or the teamshared MCP entry is absent.
-  local root seen=""
-  for root in "${HOME}" "$(pwd)"; do
-    case " ${seen} " in *" ${root} "*) continue ;; esac
-    seen="${seen} ${root}"
-    _ts_rm "${root}/.cursor/plugins/local/teamshared"
-    _ts_rm "${root}/.cursor/rules/teamshared.mdc"
-    _ts_remove_json_mcp "${root}/.cursor/mcp.json"
-  done
-  _ts_rm "${HOME}/.config/teamshared/cursor-mcp.json"
+  echo "Removing Cursor integration from ${INSTALL_ROOT}"
+  _ts_rm "${INSTALL_ROOT}/.cursor/plugins/local/teamshared"
+  _ts_rm "${INSTALL_ROOT}/.cursor/rules/teamshared.mdc"
+  _ts_rm "${INSTALL_ROOT}/.cursor/teamshared-mcp.snippet.json"
+  _ts_remove_json_mcp "${INSTALL_ROOT}/.cursor/mcp.json"
 }
 
 _ts_uninstall_codex() {
-  echo "Removing Codex integration"
-  _ts_rm "${HOME}/.codex/teamshared-mcp.toml"
-  _ts_remove_codex_block "${HOME}/.codex/config.toml"
+  echo "Removing Codex integration from ${INSTALL_ROOT}"
+  _ts_rm "${INSTALL_ROOT}/.codex/teamshared-mcp.toml"
+  _ts_remove_codex_block "${INSTALL_ROOT}/.codex/config.toml"
 }
 
 _ts_uninstall_hermes() {
-  echo "Removing Hermes integration"
-  _ts_rm "${HOME}/.hermes/teamshared-mcp.yaml"
-  _ts_rm "${HOME}/.hermes/teamshared-protocol.md"
-  _ts_rm "${HOME}/.hermes/agent-hooks/teamshared-capture.py"
-  _ts_rm "${HOME}/.hermes/agent-hooks/teamshared-capture.json"
-  _ts_remove_hermes_block "${HOME}/.hermes/config.yaml"
+  echo "Removing Hermes integration from ${INSTALL_ROOT}"
+  _ts_rm "${INSTALL_ROOT}/.hermes/teamshared-mcp.yaml"
+  _ts_rm "${INSTALL_ROOT}/.hermes/teamshared-protocol.md"
+  _ts_rm "${INSTALL_ROOT}/.hermes/agent-hooks/teamshared-capture.py"
+  _ts_rm "${INSTALL_ROOT}/.hermes/agent-hooks/teamshared-capture.json"
+  _ts_remove_hermes_block "${INSTALL_ROOT}/.hermes/config.yaml"
 }
 
 _ts_uninstall_claude() {
-  echo "Removing Claude Desktop integration"
-  _ts_rm "${HOME}/.config/teamshared/claude-mcp.json"
-  case "$(uname -s)" in
-    Darwin)
-      _ts_remove_json_mcp "${HOME}/Library/Application Support/Claude/claude_desktop_config.json"
-      ;;
-    *)
-      _ts_remove_json_mcp "${HOME}/.config/Claude/claude_desktop_config.json"
-      ;;
-  esac
+  echo "Removing Claude Desktop integration from ${INSTALL_ROOT}"
+  _ts_rm "${INSTALL_ROOT}/.claude/teamshared-mcp.snippet.json"
+  _ts_remove_json_mcp "${INSTALL_ROOT}/.claude/claude_desktop_config.json"
 }
 
 _ts_uninstall_openclaw() {
-  echo "Removing OpenClaw integration"
-  _ts_rm "${HOME}/.config/teamshared/openclaw-teamshared.sh"
-  if command -v openclaw >/dev/null 2>&1; then
-    openclaw config unset 'mcp_servers.teamshared' 2>/dev/null \
-      || openclaw config unset 'mcp_servers.teamshared.url' 2>/dev/null \
-      || true
-    openclaw daemon restart 2>/dev/null || true
-    echo "  cleared teamshared from openclaw config"
-  else
-    echo "  openclaw not on PATH — remove mcp_servers.teamshared from its config manually"
-  fi
-}
-
-# Drop the shared ~/.config/teamshared dir if nothing else lives there.
-_ts_cleanup_config_dir() {
-  local dir="${HOME}/.config/teamshared"
-  if [[ -d "${dir}" ]] && [[ -z "$(ls -A "${dir}" 2>/dev/null)" ]]; then
-    rmdir "${dir}" 2>/dev/null && echo "  removed empty ${dir}" || true
-  fi
+  echo "Removing OpenClaw integration from ${INSTALL_ROOT}"
+  _ts_rm "${INSTALL_ROOT}/.openclaw/teamshared-mcp.yaml"
+  _ts_rm "${INSTALL_ROOT}/.openclaw/apply-teamshared.sh"
+  rmdir "${INSTALL_ROOT}/.openclaw" 2>/dev/null || true
 }
 
 _ts_need_cmd python3
@@ -628,10 +593,8 @@ case "${HARNESS}" in
   *) _ts_die "unknown harness: ${HARNESS}" ;;
 esac
 
-_ts_cleanup_config_dir
-
 echo ""
-echo "Done. teamshared files removed for: ${HARNESS}."
+echo "Done. teamshared files removed for: ${HARNESS} in ${INSTALL_ROOT}."
 echo "Restart your agent to drop the teamshared MCP server."
 """
 
@@ -657,9 +620,12 @@ def install_index_html(*, base_url: str) -> str:
 </head>
 <body>
   <h1>Install teamshared</h1>
-  <p>One script for every harness ({harnesses}). Downloads plugin files and MCP
-  config from this server — no local clone of the repo required.</p>
-  <pre>curl -fsSL {base}/install.sh | bash</pre>
+  <p>One script for every harness ({harnesses}). Run it from your <strong>project
+  root</strong> — files land under <code>./.cursor</code>, <code>./.codex</code>,
+  <code>./.hermes</code>, <code>./.claude</code>, or <code>./.openclaw</code>
+  (never <code>~</code>). Downloads plugin files and MCP config from this server.</p>
+  <pre>cd /path/to/your/repo
+curl -fsSL {base}/install.sh | bash</pre>
   <p>Mint a bearer token in the <a href="/app/keys">console API Keys</a> page,
   then paste it when the script prompts. The installer writes it into your harness MCP config.</p>
   <h2>Uninstall</h2>

@@ -50,13 +50,13 @@ def test_cursor_setup_includes_mcp_json() -> None:
     assert "tsk_testtoken_secret" in setup.snippet
     assert "plugins/local" not in setup.snippet
     assert "symlink" not in setup.snippet.lower()
-    assert setup.config_path == "~/.cursor/rules/teamshared.mdc and ~/.cursor/mcp.json"
-    assert any("Memory rule section" in step for step in setup.steps)
-    assert any("Settings → MCP" in step for step in setup.steps)
+    assert setup.config_path == "./.cursor/rules/teamshared.mdc and ./.cursor/mcp.json"
+    assert any("install.sh" in step for step in setup.steps)
+    assert any(".gitignore" in step for step in setup.steps)
     assert setup.rule_mdc is not None
     assert "teamshared Memory Protocol" in setup.rule_mdc
     assert "alwaysApply: true" in setup.rule_mdc
-    assert any("Memory rule block below" in step for step in setup.rule_install_steps)
+    assert any("./.cursor/rules" in step for step in setup.rule_install_steps)
 
 
 def test_load_teamshared_memory_rule_mdc() -> None:
@@ -92,4 +92,4 @@ def test_hermes_setup_uses_mcp_url_without_trailing_slash() -> None:
     # The server rewrites /mcp -> /mcp/ in-place, so we emit the bare /mcp URL.
     assert "url: https://teamshared.com/mcp\n" in setup.snippet
     assert "https://teamshared.com/mcp/" not in setup.snippet
-    assert "SOUL.md" in setup.snippet
+    assert "teamshared-protocol" in setup.snippet or "protocol" in setup.snippet.lower()

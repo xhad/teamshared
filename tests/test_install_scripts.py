@@ -44,11 +44,19 @@ def test_unified_install_script() -> None:
     assert "_ts_install_hermes_hook" in body
     assert "teamshared-capture.py" in body
     assert "post_llm_call" in body
-    # Cursor plugin can be installed globally (~/.cursor) or per-repo (./.cursor).
-    assert "_ts_choose_cursor_scope" in body
-    assert "global — ~/.cursor" in body
-    assert "local  — ./.cursor" in body
-    assert 'CURSOR_ROOT="$(pwd)"' in body
+    # Project-local install only (current directory).
+    assert "INSTALL_ROOT=\"$(pwd)\"" in body
+    assert "_ts_choose_cursor_scope" not in body
+    assert "global — ~/.cursor" not in body
+    assert "${INSTALL_ROOT}/.cursor" in body
+    assert "plugins/local/teamshared" in body
+    assert "${INSTALL_ROOT}/.codex/config.toml" in body
+    assert "${INSTALL_ROOT}/.hermes/agent-hooks" in body
+    assert "${INSTALL_ROOT}/.claude" in body
+    assert "claude_desktop_config.json" in body
+    assert "${INSTALL_ROOT}/.openclaw" in body
+    assert "teamshared-mcp.yaml" in body
+    assert "${HOME}/.config/teamshared" not in body
     # Restart guidance is per-harness, not hardcoded to Cursor.
     assert "Restart Hermes" in body
     assert "Quit and reopen Claude Desktop" in body
@@ -66,13 +74,15 @@ def test_unified_uninstall_script() -> None:
     # Never prompts for or touches a bearer token (pure removal).
     assert "TEAMSHARED_TOKEN" not in body
     assert "_ts_prompt_token" not in body
-    # Removes each harness's files (Cursor cleaned across global + repo roots).
-    assert "${root}/.cursor/plugins/local/teamshared" in body
-    assert "${root}/.cursor/rules/teamshared.mdc" in body
-    assert "${HOME}/.codex/teamshared-mcp.toml" in body
-    assert "${HOME}/.hermes/agent-hooks/teamshared-capture.py" in body
-    assert "claude_desktop_config.json" in body
-    assert "openclaw-teamshared.sh" in body
+    # Removes project-local files under INSTALL_ROOT only.
+    assert 'INSTALL_ROOT="$(pwd)"' in body
+    assert "${INSTALL_ROOT}/.cursor/plugins/local/teamshared" in body
+    assert "${INSTALL_ROOT}/.cursor/rules/teamshared.mdc" in body
+    assert "${INSTALL_ROOT}/.codex/teamshared-mcp.toml" in body
+    assert "${INSTALL_ROOT}/.hermes/agent-hooks/teamshared-capture.py" in body
+    assert "${INSTALL_ROOT}/.claude/claude_desktop_config.json" in body
+    assert "${INSTALL_ROOT}/.openclaw/teamshared-mcp.yaml" in body
+    assert "${HOME}/.codex" not in body
     # Surgically edits shared config rather than deleting it wholesale.
     assert "_ts_remove_json_mcp" in body
     assert "_ts_remove_codex_block" in body
@@ -94,6 +104,7 @@ def test_install_routes() -> None:
         assert index.status_code == 200
         assert "install.sh" in index.text
         assert "uninstall.sh" in index.text
+        assert "./.cursor" in index.text
 
         uninstall = client.get("/uninstall.sh")
         assert uninstall.status_code == 200
@@ -118,6 +129,7 @@ def test_install_routes() -> None:
         assert hermes_hook.status_code == 200
         assert "post_llm_call" in hermes_hook.text
         assert "/sessions/turns" in hermes_hook.text
+        assert "_HOOK_DIR" in hermes_hook.text
 
         hermes_hooks_yaml = client.get("/install/assets/hermes/hooks.yaml")
         assert hermes_hooks_yaml.status_code == 200

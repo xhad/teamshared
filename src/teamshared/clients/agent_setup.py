@@ -96,29 +96,27 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
         return AgentSetup(
             agent_type=agent_type,
             title="Cursor",
-            config_path="~/.cursor/rules/teamshared.mdc and ~/.cursor/mcp.json",
+            config_path="./.cursor/rules/teamshared.mdc and ./.cursor/mcp.json",
             steps=(
-                "Copy the teamshared rule from the Memory rule section below "
-                "into ~/.cursor/rules/teamshared.mdc (include the --- frontmatter lines).",
-                "Open or create ~/.cursor/mcp.json and merge the JSON block below "
-                "(keep any other mcpServers entries).",
-                "In Cursor: Command Palette → Developer: Reload Window.",
-                "Confirm teamshared appears under Settings → MCP.",
+                "From your project root, run: curl -fsSL <server>/install.sh | bash",
+                "Or copy the teamshared rule into ./.cursor/rules/teamshared.mdc.",
+                "Merge the JSON block below into ./.cursor/mcp.json.",
+                "Add .cursor/mcp.json to .gitignore (bearer token).",
+                "Command Palette → Developer: Reload Window.",
             ),
             snippet=json.dumps(payload, indent=2),
             snippet_lang="json",
             rule_mdc=rule_mdc,
             rule_install_steps=(
-                "Create the rules directory if needed: mkdir -p ~/.cursor/rules",
-                "Copy everything in the Memory rule block below into "
-                "~/.cursor/rules/teamshared.mdc.",
+                "mkdir -p ./.cursor/rules",
+                "Copy the Memory rule block into ./.cursor/rules/teamshared.mdc.",
                 "Developer: Reload Window so Cursor loads the rule.",
             ),
         )
 
     if agent_type == "codex":
         snippet = (
-            "# Add to ~/.codex/config.toml (token is inline; no env vars needed):\n"
+            "# Add to ./.codex/config.toml in your project root:\n"
             "[mcp_servers.teamshared]\n"
             f'url = "{mcp_url}"\n'
             f'http_headers = {{ Authorization = "Bearer {token}" }}\n'
@@ -127,11 +125,12 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
         return AgentSetup(
             agent_type=agent_type,
             title="Codex",
-            config_path="~/.codex/config.toml",
+            config_path="./.codex/config.toml",
             steps=(
-                "Paste the TOML block below into ~/.codex/config.toml.",
+                "From project root: curl -fsSL <server>/install.sh | bash",
+                "Or paste the TOML block below into ./.codex/config.toml.",
+                "Run Codex from the project root so it loads ./.codex/config.toml.",
                 "Run `codex mcp list` to confirm teamshared is registered.",
-                "Start a new Codex session and confirm teamshared tools are available.",
             ),
             snippet=snippet,
             snippet_lang="toml",
@@ -139,8 +138,8 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
 
     if agent_type == "hermes":
         snippet = (
-            "# Paste under mcp_servers: in ~/.hermes/config.yaml\n"
-            "# Also paste clients/protocol.md into ~/.hermes/SOUL.md.\n"
+            "# Paste under mcp_servers: in ./.hermes/config.yaml\n"
+            "# Protocol: ./.hermes/teamshared-protocol.md (merge into SOUL if needed)\n"
             "mcp_servers:\n"
             "  teamshared:\n"
             f"    url: {mcp_url}\n"
@@ -152,11 +151,11 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
         return AgentSetup(
             agent_type=agent_type,
             title="Hermes",
-            config_path="~/.hermes/config.yaml",
+            config_path="./.hermes/config.yaml",
             steps=(
-                "Open ~/.hermes/config.yaml.",
-                "Paste the block below under mcp_servers: (merge with existing servers).",
-                "Restart Hermes so it reloads MCP config.",
+                "From project root: curl -fsSL <server>/install.sh | bash",
+                "Or paste the block below under mcp_servers: in ./.hermes/config.yaml.",
+                "Restart Hermes from the project root.",
             ),
             snippet=snippet,
             snippet_lang="yaml",
@@ -174,11 +173,12 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
         return AgentSetup(
             agent_type=agent_type,
             title="Claude Desktop",
-            config_path="~/Library/Application Support/Claude/claude_desktop_config.json",
+            config_path="./.claude/claude_desktop_config.json",
             steps=(
-                "Open Claude Desktop config (path above on macOS; see Anthropic docs on Linux/Windows).",
-                "Merge the JSON below under mcpServers.",
-                "Quit and reopen Claude Desktop.",
+                "From project root: curl -fsSL <server>/install.sh | bash",
+                "Or merge the JSON below into ./.claude/claude_desktop_config.json.",
+                "Point Claude Desktop at that file or merge into your global config.",
+                "Add .claude/ to .gitignore if it holds your bearer token.",
             ),
             snippet=json.dumps(payload, indent=2),
             snippet_lang="json",
@@ -186,18 +186,22 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
 
     if agent_type == "openclaw":
         snippet = (
-            f"openclaw config set 'mcp_servers.teamshared.url' '{mcp_url}'\n"
-            f"openclaw config set 'mcp_servers.teamshared.headers.Authorization' 'Bearer {token}'\n"
-            "openclaw config set 'mcp_servers.teamshared.timeout' 30\n"
-            "openclaw daemon restart\n"
-            "openclaw mcp list\n"
+            f"# Project-local fragment: ./.openclaw/teamshared-mcp.yaml\n"
+            f"# Or run from project root: curl -fsSL <server>/install.sh | bash\n"
+            "mcp_servers:\n"
+            "  teamshared:\n"
+            f"    url: {mcp_url}\n"
+            "    headers:\n"
+            f'      Authorization: "Bearer {token}"\n'
+            "    timeout: 30\n"
         )
         return AgentSetup(
             agent_type=agent_type,
             title="OpenClaw",
-            config_path="OpenClaw config (via CLI)",
+            config_path="./.openclaw/teamshared-mcp.yaml",
             steps=(
-                "Run the commands below in your terminal (adjust if your build uses config.yaml instead).",
+                "From project root: curl -fsSL <server>/install.sh | bash",
+                "Merge ./.openclaw/teamshared-mcp.yaml into your OpenClaw config.",
                 "Confirm teamshared tools appear in openclaw mcp list.",
             ),
             snippet=snippet,

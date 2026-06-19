@@ -1,4 +1,4 @@
-# teamshared — merge into ~/.codex/config.toml
+# teamshared — merge into ./.codex/config.toml (project-local; run Codex from repo root)
 [mcp_servers.teamshared]
 url = "__MCP_URL__"
 http_headers = { Authorization = "Bearer __TEAMSHARED_TOKEN__" }

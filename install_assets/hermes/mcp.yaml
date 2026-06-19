@@ -1,4 +1,4 @@
-# teamshared — merge under mcp_servers: in ~/.hermes/config.yaml
+# teamshared — merge under mcp_servers: in ./.hermes/config.yaml (project-local)
   teamshared:
     url: __MCP_URL__
     headers:

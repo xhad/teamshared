@@ -97,31 +97,32 @@ Postgres. Benchmark with `python scripts/bench_recall.py`.
 
 ### One-command install (curl)
 
-No local clone required — one script prompts for your harness (Cursor, Codex,
-Hermes, Claude, OpenClaw), downloads plugin files and MCP config from the server,
-and places them in the right paths:
+No local clone required — run from your **project root**. One script prompts for
+your harness (Cursor, Codex, Hermes, Claude, OpenClaw), downloads plugin files
+and MCP config, and writes them under `./.cursor`, `./.codex`, `./.hermes`,
+`./.claude`, or `./.openclaw` in the current directory (never `~`):
 
 ```bash
+cd /path/to/your/repo
 curl -fsSL https://teamshared.com/install.sh | bash
 ```
 
 The script prompts for your bearer token (mint under **API Keys** in the [console](https://teamshared.com/app/keys))
 and writes it into the harness MCP config. Details: [`/install`](https://teamshared.com/install).
 
-To undo everything the installer wrote (plugin, rule, hook, and the `teamshared`
-entry in each harness's MCP config) run the matching uninstaller — it prompts
-for the harness (or `all`) and only strips the `teamshared` server, leaving the
-rest of your config intact:
+To undo everything the installer wrote in the **current project** (plugin, rule,
+hook, and the `teamshared` entry in each harness's MCP config) run the matching
+uninstaller from the same directory — it prompts for the harness (or `all`) and
+only strips the `teamshared` server, leaving the rest of your config intact:
 
 ```bash
+cd /path/to/your/repo
 curl -fsSL https://teamshared.com/uninstall.sh | bash
 ```
 
-**Cursor (recommended):** install the **teamshared** plugin. The installer asks
-whether to install **globally** (`~/.cursor`, available in every project) or
-**locally** (`./.cursor` in the current repo, that project only). For a local
-install, add `.cursor/mcp.json` to the repo's `.gitignore` so the bearer token
-isn't committed.
+**Cursor:** the installer writes the **teamshared** plugin under `./.cursor`
+(plugin, memory rule, MCP config). Add `.cursor/mcp.json` to the repo's
+`.gitignore` so the bearer token isn't committed.
 
 **Marketplace:** Settings → Plugins → Add marketplace → `https://github.com/xhad/teamshared`, then `/add-plugin teamshared`.
 

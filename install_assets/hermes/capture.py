@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """teamshared conversation-capture shell hook for the Hermes agent.
 
-Registered on the ``post_llm_call`` event in ``~/.hermes/config.yaml`` (see
+Registered on the ``post_llm_call`` event in ``.hermes/config.yaml`` (see
 ``hooks.yaml``). Hermes fires this event once per turn, piping a JSON payload to
 stdin whose ``extra`` dict carries ``user_message`` and ``assistant_response``.
 This script forwards those turns to teamshared's ``POST /sessions/turns`` sink,
@@ -26,8 +26,9 @@ from pathlib import Path
 from typing import Any
 
 MAX_TURN_CHARS = 8000
-CREDS_FILE = Path.home() / ".hermes" / "agent-hooks" / "teamshared-capture.json"
-HERMES_CONFIG = Path.home() / ".hermes" / "config.yaml"
+_HOOK_DIR = Path(__file__).resolve().parent
+CREDS_FILE = _HOOK_DIR / "teamshared-capture.json"
+HERMES_CONFIG = _HOOK_DIR.parent / "config.yaml"
 
 
 def _normalize_base(url: str) -> str:
@@ -58,7 +59,7 @@ def _creds_from_file() -> tuple[str, str] | None:
 
 
 def _creds_from_config() -> tuple[str, str] | None:
-    """Best-effort line parse of the teamshared block in ~/.hermes/config.yaml.
+    """Best-effort line parse of the teamshared block in .hermes/config.yaml.
 
     Avoids a PyYAML dependency; only needs the ``url`` and ``Authorization``
     lines under ``mcp_servers.teamshared``.

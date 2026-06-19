@@ -116,7 +116,7 @@ build, so dropping it breaks both the `server` and `distiller` images.
 - Keep Cursor hook and continual-learning state under `~/.cursor`, not committed in the repo.
 - Prefer storing the continual-learning transcript index on the teamshared server via `memory_state_get` / `memory_state_set` (token+repo scoped) when MCP is available; fall back to `~/.cursor/hooks/state/continual-learning/<workspace-slug>/`.
 - Teammate onboarding should use the unified curl installer (`install.sh` on teamshared.com) or the `teamshared` Cursor plugin (MCP + rule + continual learning), not a standalone `~/.cursor/mcp.json` snippet alone.
-- Remote install uses one `install.sh` with interactive prompts (a harness multiple-choice selector plus a bearer-token paste written into MCP config), not environment variables (`TEAMSHARED_HARNESS` / `TEAMSHARED_TOKEN` / `TEAMSHARED_INVITE`); no per-harness `.sh` scripts and no invite-redeem flow in the installer.
+- Remote install uses one `install.sh` with interactive prompts (a harness multiple-choice selector plus a bearer-token paste written into project-local MCP config under the current directory), not environment variables (`TEAMSHARED_HARNESS` / `TEAMSHARED_TOKEN` / `TEAMSHARED_INVITE`); no per-harness `.sh` scripts and no invite-redeem flow in the installer.
 - Get-token/onboarding pages should ship the full `teamshared.mdc` rule markdown with install instructions (copy-paste from the page), not repo symlinks or MCP JSON alone.
 
 ## Learned Workspace Facts
