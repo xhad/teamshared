@@ -5,8 +5,8 @@ the capability being captured. "Active" means not revoked, not expired, and
 ``mode != 'off'``. This enforces the consent-first principle: nothing is captured
 or pulled without a human's explicit, recorded approval.
 
-The store is tenant-scoped (RLS via :class:`TenantDb`), mirroring the other
-governance store, :class:`teamshared.ingestion.approvals.ApprovalQueue`.
+The store is tenant-scoped (RLS via :class:`TenantDb`), mirroring other
+governance tables such as the audit log.
 """
 
 from __future__ import annotations

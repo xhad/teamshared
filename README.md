@@ -251,7 +251,7 @@ between them and a **New org** action to create more.
 Each new org is isolated by RLS, so opening signup only lets people create their own
 private space — the shared team brain (the default org) is reached only by an admin
 **adding your email** to it. Write actions are RBAC-checked (`org:admin` for
-agents/keys/roles/members, `memory:approve` for approvals) and audited. Agent/MCP
+agents/keys/roles/members) and audited. Agent/MCP
 bearer tokens are unaffected and keep resolving to their bound org. The public,
 no-auth memory status page stays at [`/memory`](https://teamshared.com/memory).
 

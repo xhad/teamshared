@@ -211,17 +211,18 @@ Never append secrets, tokens, or credentials.
   `memory_playbook_set`, and `memory_graph_relate` attribute to the bearer token
   unless `agent=` overrides.
 
-### Approval matrix
+### Write outcomes
 
-| Write | Typical agent outcome | `/app/approvals`? |
-|---|---|---|
-| `memory_remember` | `active` | Only if quarantined |
-| `memory_skill_set` / `memory_playbook_set` | `active` | Only if quarantined |
-| `memory_strategic_*` | `pending_approval` | Yes — human approves |
-| `work_create` | `active` | No |
-| Connector/extraction source | `pending_approval` | Yes |
+Guarded writes land **`active` immediately** (no human approval queue). Injection
+screening is audit-only; hard secrets are rejected before storage.
 
-Check status: `memory_approval_status(memory_id=... | skill_id=... | procedure_id=...)`.
+| Write | Typical outcome |
+|---|---|
+| `memory_remember` | `active` |
+| `memory_skill_set` / `memory_playbook_set` | `active` |
+| `memory_strategic_*` | `active` |
+| `work_create` | `active` |
+| Connector/extraction source | `active` (connector onboarding may still need human setup) |
 
 ## Human console (`/app`)
 
@@ -237,7 +238,7 @@ these are human/browser actions, not MCP tools:
   playbooks as a browsable knowledge base.
 - **Work** (`/app/work`): org-wide task queue; assign to people or agents.
 - **Manage:** agents, **API keys** (`tsk_…`, the bearer token MCP/agents use),
-  people (add a teammate by email), approvals, and capture consent (for automatic
+  people (add a teammate by email), and capture consent (for automatic
   `/sessions/turns` ingest — not for agent-driven `memory_session_*` logging).
 
 A fresh self-serve org starts empty and isolated; joining the shared team brain
@@ -333,7 +334,6 @@ Call `memory_tools_catalog(scope="memory", tier="core")` when unsure.
 | Store preference/fact/event/note | `memory_remember` |
 | Log every chat + distillation | `memory_session_*` |
 | Read session turns | `memory_session_get` |
-| Check guarded-write approval status | `memory_approval_status` |
 | Browse timeline | `memory_episodes_list` |
 | Atomic skill (building block) | `memory_skill_get` / `memory_skill_set` |
 | Playbook (orchestration) | `memory_playbook_get` / `memory_playbook_set` |

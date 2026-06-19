@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
 {% block title %}Memory{% endblock %}
 {% block head %}
 <style>
@@ -7,6 +8,16 @@
   .mem-search select { padding: .55rem; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--panel-2); color: var(--text); }
   .mem-search button { padding: .55rem 1rem; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
   .mem-search button:hover { background: var(--accent-bright); }
+  .mem-think { margin: 0 0 1.5rem; }
+  .mem-think textarea { width: 100%; min-height: 4.5rem; padding: .65rem .75rem; border: 1px solid var(--border-strong); border-radius: 8px; font-size: .95rem; background: var(--panel-2); color: var(--text); resize: vertical; }
+  .mem-think-actions { display: flex; justify-content: flex-end; margin-top: .55rem; }
+  .mem-think-actions button { padding: .55rem 1rem; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
+  .think-result { margin: 0 0 1.5rem; }
+  .think-result .answer { line-height: 1.55; }
+  .think-meta { font-size: .85rem; color: var(--muted); margin: .35rem 0 1rem; }
+  .think-citations, .think-gaps { margin: 1rem 0 0; }
+  .think-citations ul, .think-gaps ul { margin: .35rem 0 0; padding-left: 1.2rem; }
+  .gap-kind { display: inline-block; padding: .1rem .45rem; border-radius: 999px; font-size: .72rem; font-weight: 600; background: var(--warn-soft); color: var(--warn); margin-right: .35rem; }
   td.content { max-width: 520px; }
   .pp { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .73rem; font-weight: 600; }
   .pp.semantic { background: var(--accent-soft); color: var(--accent); }
@@ -15,7 +26,47 @@
 {% endblock %}
 {% block content %}
   <h1>Memory explorer</h1>
-  <p class="sub">Browse and search the team's durable memory.</p>
+  <p class="sub">Browse, search, and ask the shared brain.</p>
+
+  <section class="panel mem-think" aria-labelledby="ask-brain-heading">
+    <h2 id="ask-brain-heading" class="h3">Ask the brain</h2>
+    <p class="muted">Synthesized answer with citations and gap analysis (<code>memory_think</code>).</p>
+    <form method="post" action="/app/memory/think">
+      {{ cm.csrf_field() }}
+      <textarea name="think_query" placeholder="What should I know before shipping the next release?">{{ think_query or '' }}</textarea>
+      <div class="mem-think-actions">
+        <button type="submit">Ask</button>
+      </div>
+    </form>
+  </section>
+
+  {% if think %}
+  <section class="panel think-result" aria-labelledby="think-result-heading">
+    <h2 id="think-result-heading" class="h3">Answer</h2>
+    <p class="think-meta">{{ think.sources_used }} source{{ 's' if think.sources_used != 1 else '' }} used</p>
+    <div class="answer">{{ think.answer_html | safe }}</div>
+    {% if think.citations %}
+    <div class="think-citations">
+      <h3 class="h4">Citations</h3>
+      <ul>
+        {% for c in think.citations %}
+        <li><a href="/app/memory/{{ c.memory_id }}">{{ c.snippet | truncate(120) }}</a>{% if c.agent %} <span class="muted">({{ c.agent }})</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    {% if think.gaps %}
+    <div class="think-gaps">
+      <h3 class="h4">Gaps</h3>
+      <ul>
+        {% for g in think.gaps %}
+        <li><span class="gap-kind">{{ g.kind }}</span>{{ g.claim }}{% if g.detail %} — {{ g.detail }}{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
 
   <form class="mem-search" method="get" action="/app/memory">
     <input type="text" name="q" value="{{ q }}" placeholder="Search the team's memory&hellip;" />
@@ -46,7 +97,7 @@
       </tbody>
     </table>
     </div>
-    {% elif not note %}
+    {% elif not note and not think %}
     <p class="muted">No matching memories.</p>
     {% endif %}
   </div>

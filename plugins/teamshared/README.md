@@ -66,7 +66,7 @@ Do not install the upstream Cursor `continual-learning` marketplace plugin — t
   teammates to the web console (`/app`) for human actions.
 - **Web console** (`<server>/app`): self-service OTP sign-in, multi-tenant orgs
   (own org on first login, create/switch, add members), a browsable memory wiki,
-  and management of agents, API keys, approvals, and capture consent.
+  and management of agents, API keys, and capture consent.
 - **Continual learning**: on cadence, updates `AGENTS.md` from chat transcripts;
   state keys `continual-learning/cadence` and `continual-learning/index` on
   teamshared (token + repo scoped), with local fallback under
