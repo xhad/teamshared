@@ -148,7 +148,7 @@ def _fallback_answer(query: str, records: list[MemoryRecord], gaps: list[ThinkGa
     """Deterministic answer when LLM is unavailable."""
     if not records:
         return f"I could not find team memory relevant to: **{query}**."
-    lines = [f"## Answer (retrieval-only fallback)\n", f"Query: {query}\n"]
+    lines = ["## Answer (retrieval-only fallback)\n", f"Query: {query}\n"]
     for i, r in enumerate(records[:8], 1):
         snippet = (r.content or "")[:200].replace("\n", " ")
         lines.append(f"{i}. [{r.pillar}] {snippet} [{i}]")

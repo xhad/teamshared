@@ -2,13 +2,15 @@
 --
 -- Skips workflow definitions (tool_recipe.stages) and composed playbooks
 -- (tool_recipe.skills). Retires migrated procedures via soft_deleted.
+-- Legacy seed procedures may have NULL org_id; map them to the default org
+-- from migration 010.
 
 INSERT INTO skills (
     org_id, scope, name, version, description, body_md, tool_hints,
     tags, created_by, created_at, status
 )
 SELECT
-    p.org_id,
+    COALESCE(p.org_id, '00000000-0000-0000-0000-000000000001'::uuid),
     p.scope,
     p.name,
     p.version,
@@ -39,7 +41,7 @@ WHERE p.status = 'active'
   AND NOT (COALESCE(p.tool_recipe, '{}'::jsonb) ? 'skills')
   AND EXISTS (
       SELECT 1 FROM skills s
-      WHERE s.org_id = p.org_id
+      WHERE s.org_id = COALESCE(p.org_id, '00000000-0000-0000-0000-000000000001'::uuid)
         AND s.name = p.name
         AND s.version = p.version
         AND s.status = 'active'

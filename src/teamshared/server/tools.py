@@ -30,9 +30,9 @@ from teamshared.clients.agent_setup import (
 from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
 from teamshared.memory.types import (
+    DEFAULT_RECALL_SCOPES,
     AgentRunStatus,
     AssigneeType,
-    DEFAULT_RECALL_SCOPES,
     KeyResultTrackStatus,
     MemoryKind,
     MemoryScope,
@@ -43,17 +43,17 @@ from teamshared.memory.types import (
     StrategicStatementKind,
     TimeRange,
     ToolCatalogScope,
+    WorkflowAdvanceDecision,
+    WorkflowRunStatus,
     WorkItemType,
     WorkPriority,
     WorkSort,
     WorkSortDir,
-    WorkflowAdvanceDecision,
-    WorkflowRunStatus,
     WorkStatus,
 )
-from teamshared.server.tool_catalog import list_tools
 from teamshared.server.health import check_components
 from teamshared.server.state import get_state
+from teamshared.server.tool_catalog import list_tools
 
 log = get_logger(__name__)
 

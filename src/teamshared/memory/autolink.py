@@ -4,13 +4,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from teamshared.logging import get_logger
-
-if TYPE_CHECKING:
-    from teamshared.memory.graph import GraphStore
-    from teamshared.memory.graph_pg import PostgresGraphStore
 
 log = get_logger(__name__)
 
@@ -105,6 +101,7 @@ async def apply_autolink(
     tags: list[str] | None,
     org_id: str,
     agent: str,
+    allowed_predicates: frozenset[str] | None = None,
 ) -> int:
     """Write inferred edges to the graph store. Returns edge count."""
     if graph is None:
@@ -112,6 +109,8 @@ async def apply_autolink(
     refs = extract_entity_refs(content, subject=subject, tags=tags)
     count = 0
     for ref in refs:
+        if allowed_predicates is not None and ref.predicate not in allowed_predicates:
+            continue
         try:
             await graph.add_relation(
                 ref.subject,

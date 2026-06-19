@@ -23,9 +23,10 @@ from teamshared.ingestion.pii import PIIFinding, has_hard_secret, redact_pii, sc
 from teamshared.logging import get_logger
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.autolink import GraphBackend, apply_autolink
+from teamshared.memory.ontology import OntologyStore
 from teamshared.memory.procedural import OrgProceduralStore
-from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.request_context import RequestContext
+from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.types import MemoryItemScope, MemoryKind, MemorySource, Visibility
 from teamshared.memory.vectorstore import VectorStore
@@ -93,6 +94,7 @@ class IngestionPipeline:
         work: WorkStore,
         graph: GraphBackend | None = None,
         autolink_enabled: bool = True,
+        ontology: OntologyStore | None = None,
     ) -> None:
         self.vector_store = vector_store
         self.approvals = approvals
@@ -103,6 +105,15 @@ class IngestionPipeline:
         self.work = work
         self.graph = graph
         self.autolink_enabled = autolink_enabled
+        self.ontology = ontology
+
+    async def _autolink_allowed_predicates(self, org_id: UUID) -> frozenset[str] | None:
+        if self.ontology is None:
+            return None
+        link_types = await self.ontology.list_link_types(org_id)
+        if not link_types:
+            return None
+        return frozenset(lt["name"] for lt in link_types)
 
     async def ingest(
         self,
@@ -190,6 +201,7 @@ class IngestionPipeline:
             after={"status": status, "scope": scope, "visibility": visibility, "source": source},
         )
         if status == "active" and self.graph is not None and self.autolink_enabled:
+            allowed = await self._autolink_allowed_predicates(ctx.org_id)
             await apply_autolink(
                 self.graph,
                 content=safe_content,
@@ -197,6 +209,7 @@ class IngestionPipeline:
                 tags=tags,
                 org_id=str(ctx.org_id),
                 agent=ctx.principal.attribution,
+                allowed_predicates=allowed,
             )
         return IngestionResult(
             memory_id=memory_id, status=status, pii=findings, injection=verdict

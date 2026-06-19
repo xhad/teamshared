@@ -29,9 +29,10 @@ from teamshared.memory.context_assembler import (
 )
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import OrgProceduralStore
-from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.request_context import RequestContext
+from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.strategic import OrgStrategicStore
+from teamshared.memory.think import synthesize
 from teamshared.memory.types import (
     DEFAULT_RECALL_SCOPES,
     MemoryKind,
@@ -41,9 +42,8 @@ from teamshared.memory.types import (
     ThinkResult,
     TimeRange,
 )
-from teamshared.memory.think import synthesize
-from teamshared.playbook.compose import expand_playbook_skills, parse_skill_refs
 from teamshared.memory.working import WorkingMemory
+from teamshared.playbook.compose import expand_playbook_skills, parse_skill_refs
 from teamshared.server.services import ProductionServices
 from teamshared.workflow.definition import parse_definition
 
@@ -449,11 +449,6 @@ class MemoryFacade:
         out = dict(skill)
         out["content_md"] = out.get("body_md")
         return out
-
-    async def skill_get(
-        self, principal: Principal, *, name: str, version: int | None
-    ) -> dict[str, Any] | None:
-        return await self.skills.get_skill(principal.org_id, name, version)
 
     async def skill_set(
         self,

@@ -22,7 +22,7 @@ closed.
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from uuid import UUID
 

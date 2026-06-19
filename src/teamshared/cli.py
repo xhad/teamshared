@@ -124,6 +124,7 @@ def seed(
     """
 
     async def _run() -> None:
+        from teamshared.memory.ontology import OntologyStore
         from teamshared.memory.procedural import OrgProceduralStore
         from teamshared.memory.skills import OrgSkillStore
         from teamshared.seed.procedures import STARTER_PROCEDURES
@@ -135,7 +136,15 @@ def seed(
         db = TenantDb(settings.pg_app_dsn)
         await db.connect()
         skills = OrgSkillStore(db)
+        ontology = OntologyStore(db)
         try:
+            ocounts = await ontology.seed_defaults(org_id)
+            if any(ocounts.values()):
+                console.print(
+                    f"  [cyan]ontology[/cyan] "
+                    f"links={ocounts['link_types']} kinds={ocounts['object_kinds']} "
+                    f"ifaces={ocounts['interfaces']} actions={ocounts['action_types']}"
+                )
             for name, description, body_md, tags in STARTER_SKILLS:
                 existing = await skills.get_skill(org_id, name)
                 if existing and not force and existing.get("body_md") == body_md:
@@ -198,7 +207,11 @@ def migrate_procedures_to_skills(
     """
     from uuid import UUID
 
-    from teamshared.migrate.procedures_to_skills import apply_migration, list_org_ids, plan_migration
+    from teamshared.migrate.procedures_to_skills import (
+        apply_migration,
+        list_org_ids,
+        plan_migration,
+    )
     from teamshared.tenancy.context import TenantDb
 
     async def _run() -> None:

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from teamshared.memory.think import detect_gaps, synthesize
-from teamshared.memory.types import MemoryRecord, ThinkGap
+from teamshared.memory.types import MemoryRecord
 
 
 def _rec(

@@ -27,11 +27,12 @@ from teamshared.logging import get_logger
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.embeddings import Embedder, build_embedder
 from teamshared.memory.hnsw_cache import HnswCache
+from teamshared.memory.ontology import OntologyStore
 from teamshared.memory.procedural import OrgProceduralStore
-from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.projects import ProjectStore
 from teamshared.memory.retrieval import SecureRetrieval
 from teamshared.memory.service import MemoryService
+from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.vectorstore import VectorStore
 from teamshared.memory.wiki import WikiStore
@@ -61,6 +62,7 @@ class ProductionServices:
     workflow_runs: WorkflowRunStore
     projects: ProjectStore
     wiki: WikiStore
+    ontology: OntologyStore
     audit: AuditLog
     memory_service: MemoryService
     approvals: ApprovalQueue
@@ -91,6 +93,7 @@ class ProductionServices:
             self.work,
             graph=self.graph,
             autolink_enabled=self.settings.autolink_enabled,
+            ontology=self.ontology,
         )
 
     def agent_run_service(self) -> AgentRunService:
@@ -124,6 +127,7 @@ def make_services(settings: Settings) -> ProductionServices:
     memory_service = MemoryService(vector_store, audit)
     approvals = ApprovalQueue(tenant_db)
     roles = RoleStore(tenant_db)
+    ontology = OntologyStore(tenant_db)
     services = ProductionServices(
         settings=settings,
         tenant_db=tenant_db,
@@ -142,6 +146,7 @@ def make_services(settings: Settings) -> ProductionServices:
         workflow_runs=WorkflowRunStore(tenant_db),
         projects=ProjectStore(tenant_db),
         wiki=WikiStore(tenant_db),
+        ontology=OntologyStore(tenant_db),
         audit=audit,
         memory_service=memory_service,
         approvals=approvals,
@@ -160,6 +165,7 @@ def make_services(settings: Settings) -> ProductionServices:
                 OrgSkillStore(tenant_db),
                 OrgStrategicStore(tenant_db),
                 WorkStore(tenant_db),
+                ontology=ontology,
             ),
             audit=audit,
         ),

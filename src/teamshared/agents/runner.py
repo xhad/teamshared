@@ -39,11 +39,11 @@ from teamshared.logging import get_logger
 from teamshared.memory.context_assembler import ContextAssembler
 from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.procedural import OrgProceduralStore
-from teamshared.memory.skills import OrgSkillStore
-from teamshared.playbook.compose import expand_playbook_skills
 from teamshared.memory.request_context import RequestContext
+from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.work import WorkStore
 from teamshared.metrics import METRICS
+from teamshared.playbook.compose import expand_playbook_skills
 from teamshared.workflow.orchestrator import WorkflowOrchestrator
 
 log = get_logger(__name__)

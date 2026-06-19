@@ -6,7 +6,6 @@ import json
 from typing import Any
 
 import httpx
-from openai import AsyncOpenAI
 
 from teamshared.config import Settings
 from teamshared.distill.prompts import THINKER_SYSTEM, build_thinker_message

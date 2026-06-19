@@ -1,10 +1,11 @@
-"""Retrieval pipeline pure-logic tests: rerank, merge, and scope recheck."""
+"""Retrieval pipeline pure-logic tests: rerank, RRF merge, and scope recheck."""
 
 from __future__ import annotations
 
 import uuid
 
-from teamshared.memory.retrieval import _merge_by_id, _recheck_scope, _rerank
+from teamshared.memory.hybrid import reciprocal_rank_fusion
+from teamshared.memory.retrieval import _recheck_scope, _rerank
 from teamshared.memory.types import MemoryRecord
 from teamshared.memory.vectorstore import ScopeFilter
 
@@ -20,11 +21,11 @@ def test_rerank_orders_by_weighted_score() -> None:
     assert ranked[0].id == "a"  # semantic weight > working weight
 
 
-def test_merge_by_id_dedupes() -> None:
+def test_rrf_merge_dedupes() -> None:
     a = _rec("x")
     b = _rec("x")
     c = _rec("y")
-    merged = _merge_by_id([a], [b, c])
+    merged = reciprocal_rank_fusion([[a], [b, c]])
     assert {r.id for r in merged} == {"x", "y"}
 
 
