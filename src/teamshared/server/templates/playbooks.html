@@ -5,20 +5,20 @@
   <div class="page-head">
     <div>
       <h1>Playbooks</h1>
-      <p class="sub">Procedural memory &mdash; versioned how-tos your team's agents read and follow. Edit in Markdown; saving creates a new version.</p>
+      <p class="sub">Ordered collections of skills your agents run together. Optional intro markdown runs before the skill sequence.</p>
     </div>
     <a href="/app/playbooks/new"><button type="button">+ New playbook</button></a>
   </div>
 
   {% if flash == 'saved' %}<div class="flash-ok">Playbook saved as a new version.</div>{% endif %}
-  {% if flash == 'invalid' %}<div class="unavailable">Name and steps are required.</div>{% endif %}
+  {% if flash == 'invalid' %}<div class="unavailable">Name and at least one skill are required.</div>{% endif %}
   {% if flash == 'error' %}<div class="unavailable">Could not save the playbook. Please try again.</div>{% endif %}
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   {% if playbooks %}
   <div class="catalog-search">
     <span class="icon" aria-hidden="true">&#128269;</span>
-    <input type="search" id="pb-filter" placeholder="Search playbooks by name, description, tags, or steps&hellip;"
+    <input type="search" id="pb-filter" placeholder="Search playbooks by name, description, skills, or tags&hellip;"
       autocomplete="off" aria-label="Search playbooks" data-catalog-filter data-catalog-list="#pb-list"
       data-catalog-card=".catalog-card" data-catalog-empty="#pb-empty" data-catalog-count="#pb-count" />
     <span class="count" id="pb-count"></span>
@@ -32,9 +32,26 @@
       <span class="ver">v{{ p.version }}</span>
     </div>
     {% if p.description %}<p class="sub">{{ p.description }}</p>{% endif %}
-    <p class="meta">Updated {{ p.updated }}{% if p.author %} &middot; {{ p.author }}{% endif %}</p>
+    <p class="meta">Updated {{ p.updated }}{% if p.author %} &middot; {{ p.author }}{% endif %}
+      {% if p.max_iterations %} &middot; loop &times;{{ p.max_iterations }}{% endif %}
+    </p>
+    {% if p.legacy_only %}
+    <p class="muted">Legacy markdown-only playbook &mdash; edit to attach skills.</p>
+    {% elif p.skills %}
+    <ol class="skill-sequence">
+      {% for s in p.skills %}
+      <li>
+        <a href="/app/skills/{{ s.name }}">{{ s.name }}</a>{% if s.version %} <span class="ver">v{{ s.version }}</span>{% endif %}
+        {% if not s.available %}<span class="muted">(missing)</span>{% endif %}
+        {% if s.description %}<span class="muted"> &mdash; {{ s.description }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+    {% if p.intro_html %}
+    <div class="prose intro-snippet">{{ p.intro_html | safe }}</div>
+    {% endif %}
     {% if p.tags %}<div class="tagcloud">{% for t in p.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>{% endif %}
-    <div class="prose">{{ p.body_html | safe }}</div>
     <div class="actions">
       <a href="/app/playbooks/{{ p.name }}"><button type="button" class="ghost">Edit</button></a>
     </div>
@@ -45,7 +62,7 @@
   {% elif not note %}
   <div class="empty-state panel">
     <h3>No playbooks yet</h3>
-    <p>Create one above, or agents can add them with <code>memory_playbook_set</code>.</p>
+    <p>Create skills first, then compose them into a playbook here or via <code>memory_playbook_set</code> with <code>tool_recipe.skills</code>.</p>
   </div>
   {% endif %}
 {% endblock %}

@@ -7,7 +7,10 @@
       <h1>Skills</h1>
       <p class="sub">Atomic instruction blocks agents read directly. Playbooks compose skills; saving creates a new version.</p>
     </div>
-    <a href="/app/skills/new"><button type="button">+ New skill</button></a>
+    <div class="page-head-actions">
+      <a href="/app/skills/new"><button type="button">+ New skill</button></a>
+      <a href="/app/playbooks/new"><button type="button" class="ghost">Compose playbook</button></a>
+    </div>
   </div>
 
   {% if flash == 'saved' %}<div class="flash-ok">Skill saved as a new version.</div>{% endif %}
@@ -37,6 +40,7 @@
     <div class="prose">{{ s.body_html | safe }}</div>
     <div class="actions">
       <a href="/app/skills/{{ s.name }}"><button type="button" class="ghost">Edit</button></a>
+      <a href="/app/playbooks/new?skill={{ s.name | urlencode }}"><button type="button" class="ghost">Use in playbook</button></a>
     </div>
   </div>
   {% endfor %}

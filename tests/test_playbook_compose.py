@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from teamshared.playbook.compose import SkillRef, expand_playbook_skills, parse_skill_refs
 
 
@@ -24,6 +26,31 @@ def test_parse_skill_refs_empty_when_missing() -> None:
     assert parse_skill_refs(None) == []
     assert parse_skill_refs({}) == []
     assert parse_skill_refs({"stages": []}) == []
+
+
+# Playbook skill collections
+
+def test_build_skill_recipe_requires_names() -> None:
+    from teamshared.playbook.compose import build_skill_recipe
+
+    with pytest.raises(ValueError):
+        build_skill_recipe([])
+    recipe = build_skill_recipe(["lint", "ship-pr"], max_iterations=3)
+    assert recipe == {"skills": ["lint", "ship-pr"], "loop": {"max_iterations": 3}}
+
+
+def test_skill_names_from_recipe() -> None:
+    from teamshared.playbook.compose import skill_names_from_recipe
+
+    assert skill_names_from_recipe({"skills": ["a", "b"]}) == ["a", "b"]
+    assert skill_names_from_recipe(None) == []
+
+
+def test_is_workflow_recipe() -> None:
+    from teamshared.playbook.compose import is_workflow_recipe
+
+    assert is_workflow_recipe({"stages": [{"id": "triage"}]})
+    assert not is_workflow_recipe({"skills": ["lint"]})
 
 
 async def test_expand_playbook_skills_inlines_bodies() -> None:

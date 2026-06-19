@@ -46,7 +46,11 @@ from teamshared.memory.types import (
 )
 from teamshared.memory.wiki import slugify
 from teamshared.memory.working import WorkingMemory
-from teamshared.playbook.compose import expand_playbook_skills, parse_skill_refs
+from teamshared.playbook.compose import (
+    expand_playbook_skills,
+    parse_skill_refs,
+    skill_names_from_recipe,
+)
 from teamshared.server.services import ProductionServices
 from teamshared.workflow.definition import parse_definition
 
@@ -2205,10 +2209,17 @@ def _summarize_record(record: MemoryRecord) -> MemoryRecord:
 
 def _summarize_playbook(row: dict[str, Any], *, include_body: bool) -> dict[str, Any]:
     out = dict(row)
+    tool_recipe = out.get("tool_recipe")
+    skill_names = skill_names_from_recipe(tool_recipe)
     if not include_body:
         out.pop("steps_md", None)
-        if out.get("tool_recipe") is not None:
-            out["tool_recipe"] = {"skills": (out.get("tool_recipe") or {}).get("skills")}
+        if tool_recipe is not None:
+            loop = (tool_recipe or {}).get("loop")
+            out["tool_recipe"] = {
+                "skills": skill_names,
+                **({"loop": loop} if loop else {}),
+            }
+    out["skill_names"] = skill_names
     out["content_md"] = row.get("steps_md") if include_body else (row.get("description") or "")
     return out
 

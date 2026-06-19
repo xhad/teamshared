@@ -11,12 +11,12 @@
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   {% if is_new or playbook %}
-  <form method="post" action="/app/playbooks/save" class="stack-form" style="margin-top:1rem">
+  <form method="post" action="/app/playbooks/save" class="stack-form" style="margin-top:1rem" id="pb-form">
     {{ cm.csrf_field() }}
     <div class="field">
       <label for="pb-name">Name</label>
       {% if is_new %}
-      <input id="pb-name" name="name" required placeholder="e.g. ship-pr" />
+      <input id="pb-name" name="name" required placeholder="e.g. release-loop" />
       {% else %}
       <input id="pb-name" name="name" value="{{ playbook.name }}" readonly />
       {% endif %}
@@ -32,10 +32,65 @@
         value="{{ (playbook.tags or []) | join(', ') if playbook else '' }}"
         placeholder="comma, separated, tags" />
     </div>
+
+    <div class="playbook-skill-picker panel" data-playbook-skill-picker
+      data-initial='{{ prefill_skill_names | tojson }}'>
+      <div class="skill-picker-col">
+        <label>Skills in this playbook</label>
+        <p class="muted">Agents run these in order. Add from the library, then reorder.</p>
+        <ol class="skill-picker-selected" data-selected-list aria-label="Selected skills"></ol>
+        <p class="muted skill-picker-empty" data-selected-empty hidden>Click <strong>Add</strong> on skills below to build your playbook.</p>
+        <p class="unavailable skill-picker-error" data-picker-error hidden>Add at least one skill.</p>
+        <textarea id="pb-skills" name="skills" class="visually-hidden" aria-hidden="true" tabindex="-1"></textarea>
+      </div>
+
+      {% if all_skills %}
+      <div class="skill-picker-col skill-picker-library">
+        <div class="skill-picker-library-head">
+          <h3>Skill library</h3>
+          <span class="muted">{{ all_skills | length }} available</span>
+        </div>
+        <div class="catalog-search skill-picker-search">
+          <span class="icon" aria-hidden="true">&#128269;</span>
+          <input type="search" id="pb-skill-filter" placeholder="Search skills…"
+            autocomplete="off" aria-label="Search available skills"
+            data-catalog-filter data-catalog-list="#pb-skill-pool"
+            data-catalog-card=".skill-picker-card" data-catalog-empty="#pb-skill-pool-empty"
+            data-catalog-count="#pb-skill-pool-count" />
+          <span class="count" id="pb-skill-pool-count"></span>
+        </div>
+        <div id="pb-skill-pool" class="skill-picker-pool">
+          {% for s in all_skills %}
+          <div class="skill-picker-card" data-skill-name="{{ s.name }}"
+            data-search="{{ (s.name ~ ' ' ~ (s.description or '')) | lower }}">
+            <div class="skill-picker-card-body">
+              <span class="skill-picker-card-name">{{ s.name }}</span>
+              <span class="ver">v{{ s.version }}</span>
+              {% if s.description %}<p class="muted">{{ s.description }}</p>{% endif %}
+            </div>
+            <button type="button" class="ghost" data-skill-add aria-label="Add {{ s.name }}">Add</button>
+          </div>
+          {% endfor %}
+        </div>
+        <p class="muted catalog-empty" id="pb-skill-pool-empty">No skills match your search.</p>
+      </div>
+      {% else %}
+      <div class="skill-picker-col">
+        <p class="muted">No skills yet &mdash; <a href="/app/skills/new">create a skill</a> first, then return here to compose a playbook.</p>
+      </div>
+      {% endif %}
+    </div>
+
     <div class="field">
-      <label for="pb-steps">Steps (Markdown)</label>
-      <textarea id="pb-steps" name="steps_md" rows="22" class="mono" required
-        placeholder="# Steps&#10;&#10;1. First do…">{{ playbook.steps_md if playbook else '' }}</textarea>
+      <label for="pb-max-iter">Loop max iterations (optional)</label>
+      <input id="pb-max-iter" name="max_iterations" type="number" min="1" step="1"
+        value="{{ playbook.max_iterations if playbook and playbook.max_iterations else '' }}"
+        placeholder="e.g. 3" />
+    </div>
+    <div class="field">
+      <label for="pb-intro">Introduction (optional Markdown)</label>
+      <textarea id="pb-intro" name="intro_md" rows="6" class="mono"
+        placeholder="# Context&#10;&#10;Brief setup before skills run…">{{ playbook.steps_md if playbook else '' }}</textarea>
     </div>
     <div>
       <button type="submit">{% if is_new %}Create playbook{% else %}Save new version{% endif %}</button>

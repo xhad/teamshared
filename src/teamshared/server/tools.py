@@ -549,7 +549,15 @@ def register_tools(mcp: Any) -> None:
     @mcp.tool()
     async def memory_procedure_set(
         name: Annotated[str, Field(description="Procedure name (stable id)")],
-        steps_md: Annotated[str, Field(description="Markdown body the agent will read")],
+        steps_md: Annotated[
+            str,
+            Field(
+                description=(
+                    "Optional intro markdown before composed skills; "
+                    "use tool_recipe.skills for the ordered skill list"
+                ),
+            ),
+        ] = "",
         description: Annotated[
             str | None, Field(description="One-line summary")
         ] = None,
@@ -557,7 +565,7 @@ def register_tools(mcp: Any) -> None:
             dict[str, Any] | None,
             Field(
                 description=(
-                    "Optional recipe. Skills compose: "
+                    "Playbook recipe: "
                     '{"skills": ["lint", "ship-pr"], "loop": {"max_iterations": 3}}. '
                     "Workflow: {\"stages\": [...], \"loop\": {...}}. "
                     "See memory_tools_catalog for full shapes."
@@ -569,9 +577,9 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, Any]:
         """Insert a new version of a procedure. Each call creates a new version.
 
-        Routed through the guarded ingestion pipeline (PII redaction, injection
-        screening). Returns ``status`` (``active`` or ``duplicate``); only ``active`` playbooks are
-        visible to recall and ``memory_procedure_get``.
+        Playbooks are ordered skill collections: set ``tool_recipe.skills`` and
+        optional ``steps_md`` intro. Routed through the guarded ingestion pipeline.
+        Returns ``status`` (``active`` or ``duplicate``).
         """
         state = get_state()
         principal = await _principal()
@@ -589,9 +597,14 @@ def register_tools(mcp: Any) -> None:
     @mcp.tool(name="memory_playbook_set")
     async def memory_playbook_set(
         name: Annotated[str, Field(description="Playbook name (stable id)")],
-        steps_md: Annotated[str, Field(description="Markdown body the agent will read")],
+        steps_md: Annotated[
+            str, Field(description="Optional intro markdown before composed skills")
+        ] = "",
         description: Annotated[str | None, Field(description="One-line summary")] = None,
-        tool_recipe: Annotated[dict[str, Any] | None, Field(description="Skills or workflow graph")] = None,
+        tool_recipe: Annotated[
+            dict[str, Any] | None,
+            Field(description="Ordered skill list: {\"skills\": [\"lint\", \"ship-pr\"]}"),
+        ] = None,
         tags: Annotated[list[str] | None, Field(description="Tags for discovery")] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:

@@ -40,6 +40,11 @@ from teamshared.logging import get_logger
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.wiki import slugify
 from teamshared.metrics import METRICS
+from teamshared.playbook.compose import (
+    build_skill_recipe,
+    is_workflow_recipe,
+    skill_names_from_recipe,
+)
 from teamshared.server import mailer
 from teamshared.server.console_csrf import (
     cookie_secure,
@@ -732,7 +737,49 @@ def register_console_routes(
         # path as a permanent redirect for bookmarks and the old wiki tab link.
         return RedirectResponse("/app/playbooks", status_code=308)
 
-    # --- playbooks (editable procedural memory) -------------------------
+    # --- playbooks (skill collections) --------------------------------
+
+    def _prefill_skill_names(
+        request: Request,
+        playbook: dict[str, Any] | None,
+    ) -> list[str]:
+        """Initial skill order for the playbook editor (saved or query prefill)."""
+        if playbook and playbook.get("skill_names"):
+            return list(playbook["skill_names"])
+        names: list[str] = []
+        for part in str(request.query_params.get("skills") or "").split(","):
+            part = part.strip()
+            if part and part not in names:
+                names.append(part)
+        single = str(request.query_params.get("skill") or "").strip()
+        if single and single not in names:
+            names.insert(0, single)
+        return names
+
+    async def _skill_options(principal: Principal) -> list[dict[str, Any]]:
+        try:
+            rows = await services.skills.list_skills(principal.org_id, limit=500)
+            return [
+                {"name": r["name"], "version": r["version"], "description": r.get("description")}
+                for r in rows
+            ]
+        except Exception as exc:
+            log.warning("skill_options_failed", error=str(exc))
+            return []
+
+    async def _playbook_skill_meta(
+        principal: Principal, tool_recipe: dict[str, Any] | None
+    ) -> list[dict[str, Any]]:
+        meta: list[dict[str, Any]] = []
+        for skill_name in skill_names_from_recipe(tool_recipe):
+            skill = await services.skills.get_skill(principal.org_id, skill_name)
+            meta.append({
+                "name": skill_name,
+                "version": skill.get("version") if skill else None,
+                "description": skill.get("description") if skill else None,
+                "available": skill is not None,
+            })
+        return meta
 
     async def playbooks_page(request: Request) -> Response:
         principal = _session(request)
@@ -745,22 +792,32 @@ def register_console_routes(
             procs = await services.procedural.list_procedures(
                 principal.org_id, limit=200
             )
-            playbooks = [
-                {
+            for p in procs:
+                tool_recipe = p.get("tool_recipe") or {}
+                if is_workflow_recipe(tool_recipe):
+                    continue
+                skill_names = skill_names_from_recipe(tool_recipe)
+                skills = await _playbook_skill_meta(principal, tool_recipe)
+                intro = (p.get("steps_md") or "").strip()
+                playbooks.append({
                     "name": p["name"], "version": p["version"],
                     "description": p.get("description"), "tags": p.get("tags") or [],
                     "author": p.get("created_by"),
                     "updated": _dt(p.get("created_at")),
-                    "body_html": render_markdown_safe(p.get("steps_md") or ""),
+                    "skill_names": skill_names,
+                    "skills": skills,
+                    "intro_md": intro,
+                    "intro_html": render_markdown_safe(intro) if intro else "",
+                    "legacy_only": not skill_names and bool(intro),
+                    "max_iterations": (tool_recipe.get("loop") or {}).get("max_iterations"),
                     "search": " ".join(
                         filter(None, [
                             p["name"], p.get("description") or "",
-                            " ".join(p.get("tags") or []), p.get("steps_md") or "",
+                            " ".join(p.get("tags") or []),
+                            " ".join(skill_names), intro,
                         ])
                     ).lower(),
-                }
-                for p in procs
-            ]
+                })
         except Exception as exc:
             log.warning("playbooks_page_failed", error=str(exc))
             note = f"Playbooks unavailable: {exc}"
@@ -773,7 +830,11 @@ def register_console_routes(
         if principal is None:
             return _redirect_login()
         ctx = await _shell(request, principal, "playbooks")
-        ctx.update({"playbook": None, "is_new": True, "note": ""})
+        ctx.update({
+            "playbook": None, "is_new": True, "note": "",
+            "all_skills": await _skill_options(principal),
+            "prefill_skill_names": _prefill_skill_names(request, None),
+        })
         return _TEMPLATES.TemplateResponse(request, "playbook_edit.html", ctx)
 
     async def playbook_edit(request: Request) -> Response:
@@ -785,13 +846,25 @@ def register_console_routes(
         playbook: dict[str, Any] | None = None
         note = ""
         try:
-            playbook = await services.procedural.get_procedure(principal.org_id, name)
-            if playbook is None:
+            row = await services.procedural.get_procedure(principal.org_id, name)
+            if row is None:
                 note = "Playbook not found."
+            else:
+                tool_recipe = row.get("tool_recipe") or {}
+                playbook = {
+                    **row,
+                    "skill_names": skill_names_from_recipe(tool_recipe),
+                    "skills": await _playbook_skill_meta(principal, tool_recipe),
+                    "max_iterations": (tool_recipe.get("loop") or {}).get("max_iterations"),
+                }
         except Exception as exc:
             log.warning("playbook_edit_failed", error=str(exc))
             note = f"Playbook unavailable: {exc}"
-        ctx.update({"playbook": playbook, "is_new": False, "note": note})
+        ctx.update({
+            "playbook": playbook, "is_new": False, "note": note,
+            "all_skills": await _skill_options(principal),
+            "prefill_skill_names": _prefill_skill_names(request, playbook),
+        })
         return _TEMPLATES.TemplateResponse(request, "playbook_edit.html", ctx)
 
     async def playbook_save(request: Request) -> Response:
@@ -802,21 +875,29 @@ def register_console_routes(
         if deny:
             return deny
         name = str(form.get("name") or "").strip()
-        steps_md = str(form.get("steps_md") or "").strip()
+        intro_md = str(form.get("intro_md") or "").strip()
         description = str(form.get("description") or "").strip() or None
         tags = [t.strip() for t in str(form.get("tags") or "").split(",") if t.strip()]
-        if not name or not steps_md:
+        skills_raw = str(form.get("skills") or "").strip()
+        skill_names = [line.strip() for line in skills_raw.splitlines() if line.strip()]
+        max_iter_raw = str(form.get("max_iterations") or "").strip()
+        max_iterations: int | None = int(max_iter_raw) if max_iter_raw.isdigit() else None
+        if not name or not skill_names:
             return RedirectResponse("/app/playbooks?flash=invalid", status_code=303)
         try:
+            tool_recipe = build_skill_recipe(skill_names, max_iterations=max_iterations)
             await services.ingestion().ingest_procedure(
                 _ctx(principal),
                 name=name,
-                steps_md=steps_md,
+                steps_md=intro_md,
                 description=description,
+                tool_recipe=tool_recipe,
                 tags=tags or None,
                 agent=principal.attribution,
                 source="agent",
             )
+        except ValueError:
+            return RedirectResponse("/app/playbooks?flash=invalid", status_code=303)
         except Exception as exc:
             log.warning("playbook_save_failed", error=str(exc))
             return RedirectResponse("/app/playbooks?flash=error", status_code=303)
@@ -1046,7 +1127,9 @@ def register_console_routes(
         try:
             rows = await services.procedural.list_procedures(principal.org_id, limit=100)
             return [
-                {"name": r.get("name"), "version": r.get("version")} for r in rows
+                {"name": r.get("name"), "version": r.get("version")}
+                for r in rows
+                if not is_workflow_recipe(r.get("tool_recipe"))
             ]
         except Exception as exc:
             log.warning("playbook_options_failed", error=str(exc))

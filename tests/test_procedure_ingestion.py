@@ -84,6 +84,33 @@ async def test_ingest_procedure_rejects_hard_secret() -> None:
     procedural.set_procedure.assert_not_awaited()
 
 
+async def test_ingest_procedure_rejects_empty_skill_playbook() -> None:
+    pipe, procedural = _pipeline()
+    with pytest.raises(IngestionRejected, match="at least one skill"):
+        await pipe.ingest_procedure(
+            _ctx(),
+            name="empty",
+            steps_md="",
+            tool_recipe=None,
+            agent="cursor",
+        )
+    procedural.set_procedure.assert_not_awaited()
+
+
+async def test_ingest_procedure_accepts_skill_recipe_without_intro() -> None:
+    pipe, procedural = _pipeline()
+    result = await pipe.ingest_procedure(
+        _ctx(),
+        name="loop",
+        steps_md="",
+        tool_recipe={"skills": ["lint", "ship-pr"]},
+        agent="cursor",
+    )
+    assert result.status == "active"
+    kwargs = procedural.set_procedure.await_args.kwargs
+    assert kwargs["tool_recipe"] == {"skills": ["lint", "ship-pr"]}
+
+
 async def test_ingest_procedure_injection_still_active() -> None:
     pipe, procedural = _pipeline()
     procedural.set_procedure = AsyncMock(

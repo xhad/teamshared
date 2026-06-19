@@ -1,4 +1,9 @@
-"""Resolve skill references embedded in playbook ``tool_recipe`` payloads."""
+"""Playbook composition: skill collections stored in ``tool_recipe.skills``.
+
+A playbook is an ordered list of skills (plus optional intro markdown in
+``steps_md``). At runtime :func:`expand_playbook_skills` inlines each skill's
+``body_md`` so agents execute them in sequence.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +20,31 @@ class SkillRef:
 
     name: str
     version: int | None = None
+
+
+def is_workflow_recipe(tool_recipe: Any) -> bool:
+    """True when ``tool_recipe`` defines workflow stages (not a skill playbook)."""
+    return isinstance(tool_recipe, dict) and bool(tool_recipe.get("stages"))
+
+
+def skill_names_from_recipe(tool_recipe: Any) -> list[str]:
+    """Ordered skill names referenced by a playbook's ``tool_recipe``."""
+    return [ref.name for ref in parse_skill_refs(tool_recipe)]
+
+
+def build_skill_recipe(
+    skill_names: list[str],
+    *,
+    max_iterations: int | None = None,
+) -> dict[str, Any]:
+    """Build a playbook ``tool_recipe`` from an ordered skill name list."""
+    names = [n.strip() for n in skill_names if isinstance(n, str) and n.strip()]
+    if not names:
+        raise ValueError("playbook requires at least one skill")
+    recipe: dict[str, Any] = {"skills": names}
+    if max_iterations is not None and max_iterations > 0:
+        recipe["loop"] = {"max_iterations": max_iterations}
+    return recipe
 
 
 def parse_skill_refs(tool_recipe: Any) -> list[SkillRef]:

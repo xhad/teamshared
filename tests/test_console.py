@@ -881,46 +881,84 @@ def test_playbooks_page_lists_and_sanitizes() -> None:
     client, services = _build()
     services.procedural.list_procedures = AsyncMock(
         return_value=[
-            {"name": "ship-pr", "version": 2, "description": "How to ship",
+            {"name": "release-loop", "version": 2, "description": "Release flow",
              "tags": ["git"], "created_by": "cursor",
              "created_at": "2026-05-28T10:00:00",
-             "steps_md": "# Steps\n\n1. do **thing**\n\n<script>alert(1)</script>"}
+             "steps_md": "# Intro\n\nBefore skills run.",
+             "tool_recipe": {"skills": ["lint", "ship-pr"]}},
+        ]
+    )
+    services.skills.get_skill = AsyncMock(
+        side_effect=[
+            {"name": "lint", "version": 1, "description": "Lint code"},
+            {"name": "ship-pr", "version": 2, "description": "Open PR"},
         ]
     )
     _login(client)
     resp = client.get("/app/playbooks")
     assert resp.status_code == 200
+    assert "release-loop" in resp.text
+    assert "lint" in resp.text
     assert "ship-pr" in resp.text
-    assert "<strong>thing</strong>" in resp.text
-    assert "<script>alert(1)</script>" not in resp.text
-    assert "/app/playbooks/ship-pr" in resp.text  # edit link
-    assert "/app/playbooks/new" in resp.text  # create button
-    assert 'id="pb-filter"' in resp.text  # live search bar
-    assert 'data-search="' in resp.text  # filterable card metadata
+    assert "/app/playbooks/release-loop" in resp.text
+    assert "/app/playbooks/new" in resp.text
+    assert 'id="pb-filter"' in resp.text
+    assert 'data-search="' in resp.text
 
 
 def test_playbook_new_form_renders() -> None:
-    client, _ = _build()
+    client, services = _build()
+    services.skills.list_skills = AsyncMock(return_value=[
+        {"name": "lint", "version": 1, "description": "Lint"},
+    ])
     _login(client)
     resp = client.get("/app/playbooks/new")
     assert resp.status_code == 200
-    assert 'name="steps_md"' in resp.text
+    assert 'data-playbook-skill-picker' in resp.text
+    assert 'data-skill-add' in resp.text
+    assert 'name="skills"' in resp.text
+    assert 'name="intro_md"' in resp.text
     assert 'name="name"' in resp.text
+
+
+def test_playbook_new_prefills_skill_from_query() -> None:
+    client, services = _build()
+    services.skills.list_skills = AsyncMock(return_value=[
+        {"name": "ship-pr", "version": 1, "description": "Ship"},
+    ])
+    _login(client)
+    resp = client.get("/app/playbooks/new?skill=ship-pr")
+    assert resp.status_code == 200
+    assert '"ship-pr"' in resp.text
+    assert 'data-initial=' in resp.text
 
 
 def test_playbook_edit_form_prefills() -> None:
     client, services = _build()
     services.procedural.get_procedure = AsyncMock(
-        return_value={"name": "ship-pr", "version": 3, "description": "How to ship",
-                      "tags": ["git", "release"],
-                      "steps_md": "# Steps\n\n1. do thing"}
+        return_value={
+            "name": "release-loop", "version": 3, "description": "Release flow",
+            "tags": ["git", "release"],
+            "steps_md": "# Intro\n\nSetup context.",
+            "tool_recipe": {"skills": ["lint", "ship-pr"], "loop": {"max_iterations": 2}},
+        }
     )
+    services.skills.get_skill = AsyncMock(
+        side_effect=[
+            {"name": "lint", "version": 1, "description": "Lint"},
+            {"name": "ship-pr", "version": 1, "description": "Ship"},
+        ]
+    )
+    services.skills.list_skills = AsyncMock(return_value=[])
     _login(client)
-    resp = client.get("/app/playbooks/ship-pr")
+    resp = client.get("/app/playbooks/release-loop")
     assert resp.status_code == 200
-    assert "ship-pr" in resp.text
-    assert "1. do thing" in resp.text
-    assert "git, release" in resp.text  # tags joined into the input
+    assert "release-loop" in resp.text
+    assert "data-playbook-skill-picker" in resp.text
+    assert '"lint"' in resp.text
+    assert '"ship-pr"' in resp.text
+    assert "Setup context." in resp.text
+    assert "git, release" in resp.text
 
 
 def test_playbook_save_creates_version_and_redirects() -> None:
@@ -931,23 +969,30 @@ def test_playbook_save_creates_version_and_redirects() -> None:
     _login(client)
     resp = _app_post(
         client, "/app/playbooks/save",
-        {"name": "ship-pr", "description": "How to ship",
-         "tags": "git, release", "steps_md": "# Steps\n\n1. do thing"},
+        {
+            "name": "release-loop", "description": "Release flow",
+            "tags": "git, release", "skills": "lint\nship-pr",
+            "intro_md": "# Intro", "max_iterations": "2",
+        },
     )
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/playbooks?flash=saved"
     services.ingestion.return_value.ingest_procedure.assert_awaited_once()
     kwargs = services.ingestion.return_value.ingest_procedure.await_args.kwargs
-    assert kwargs["name"] == "ship-pr"
-    assert kwargs["steps_md"] == "# Steps\n\n1. do thing"
+    assert kwargs["name"] == "release-loop"
+    assert kwargs["steps_md"] == "# Intro"
     assert kwargs["tags"] == ["git", "release"]
+    assert kwargs["tool_recipe"] == {
+        "skills": ["lint", "ship-pr"],
+        "loop": {"max_iterations": 2},
+    }
 
 
-def test_playbook_save_requires_name_and_steps() -> None:
+def test_playbook_save_requires_name_and_skills() -> None:
     client, services = _build()
     services.ingestion.return_value.ingest_procedure = AsyncMock()
     _login(client)
-    resp = _app_post(client, "/app/playbooks/save", {"name": "", "steps_md": ""})
+    resp = _app_post(client, "/app/playbooks/save", {"name": "", "skills": ""})
     assert resp.status_code == 303
     assert resp.headers["location"] == "/app/playbooks?flash=invalid"
     services.ingestion.return_value.ingest_procedure.assert_not_awaited()
@@ -974,6 +1019,9 @@ def test_skills_page_lists_and_sanitizes() -> None:
     assert "<script>alert(1)</script>" not in resp.text
     assert "/app/skills/ship-pr" in resp.text
     assert "/app/skills/new" in resp.text
+    assert "/app/playbooks/new" in resp.text
+    assert "Use in playbook" in resp.text
+    assert "skill=ship-pr" in resp.text
     assert 'id="sk-filter"' in resp.text
 
 

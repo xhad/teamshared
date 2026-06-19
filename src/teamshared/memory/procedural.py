@@ -1,9 +1,9 @@
-"""Postgres-backed procedural memory: agent-callable skills/recipes.
+"""Postgres-backed procedural memory: playbooks as ordered skill collections.
 
-Procedures are markdown-first so an agent can read ``steps_md`` and execute
-them by hand if the optional ``tool_recipe`` JSON doesn't cover its situation.
-Versioning is monotonic per name; ``get`` always returns the latest unless
-asked for a specific version.
+Each playbook stores an ordered ``tool_recipe.skills`` list (plus optional intro
+``steps_md``). At runtime :func:`teamshared.playbook.compose.expand_playbook_skills`
+inlines each skill's ``body_md``. Workflows are also stored as procedures but use
+``tool_recipe.stages`` instead of skills.
 """
 
 from __future__ import annotations
