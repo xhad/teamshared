@@ -238,7 +238,7 @@ these are human/browser actions, not MCP tools:
   playbooks as a browsable knowledge base.
 - **Work** (`/app/work`): org-wide task queue; assign to people or agents.
 - **Manage:** agents, **API keys** (`tsk_…`, the bearer token MCP/agents use),
-  people (add a teammate by email), approvals, and capture consent (for automatic
+  people (add a teammate by email), and capture consent (for automatic
   `/sessions/turns` ingest — not for agent-driven `memory_session_*` logging).
 
 A fresh self-serve org starts empty and isolated; joining the shared team brain

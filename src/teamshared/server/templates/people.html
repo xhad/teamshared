@@ -4,6 +4,11 @@
 {% block content %}
   <h1>People</h1>
   <p class="sub">Members of this organization and their roles.</p>
+  {% if flash == 'added' %}<div class="flash-ok">Member added — they can sign in with that email.</div>{% endif %}
+  {% if flash == 'saved' %}<div class="flash-ok">Role updated.</div>{% endif %}
+  {% if flash == 'revoked' %}<div class="flash-ok">Role binding revoked.</div>{% endif %}
+  {% if flash == 'invalid' %}<div class="unavailable">Email is required.</div>{% endif %}
+  {% if flash == 'error' %}<div class="unavailable">Could not update people. Try again.</div>{% endif %}
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   <div class="panel" style="margin-bottom:1rem">
@@ -50,8 +55,8 @@
   </div>
 
   <h2>Role bindings</h2>
-  <p class="sub">Raw RBAC bindings, including agents. Edit member roles above.</p>
-  <div class="panel" style="margin-top:1rem">
+  <details class="panel" style="margin-top:1rem">
+    <summary class="sub" style="cursor:pointer; margin:0; padding:.25rem 0">Advanced: raw RBAC bindings (including agents)</summary>
     {% if bindings %}
     <div class="table-wrap">
     <table>
@@ -77,5 +82,5 @@
     </table>
     </div>
     {% else %}<p class="muted">No explicit role bindings.</p>{% endif %}
-  </div>
+  </details>
 {% endblock %}

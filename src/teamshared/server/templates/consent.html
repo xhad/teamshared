@@ -25,10 +25,14 @@
 {% block content %}
   <h1>Capture &amp; consent</h1>
   <p class="sub">Control what each agent may share into team memory. Nothing is captured without an active grant.</p>
+  {% if flash == 'granted' %}<div class="flash-ok">Consent granted.</div>{% endif %}
+  {% if flash == 'revoked' %}<div class="flash-ok">Consent revoked.</div>{% endif %}
+  {% if flash == 'error' %}<div class="unavailable">Could not update consent. Try again.</div>{% endif %}
 
   <div class="panel">
     <h3>Consent grants</h3>
     {% if grants %}
+    <div class="table-wrap">
     <table>
       <thead><tr><th>Agent</th><th>Mode</th><th>Scope</th><th>Granted by</th><th>Expires</th><th>Status</th><th></th></tr></thead>
       <tbody>
@@ -52,6 +56,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}
     <p class="muted">No consent grants yet &mdash; capture is off until you grant consent.</p>
     {% endif %}

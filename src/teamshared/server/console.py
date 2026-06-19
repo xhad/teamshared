@@ -8,9 +8,9 @@ cookie. The console home renders live memory-system stats from the existing
 stores via :func:`teamshared.server.state.get_state`.
 
 Sections: home overview, the wiki (topics/timeline/playbooks), read screens
-(memory/agents/people/keys/audit), and capture consent. Sections still
-unbuilt console sections render a placeholder through the same shell so
-navigation works end to end.
+(memory/agents), govern surfaces (people/orgs/keys/consent/audit), and
+capture consent. Sections still unbuilt render a placeholder through the
+same shell so navigation works end to end.
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
         ],
     ),
     (
-        "Admin",
+        "Govern",
         [
             ("/app/agents", "Agents", "agents"),
             ("/app/people", "People", "people"),
@@ -1881,9 +1881,14 @@ def register_console_routes(
             log.warning("people_page_failed", error=str(exc))
             note = f"Unavailable: {exc}"
         ctx.update(
-            {"members": members, "bindings": bindings, "note": note,
-             "roles": ["org_admin", "member", "viewer", "agent"],
-             "member_roles": ["org_owner", "org_admin", "member", "viewer"]}
+            {
+                "members": members,
+                "bindings": bindings,
+                "note": note,
+                "flash": request.query_params.get("flash") or "",
+                "roles": ["org_admin", "member", "viewer", "agent"],
+                "member_roles": ["org_owner", "org_admin", "member", "viewer"],
+            }
         )
         return _TEMPLATES.TemplateResponse(request, "people.html", ctx)
 
@@ -1903,7 +1908,8 @@ def register_console_routes(
             )
         except Exception as exc:
             log.warning("people_grant_failed", error=str(exc))
-        return RedirectResponse("/app/people", status_code=303)
+            return RedirectResponse("/app/people?flash=error", status_code=303)
+        return RedirectResponse("/app/people?flash=saved", status_code=303)
 
     async def people_revoke(request: Request) -> Response:
         principal = _session(request)
@@ -1922,7 +1928,8 @@ def register_console_routes(
             )
         except Exception as exc:
             log.warning("people_revoke_failed", error=str(exc))
-        return RedirectResponse("/app/people", status_code=303)
+            return RedirectResponse("/app/people?flash=error", status_code=303)
+        return RedirectResponse("/app/people?flash=revoked", status_code=303)
 
     async def people_add(request: Request) -> Response:
         principal = _session(request)
@@ -1933,12 +1940,14 @@ def register_console_routes(
             return deny
         email = str(form.get("email") or "").strip().lower()
         role = str(form.get("role") or "member").strip() or "member"
-        if email:
-            try:
-                await services.admin.add_member(_ctx(principal), email=email, role=role)
-            except Exception as exc:
-                log.warning("people_add_failed", error=str(exc))
-        return RedirectResponse("/app/people", status_code=303)
+        if not email:
+            return RedirectResponse("/app/people?flash=invalid", status_code=303)
+        try:
+            await services.admin.add_member(_ctx(principal), email=email, role=role)
+        except Exception as exc:
+            log.warning("people_add_failed", error=str(exc))
+            return RedirectResponse("/app/people?flash=error", status_code=303)
+        return RedirectResponse("/app/people?flash=added", status_code=303)
 
     # --- organizations (org switcher + self-service create) --------------
 
@@ -1947,6 +1956,7 @@ def register_console_routes(
         if principal is None:
             return _redirect_login()
         ctx = await _shell(request, principal, "orgs")
+        ctx["flash"] = request.query_params.get("flash") or ""
         return _TEMPLATES.TemplateResponse(request, "orgs.html", ctx)
 
     async def org_create(request: Request) -> Response:
@@ -1961,7 +1971,7 @@ def register_console_routes(
         name = str(form.get("name") or "").strip()
         resp = RedirectResponse("/app", status_code=303)
         if not name:
-            return RedirectResponse("/app/orgs", status_code=303)
+            return RedirectResponse("/app/orgs?flash=invalid", status_code=303)
         try:
             slug = f"{slugify(name) or 'org'}-{secrets.token_hex(3)}"
             result = await signup_org(
@@ -1978,7 +1988,7 @@ def register_console_routes(
             )
         except Exception as exc:
             log.warning("org_create_failed", error=str(exc))
-            return RedirectResponse("/app/orgs", status_code=303)
+            return RedirectResponse("/app/orgs?flash=error", status_code=303)
         return resp
 
     async def org_switch(request: Request) -> Response:
@@ -2036,7 +2046,15 @@ def register_console_routes(
         except Exception as exc:
             log.warning("keys_page_failed", error=str(exc))
             note = note or f"Unavailable: {exc}"
-        ctx.update({"keys": keys, "agents": agents, "new_token": new_token, "note": note})
+        ctx.update(
+            {
+                "keys": keys,
+                "agents": agents,
+                "new_token": new_token,
+                "note": note,
+                "flash": request.query_params.get("flash") or "",
+            }
+        )
         return _TEMPLATES.TemplateResponse(request, "keys.html", ctx)
 
     async def key_mint(request: Request) -> Response:
@@ -2080,7 +2098,8 @@ def register_console_routes(
             )
         except Exception as exc:
             log.warning("key_revoke_failed", error=str(exc))
-        return RedirectResponse("/app/keys", status_code=303)
+            return RedirectResponse("/app/keys?flash=error", status_code=303)
+        return RedirectResponse("/app/keys?flash=revoked", status_code=303)
 
     # --- strategy -------------------------------------------------------
 
@@ -2210,7 +2229,7 @@ def register_console_routes(
             note = f"Unavailable: {exc}"
         return await _table(
             request, principal, active="audit", title="Audit log",
-            subtitle="Every read, write, share, and permission change.",
+            subtitle="RBAC-gated writes and reads — every permission change is logged.",
             headers=["When", "Agent", "Action", "Resource", "Target"], rows=rows, note=note,
         )
 
@@ -2233,6 +2252,7 @@ def register_console_routes(
                 "modes": MODES,
                 "baseline": BASELINE_PROFILE,
                 "locked": LOCKED_RULES,
+                "flash": request.query_params.get("flash") or "",
             }
         )
         return _TEMPLATES.TemplateResponse(request, "consent.html", ctx)
@@ -2258,7 +2278,8 @@ def register_console_routes(
                 )
             except Exception as exc:
                 log.warning("consent_grant_failed", error=str(exc))
-        return RedirectResponse("/app/consent", status_code=303)
+                return RedirectResponse("/app/consent?flash=error", status_code=303)
+        return RedirectResponse("/app/consent?flash=granted", status_code=303)
 
     async def consent_revoke(request: Request) -> Response:
         principal = _session(request)
@@ -2272,7 +2293,8 @@ def register_console_routes(
             await services.consent.revoke(principal.org_id, grant_id)
         except Exception as exc:
             log.warning("consent_revoke_failed", error=str(exc))
-        return RedirectResponse("/app/consent", status_code=303)
+            return RedirectResponse("/app/consent?flash=error", status_code=303)
+        return RedirectResponse("/app/consent?flash=revoked", status_code=303)
 
     def _placeholder(active: str, title: str) -> Any:
         async def handler(request: Request) -> Response:

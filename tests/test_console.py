@@ -1194,7 +1194,7 @@ def test_key_revoke_redirects() -> None:
     _login(client)
     resp = _app_post(client, f"/app/keys/{kid}/revoke")
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/keys"
+    assert resp.headers["location"] == "/app/keys?flash=revoked"
     services.api_keys.revoke.assert_awaited_once()
 
 
@@ -1208,13 +1208,15 @@ def test_people_grant_and_revoke_redirect() -> None:
         client, "/app/people/grant", {"principal_id": uid, "role_name": "member"}
     )
     assert grant.status_code == 303
-    services.admin.grant_role.assert_awaited_once()
+    assert grant.headers["location"] == "/app/people?flash=saved"
     revoke = _app_post(
         client,
         "/app/people/revoke",
         {"principal_type": "user", "principal_id": uid, "role_name": "member"},
     )
     assert revoke.status_code == 303
+    assert revoke.headers["location"] == "/app/people?flash=revoked"
+    services.admin.grant_role.assert_awaited_once()
     services.admin.revoke_role.assert_awaited_once()
 
 
@@ -1296,6 +1298,24 @@ def test_org_create_signs_up_and_switches(monkeypatch) -> None:
     assert signup.await_args.kwargs["org_name"] == "New Team"
 
 
+def test_people_add_shows_flash() -> None:
+    client, services = _build()
+    services.admin.list_members = AsyncMock(return_value=[])
+    services.admin.list_role_bindings = AsyncMock(return_value=[])
+    _login(client)
+    resp = client.get("/app/people?flash=added")
+    assert resp.status_code == 200
+    assert "Member added" in resp.text
+
+
+def test_nav_shows_govern_section() -> None:
+    client, _ = _build()
+    _login(client)
+    resp = client.get("/app/people")
+    assert resp.status_code == 200
+    assert "Govern" in resp.text
+
+
 def test_people_add_member_redirects() -> None:
     client, services = _build()
     services.admin.add_member = AsyncMock(
@@ -1306,7 +1326,7 @@ def test_people_add_member_redirects() -> None:
         client, "/app/people/add", {"email": "new@team.io", "role": "member"}
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/people"
+    assert resp.headers["location"] == "/app/people?flash=added"
     services.admin.add_member.assert_awaited_once()
     assert services.admin.add_member.await_args.kwargs["email"] == "new@team.io"
     assert services.admin.add_member.await_args.kwargs["role"] == "member"
@@ -1361,8 +1381,7 @@ def test_consent_grant_posts_and_redirects() -> None:
         {"agent": "hermes", "mode": "policy", "scope": "tool_calls"},
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/consent"
-    consent.grant.assert_awaited_once()
+    assert resp.headers["location"] == "/app/consent?flash=granted"
     kwargs = consent.grant.await_args.kwargs
     assert kwargs["agent"] == "hermes"
     assert kwargs["mode"] == "policy"
@@ -1375,5 +1394,5 @@ def test_consent_revoke_posts_and_redirects() -> None:
     _login(client)
     resp = _app_post(client, "/app/consent/g1/revoke")
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/consent"
+    assert resp.headers["location"] == "/app/consent?flash=revoked"
     consent.revoke.assert_awaited_once()

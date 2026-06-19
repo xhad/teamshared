@@ -4,9 +4,12 @@
 {% block content %}
   <h1>Organizations</h1>
   <p class="sub">Every org your account ({{ who }}) belongs to. Switch from the header, or create a new one.</p>
+  {% if flash == 'invalid' %}<div class="unavailable">Organization name is required.</div>{% endif %}
+  {% if flash == 'error' %}<div class="unavailable">Could not create organization. Try again.</div>{% endif %}
 
   <div class="panel">
     {% if orgs %}
+    <div class="table-wrap">
     <table>
       <thead><tr><th>Organization</th><th>Slug</th><th>Your role</th><th></th></tr></thead>
       <tbody>
@@ -30,6 +33,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% else %}<p class="muted">No organizations yet.</p>{% endif %}
   </div>
 

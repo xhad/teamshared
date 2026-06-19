@@ -23,7 +23,7 @@ Often on a laptop; sometimes on a phone between meetings.
 
 1. **Orient** — see brain health, open work, and recent activity at a glance (Home).
 2. **Know** — browse wiki, skills, playbooks, and memory explorer.
-3. **Act** — create/update work, approve agent writes, assign agents.
+3. **Act** — create/update work and assign agents.
 4. **Govern** — people, orgs, keys, consent, audit.
 
 ## Surfaces
