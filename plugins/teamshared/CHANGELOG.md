@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 — 2026-06-19
+
+- **Rule 1.5.0:** `memory_think` + recall `explain`; skills vs playbooks decision
+  tree; tiered every-turn checklist; approval matrix; graph autolink + Postgres
+  fallback; slim tool reference (delegate to `memory_tools_catalog`); fix
+  `work_create` active-immediately guidance; bundled rituals documented as skills.
+
 ## 0.4.0 — 2026-06-08
 
 - **Rule 1.3.0:** log every chat via `memory_session_*` (open on first turn,

@@ -7,6 +7,7 @@ Subcommands:
 - ``teamshared curator`` -- run the wiki curation worker.
 - ``teamshared agent-worker`` -- run the background agent-run worker.
 - ``teamshared migrate`` -- apply SQL migrations against the configured Postgres.
+- ``teamshared migrate-procedures-to-skills`` -- copy atomic procedures into skills.
 - ``teamshared token mint <agent>`` -- issue a bearer token for an agent.
 - ``teamshared token invite-create [--agent] [--uses]`` -- create a one-time invite code.
 - ``teamshared token invite-list`` -- list active invite codes.
@@ -106,42 +107,145 @@ def serve(
 
 @app.command()
 def seed(
-    agent: str = typer.Option("teamshared", help="Agent attribution stamped on each seed procedure"),
+    agent: str = typer.Option("teamshared", help="Agent attribution stamped on each seed skill"),
     force: bool = typer.Option(
         False, "--force", help="Insert a new version even if the latest already matches."
     ),
+    procedures: bool = typer.Option(
+        False,
+        "--procedures",
+        help="Also seed legacy starter procedures (deprecated; use skills).",
+    ),
 ) -> None:
-    """Insert (or refresh) the bundled starter procedures.
+    """Insert (or refresh) the bundled starter skills.
 
-    Each procedure is checked against its latest stored version; if the body
+    Each skill is checked against its latest stored version; if the body
     differs (or ``--force`` is set), a new version is inserted.
     """
 
     async def _run() -> None:
         from teamshared.memory.procedural import OrgProceduralStore
+        from teamshared.memory.skills import OrgSkillStore
         from teamshared.seed.procedures import STARTER_PROCEDURES
+        from teamshared.seed.skills import STARTER_SKILLS
         from teamshared.tenancy.context import TenantDb
 
         settings = get_settings()
         org_id = settings.default_org_id
         db = TenantDb(settings.pg_app_dsn)
         await db.connect()
-        store = OrgProceduralStore(db)
+        skills = OrgSkillStore(db)
         try:
-            for name, description, steps_md, tags in STARTER_PROCEDURES:
-                existing = await store.get_procedure(org_id, name)
-                if existing and not force and existing.get("steps_md") == steps_md:
+            for name, description, body_md, tags in STARTER_SKILLS:
+                existing = await skills.get_skill(org_id, name)
+                if existing and not force and existing.get("body_md") == body_md:
                     console.print(f"  [dim]unchanged[/dim] {name}")
                     continue
-                proc = await store.set_procedure(
+                row = await skills.set_skill(
                     org_id,
                     name,
-                    steps_md,
+                    body_md,
                     agent=agent,
                     description=description,
                     tags=tags,
                 )
-                console.print(f"  [green]wrote[/green] {name} v{proc['version']}")
+                console.print(f"  [green]skill[/green] {name} v{row['version']}")
+            if procedures:
+                procedural = OrgProceduralStore(db)
+                for name, description, steps_md, tags in STARTER_PROCEDURES:
+                    existing = await procedural.get_procedure(org_id, name)
+                    if existing and not force and existing.get("steps_md") == steps_md:
+                        console.print(f"  [dim]unchanged procedure[/dim] {name}")
+                        continue
+                    proc = await procedural.set_procedure(
+                        org_id,
+                        name,
+                        steps_md,
+                        agent=agent,
+                        description=description,
+                        tags=tags,
+                    )
+                    console.print(f"  [yellow]procedure[/yellow] {name} v{proc['version']}")
+        finally:
+            await db.close()
+
+    asyncio.run(_run())
+
+
+@app.command("migrate-procedures-to-skills")
+def migrate_procedures_to_skills(
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Write migrated skills and soft-delete source procedures (default is dry-run).",
+    ),
+    org_id: str | None = typer.Option(
+        None,
+        "--org-id",
+        help="Migrate one org (default: every organization).",
+    ),
+    include_composed: bool = typer.Option(
+        False,
+        "--include-composed",
+        help="Also migrate playbooks whose tool_recipe lists composed skills.",
+    ),
+) -> None:
+    """Move misclassified atomic procedures into the skills pillar.
+
+    Copies ``steps_md`` → ``body_md``, maps atomic ``tool_recipe`` → ``tool_hints``,
+    tags rows ``migrated-from-procedure``, and soft-deletes the source procedures.
+    Skips workflow definitions (``tool_recipe.stages``) unless ``--include-composed``.
+    """
+    from uuid import UUID
+
+    from teamshared.migrate.procedures_to_skills import apply_migration, list_org_ids, plan_migration
+    from teamshared.tenancy.context import TenantDb
+
+    async def _run() -> None:
+        settings = get_settings()
+        db = TenantDb(settings.pg_dsn)
+        await db.connect()
+        try:
+            if org_id:
+                orgs = [UUID(org_id)]
+            else:
+                orgs = await list_org_ids(settings.pg_dsn)
+                if not orgs:
+                    orgs = [settings.default_org_id]
+            total_migrated = 0
+            total_retired = 0
+            for oid in orgs:
+                plan = await plan_migration(
+                    db, oid, include_composed=include_composed
+                )
+                console.print(f"\n[bold]org {oid}[/bold]")
+                if plan.migrate:
+                    for proc in plan.migrate:
+                        console.print(f"  [green]migrate[/green] {proc.name} v{proc.version}")
+                for proc in plan.skip_workflow:
+                    console.print(f"  [dim]skip workflow[/dim] {proc.name} v{proc.version}")
+                for proc in plan.skip_composed:
+                    console.print(f"  [dim]skip composed[/dim] {proc.name} v{proc.version}")
+                for proc in plan.skip_exists:
+                    console.print(f"  [dim]skip exists[/dim] {proc.name} v{proc.version}")
+                if apply and plan.migrate:
+                    result = await apply_migration(db, oid, plan)
+                    total_migrated += result.migrated
+                    total_retired += result.retired
+                    console.print(
+                        f"  [bold green]applied[/bold green] "
+                        f"{result.migrated} skill row(s), "
+                        f"{result.retired} procedure row(s) retired"
+                    )
+            if not apply:
+                console.print(
+                    "\n[dim]Dry run — pass --apply to copy skills and retire procedures.[/dim]"
+                )
+            else:
+                console.print(
+                    f"\n[bold green]Done.[/bold green] "
+                    f"{total_migrated} skill versions, {total_retired} procedures retired."
+                )
         finally:
             await db.close()
 

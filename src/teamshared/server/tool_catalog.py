@@ -16,7 +16,7 @@ _CATALOG: list[dict[str, Any]] = [
      "summary": "Liveness + dependency probe", "example": {}},
     {"name": "version", "tier": "core", "group": "ops",
      "summary": "Server + memory-rule version check",
-     "example": {"installed_rule_version": "1.4.0"}},
+     "example": {"installed_rule_version": "1.5.0"}},
     {"name": "memory_tools_catalog", "tier": "core", "group": "ops",
      "summary": "List tools by tier/group with examples",
      "example": {"scope": "memory", "tier": "core"}},

@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.4.0
+version: 1.5.0
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.4.0 -->
+<!-- teamshared-rule-version: 1.5.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.4.0`).
+This rule is versioned (`version` in the frontmatter above, currently `1.5.0`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
    versions), call the `version` tool with this rule's frontmatter `version`
-   (`1.4.0`) as `installed_rule_version`. Do not call `version` every turn.
+   (`1.5.0`) as `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
    `~/.cursor/rules/teamshared.mdc`; repo / Cloud Agents:
@@ -32,41 +32,77 @@ Never invent a version; read it from the frontmatter or the `version` tool.
 
 ## Every turn checklist
 
-Run these in order on **every** turn (see **Session logging** for setup details):
+Tier by turn type — do not run the full stack on trivial acks (ok, yes, commit/push
+only, lint fixes with no architecture questions).
 
-1. **Ensure session** — recover or open `session_id` (do not open a second
-   session if `conversation/active-session` already has one for this chat).
-2. **`memory_session_append(session_id, "user", ...)`** — the substantive user
-   request (not boilerplate system context).
-3. **`memory_recall(...)`** — for non-trivial tasks (architecture, debugging,
-   past work, "how do we…"). Skip for pure one-liner acknowledgments.
-4. **Do the work** — tools, edits, answers.
-5. **`memory_session_append(session_id, "assistant", ...)`** — a faithful summary
-   of your reply. This should be your **last MCP call** before ending the turn.
-6. **`memory_remember` / `work_*`** — as needed for durable facts or tasks.
+**Always (every substantive turn):**
 
-After significant tool use, optionally append a one-line `tool` turn summarizing
-what ran and the outcome. Server middleware also logs MCP tool calls to a
-separate autosession; your explicit session holds the NL story.
+1. **Ensure session** — recover `session_id` from
+   `memory_state_get(repo=..., key="conversation/active-session")`; open only on
+   first turn or pivot (see **Session logging**). Never open a second session when
+   state already has one for this chat.
+2. **`memory_session_append(session_id, "user", ...)`** — substantive user request
+   (not boilerplate system context).
+3. **Do the work** — tools, edits, answers.
+4. **`memory_session_append(session_id, "assistant", ...)`** — faithful summary of
+   your reply. Should be your **last MCP call** before ending the turn.
+
+**Normal task turns** (add between steps 2 and 3):
+
+- **`memory_recall(...)`** or **`memory_think(...)`** — see **Recall first**;
+  pick one, not both by default.
+
+**Lifecycle turns:**
+
+- **First turn of a new Cursor chat** — full session open flow (Session logging).
+- **Mid-thread pivot** — close + distill + new session same turn.
+- **Task done / goodbye** — `memory_session_close(distill=true)` + clear state.
+
+**As needed:** `memory_remember` / `work_*`. After heavy tool use, optional one-line
+`tool` turn. Server middleware also logs MCP tool calls to a separate autosession.
+
+## Skills vs playbooks
+
+| You have | Store with | Fetch with |
+|---|---|---|
+| Atomic instruction (`SKILL.md` block) | `memory_skill_set` | `memory_skill_get` / `scope=["skill"]` |
+| Orchestration composing skills | `memory_playbook_set` + `tool_recipe.skills` | `memory_playbook_get` (`expand_skills=true`) |
+| Multi-stage agent loop | `workflow_define` / `workflow_start` + `tool_recipe.stages` | `workflow_status` |
+
+Bundled rituals (`teamshared.start-of-task`, etc.) are **skills**, not playbooks.
 
 ## Core workflows
 
 ### Recall first
 
-Before any non-trivial request, call `memory_recall` with the user's query
-(step 3 above). Ground answers in hits; cite them.
+Before non-trivial work, search team memory (step 3 above). Ground answers in
+hits; cite them. If recall is empty, say so before answering from priors.
 
-- Omit `scope` to search all pillars (default).
-- `scope=["procedural"]` for "how do we usually…".
-- `scope=["strategic"]` for vision, mission, OKRs, and initiatives.
-- `scope=["work"]` for open tasks, blockers, and assignee-owned work.
-- `scope=["episodic"]` for "what did we do on X?".
-- `scope=["semantic"]` for stable facts and preferences.
-- `scope=["working"]` only when you need the caller's open session turns.
-- For code/repo-specific work, pass `repo=<workspace-slug>` and/or
-  `github=<owner>/<repo>` to softly boost scoped memories (nothing is hidden).
+**Answer vs search:**
 
-If recall is empty, say so before answering from priors.
+- **`memory_think(query=...)`** — synthesized prose answer with citations and gap
+  analysis. Prefer when the user wants an **answer**.
+- **`memory_recall(query=...)`** — raw ranked records. Use for IDs, debugging
+  retrieval, or when you need to inspect sources yourself. Pass `explain=true` for
+  vector/keyword/RRF attribution in each record's `metadata`.
+
+**Scope hints** (default omits `scope` → all pillars below):
+
+- `scope=["skill"]` — how-to building blocks ("how do we ship a PR?").
+- `scope=["procedural"]` — playbooks and workflow definitions only.
+- `scope=["strategic"]` — vision, mission, OKRs, initiatives.
+- `scope=["work"]` — open tasks, blockers, assignees.
+- `scope=["episodic"]` — "what did we do on X?".
+- `scope=["semantic"]` — stable facts and preferences.
+- `scope=["working"]` — caller's open session turns only.
+
+Default pillars: `semantic`, `episodic`, `procedural`, `skill`, `strategic`,
+`work`, `working`.
+
+For code/repo work, pass `repo=<workspace-slug>` and/or `github=<owner>/<repo>`
+to softly boost scoped memories (nothing is hidden).
+
+Param detail for any tool: `memory_tools_catalog(scope="memory", tier="core")`.
 
 ### Code work: resolve `repo` and `github`
 
@@ -98,8 +134,16 @@ Call `memory_remember(content, kind=...)` for things still true next week:
 
 Optional: `subject`, `tags`. For code/repo-specific memories, pass
 `repo=<workspace-slug>` and/or `github=<owner>/<repo>`; omit both for
-cross-cutting preferences. Do **not** use `memory_remember` for playbooks —
-use `memory_procedure_set`.
+cross-cutting preferences.
+
+Do **not** use `memory_remember` for instructions:
+
+- Atomic skill → `memory_skill_set`
+- Playbook orchestration → `memory_playbook_set`
+- Facts about decisions → `memory_remember(kind="fact")`
+
+**Wikilinks** — `[[Entity Name]]` in `memory_remember` content auto-creates graph
+`mentions` edges on active writes (zero-LLM autolink).
 
 ### Work queue (tasks for humans and agents)
 
@@ -116,9 +160,9 @@ Use `work_*` for durable, assignable tasks — not `memory_remember`.
 5. **Finish:** `work_close(work_id=..., work_status="done")` when complete.
    Closing writes an episodic event for the timeline.
 
-Work items are created active immediately for both humans and agents — task
-creation does not go through the approval queue. Optional `initiative_id=`
-links a task to a strategic initiative.
+`work_create` is **active immediately** for humans and agents (no approval queue).
+Optional `initiative_id=` links a task to a strategic initiative. Projects,
+subtasks, dependencies: `memory_tools_catalog(scope="work")`.
 
 ### Session logging (every chat)
 
@@ -130,18 +174,18 @@ consent path (unlike automatic transcript ingest).
 Always resolve `repo=` first (see above). State key: `conversation/active-session`.
 Treat a missing or empty `session_id` in state as no active session.
 
-**First turn of a thread** (no prior assistant turns in your context):
+**First turn of a new Cursor chat** (no prior assistant turns in your context):
 
 1. `memory_state_get(repo=..., key="conversation/active-session")`.
 2. If `session_id` is present → `memory_session_close(session_id, distill=true)`.
+   (Stale state from a prior chat — close + distill is intentional.)
 3. `memory_session_open(topic=<first user message, max ~120 chars>, repo=..., github=...)`.
 4. `memory_state_set(repo=..., key="conversation/active-session", value={"session_id": "<id>"})`.
 
 Do **not** call `memory_session_open` if state already holds a `session_id` for
 this chat.
 
-**Mid-thread pivot** (user clearly starts a new topic — do not wait for a new
-Cursor chat):
+**Mid-thread pivot** (user clearly starts a new topic):
 
 1. `memory_session_close(session_id, distill=true)`.
 2. `memory_state_set(..., value={})`.
@@ -155,9 +199,7 @@ Cursor chat):
 **Append failure recovery** — if `memory_session_append` fails (expired or
 unknown `session_id`): open a new session, update state, retry the append once.
 
-Append the substantive user request and a faithful summary of your reply — not
-UI boilerplate. Truncate long tool output. Never append secrets, tokens, or
-credentials.
+Never append secrets, tokens, or credentials.
 
 ### Read vs write scoping
 
@@ -165,8 +207,21 @@ credentials.
   every agent's durable memories unless you pass `agent=` to narrow.
 - **Caller-scoped working memory:** recall always includes the caller's own
   session turns; durable pillars are not filtered by caller unless `agent=` is set.
-- **Writes:** `memory_remember`, `memory_session_*`, `memory_procedure_set`, and
-  `memory_graph_relate` attribute to the bearer token unless `agent=` overrides.
+- **Writes:** `memory_remember`, `memory_session_*`, `memory_skill_set`,
+  `memory_playbook_set`, and `memory_graph_relate` attribute to the bearer token
+  unless `agent=` overrides.
+
+### Approval matrix
+
+| Write | Typical agent outcome | `/app/approvals`? |
+|---|---|---|
+| `memory_remember` | `active` | Only if quarantined |
+| `memory_skill_set` / `memory_playbook_set` | `active` | Only if quarantined |
+| `memory_strategic_*` | `pending_approval` | Yes — human approves |
+| `work_create` | `active` | No |
+| Connector/extraction source | `pending_approval` | Yes |
+
+Check status: `memory_approval_status(memory_id=... | skill_id=... | procedure_id=...)`.
 
 ## Human console (`/app`)
 
@@ -178,8 +233,8 @@ these are human/browser actions, not MCP tools:
 - **Sign in:** any email + a one-time passcode (no password). First sign-in
   creates that email's own private org; they can create more orgs and switch
   between them from the header.
-- **Memory wiki** (`/app/wiki`): semantic facts, the episodic timeline, and
-  playbooks rendered as a browsable, human-readable knowledge base.
+- **Memory wiki** (`/app/wiki`): semantic facts, episodic timeline, skills, and
+  playbooks as a browsable knowledge base.
 - **Work** (`/app/work`): org-wide task queue; assign to people or agents.
 - **Manage:** agents, **API keys** (`tsk_…`, the bearer token MCP/agents use),
   people (add a teammate by email), approvals, and capture consent (for automatic
@@ -189,187 +244,109 @@ A fresh self-serve org starts empty and isolated; joining the shared team brain
 is an admin action (People → add member). The public, no-auth status page is at
 `<server>/memory`.
 
-## Tool reference
+## Core tool reference
 
-Prefer the **Quick chooser** during tasks; use these tables when you need param detail.
+Full catalog: `memory_tools_catalog`. Below: tools every session should know.
 
-### `health`
+### `health` / `version`
 
-Probe server liveness and dependencies. Returns
-`{"status": "ok"|"degraded", "components": {...}}` covering redis, postgres, and
-the memory/LLM backends (semantic, distiller, curator, graph, ollama).
-Use when MCP seems broken or before blaming empty recall on missing data.
-Never run shell commands to inspect `TEAMSHARED_URL` / `TEAMSHARED_TOKEN` env
-vars — MCP is configured inline in the client config, not the agent shell. If
-MCP looks down, call `health`, not `echo`.
+`health` — liveness + dependencies (redis, postgres, semantic, distiller,
+curator, graph, LLM). Never probe `TEAMSHARED_*` env vars in shell; MCP config
+is inline in the client.
+
+`version` — pass `installed_rule_version` from this rule's frontmatter on first
+turn; apply returned `rule_markdown` when `update_available: true`.
+
+### `memory_think`
+
+Synthesized answer with citations and explicit gaps (stale, missing, contradicts,
+low confidence). Params: `query`, optional `k`, `repo`, `github`, `token_budget`.
+Falls back to retrieval-only prose when LLM is unavailable.
 
 ### `memory_recall`
 
-Hybrid search across semantic, episodic, procedural, strategic, work, and working pillars.
-
-| Param | Use |
-|---|---|
-| `query` | Natural-language search (required) |
-| `scope` | Subset of pillars; omit = all (includes work) |
-| `k` | Max records (1–50, default 8) |
-| `time_range` | Optional bounds for episodic/working hits |
-| `agent` | Optional filter to one agent's durable writes |
-| `repo` | Optional workspace slug; soft-boosts `repo:<slug>` tags (nothing hidden) |
-| `github` | Optional `owner/repo`; soft-boosts `github:<owner>/<repo>` tags |
-
-Returns `records` with pillar, agent, timestamps, and content for citation.
-For code work, pass `repo=<workspace-slug>` and/or `github=<owner>/<repo>`.
+Hybrid search. Params: `query`, `scope`, `k`, `time_range`, `agent`, `repo`,
+`github`, `verbose`, `explain`. Shared brain on durable pillars; `agent=` narrows.
 
 ### `memory_remember`
 
-Write semantic or episodic memory.
+`kind`: `fact` | `preference` | `event` | `note`. `event` → episodic; others →
+semantic. Rejects `kind=procedure`. Wikilink autolink on active writes.
 
-| Param | Use |
-|---|---|
-| `content` | Text to store (required) |
-| `kind` | `fact` \| `preference` \| `event` \| `note` (default `note`) |
-| `subject` | Optional entity the memory is about |
-| `tags` | Optional string list |
-| `agent` | Optional attribution override |
-| `repo` | Optional workspace slug → `repo:<slug>` tag |
-| `github` | Optional `owner/repo` → `github:<owner>/<repo>` tag (portable) |
+### `memory_assemble_context`
 
-Routing: `event` → episodic; others → semantic. Rejects `kind=procedure`.
-For code work, pass `repo=` and/or `github=`; omit both for cross-cutting facts.
+One token-budgeted context pack for a `task` — parallel recall + optional graph;
+prefer over serial recall when bootstrapping a complex job.
 
-### `memory_session_open` / `memory_session_append` / `memory_session_close`
+### Sessions
 
-Working-memory buffer in Redis — one session per chat (see **Session logging**).
+`memory_session_open` → `memory_session_append` → `memory_session_close(distill=true)`.
+`memory_session_get` for debug/handoff.
 
-| Tool | Key params |
-|---|---|
-| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo`, `github` → `{session_id, agent}` |
-| `memory_session_append` | `session_id`, `role` (`user` \| `assistant` \| `tool` \| `system`), `content` → `{turn_count}` |
-| `memory_session_close` | `session_id`, `distill=true` (default) queues distillation to durable memory |
+### Skills and playbooks
 
-### `memory_episodes_list`
+- **Skills:** `memory_skill_get`, `memory_skill_set`, `memory_skills_list`,
+  `memory_forget_skill`
+- **Playbooks:** `memory_playbook_get` / `memory_playbook_set` /
+  `memory_playbooks_list`, `memory_forget_procedure`
+- **Compose:** `memory_skill_resolve(playbook_name=...)` or
+  `memory_playbook_get(expand_skills=true)`
+- `tool_recipe` shapes: `memory_tools_catalog` → `tool_recipe_shapes`
+- Each `memory_skill_set` / `memory_playbook_set` creates a **new version** (not upsert)
 
-Browse the episodic timeline (distilled sessions and logged events).
+### Graph
 
-| Param | Use |
-|---|---|
-| `topic` | Substring match |
-| `since` / `until` | Time bounds on `created_at` |
-| `limit` | 1–200 (default 20) |
-| `agent` | Optional filter to one agent's episodes |
+`memory_graph_relate(subject, predicate, object_entity)` — explicit edges.
+`memory_graph_related(name, depth=1–4)` — walk neighbors. Neo4j when enabled;
+Postgres fallback when Neo4j is down. Autolink from `[[wikilinks]]` on remember.
 
-Default: all agents' episodes (shared brain).
+### Strategic / work / extended
 
-### `memory_procedure_get` / `memory_procedure_set` / `memory_procedures_list`
-
-Versioned playbooks in Postgres (markdown steps agents read and follow).
-
-| Tool | When |
-|---|---|
-| `memory_procedure_get` | Fetch by `name`, optional `version` (latest if omitted) |
-| `memory_procedure_set` | Store new version: `name`, `steps_md`, optional `description`, `tool_recipe`, `tags` |
-| `memory_procedures_list` | Discover playbooks; optional `tag`, `limit` |
-
-Each `memory_procedure_set` call creates a new version — use stable names
-(e.g. `ship-pr`, `debug-flaky-test`).
-
-### `memory_strategic_*`
-
-Org-wide vision, mission, purpose, and OKR cycles. **Never** use
-`memory_remember` for strategic content — use these tools instead.
-
-| Tool | When |
-|---|---|
-| `memory_strategic_statement_get` | Active vision, mission, or purpose |
-| `memory_strategic_statement_set` | Propose a new statement version |
-| `memory_strategic_plan_list` / `memory_strategic_plan_get` | Browse OKR cycles |
-| `memory_strategic_plan_set` | Propose a new cycle |
-| `memory_strategic_objective_set` | Propose an objective |
-| `memory_strategic_key_result_set` | Propose a key result |
-| `memory_strategic_initiative_set` | Propose an initiative |
-
-All strategic writes return `pending_approval` until a human approves them
-in the console (`/app/approvals`).
-
-### `work_list` / `work_get` / `work_create` / `work_update` / `work_close` / `work_comment_*`
-
-Org-scoped task queue. Assign to **users** (`assignee_email` / `assignee_type=user`)
-or **agents** (`assignee_agent` / `assignee_type=agent`).
-
-| Tool | When |
-|---|---|
-| `work_list` | Table backlog; `mine=true`; filter `work_status`; `exclude_closed` (default true); `sort` |
-| `work_get` | One item by `work_id` |
-| `work_create` | New task; agent writes → `pending_approval` |
-| `work_update` | Status, assignee, priority, `blocked_reason` — immediate |
-| `work_close` | `work_status=done` or `cancelled`; writes episodic timeline event |
-| `work_comment_add` | Progress note on a task |
-| `work_comment_list` | Thread on a task (oldest first) |
-
-Workflow statuses: `backlog`, `todo`, `in_progress`, `blocked`, `done`, `cancelled`.
-Do **not** store tasks via `memory_remember`. Use comments for progress, not facts.
-
-### `memory_graph_relate` / `memory_graph_related`
-
-Explicit entity relationships (Neo4j when enabled; otherwise no-op with
-`reason: graph_disabled`).
-
-| Tool | Use |
-|---|---|
-| `memory_graph_relate` | `subject`, `predicate`, `object`, optional `weight`, optional `agent` |
-| `memory_graph_related` | Expand neighbors of `name`, `depth` (1–4), `limit` |
-
-Use for structured facts vector recall would obscure (e.g. `alice` → `works_on` → `teamshared`).
+- Strategic: `memory_strategic_*` — never `memory_remember` for OKRs/vision.
+- Work: `work_list`, `work_get`, `work_create`, `work_update`, `work_close`,
+  `work_comment_*` — tasks active immediately.
+- Extended (discover via catalog): `agent_run_*`, `workflow_*`, `project_*`,
+  `work_move`, dependencies, followers.
 
 ### `memory_state_get` / `memory_state_set`
 
-Token+repo scoped JSON blobs for client bookkeeping (not durable team knowledge).
-
-| Param | Use |
-|---|---|
-| `repo` | Workspace slug: absolute path, leading `/` removed, `/` → `-` |
-| `key` | Opaque key, e.g. `conversation/active-session`, `continual-learning/index` |
-| `value` | JSON object (`memory_state_set` only); `{}` clears active session |
-
-Prefer server state over git for incremental indexes and cadence files when MCP
-is available; fall back to `~/.cursor/hooks/state/...` locally.
+Token+repo scoped JSON blobs (`conversation/active-session`,
+`continual-learning/index`). Prefer server state over `~/.cursor/hooks/state/...`.
 
 ### `memory_forget`
 
-Soft-delete a semantic/episodic memory by `memory_id` (from a prior recall).
-Requires `reason` for audit. **Only when the user explicitly asks.**
-
-### `version`
-
-Report the server version and the canonical rule version, and check whether the
-installed rule is current.
-
-| Param | Use |
-|---|---|
-| `installed_rule_version` | The `version` from this rule's frontmatter (optional; omit if unknown) |
-
-Returns `{server_version, rule_version, installed_rule_version, rule_path,
-update_available}` and, when `update_available` is true, the full `rule_markdown`
-to write to the local rule file. See **Staying current** above.
+Soft-delete semantic/episodic by `memory_id`. **Only when the user explicitly asks.**
 
 ## Quick chooser
 
+**Tiers:** `core` = every session; `extended` = writes/debug; `human` = workflows.
+Call `memory_tools_catalog(scope="memory", tier="core")` when unsure.
+
 | Need | Tool |
 |---|---|
+| Discover tools + `tool_recipe` shapes | `memory_tools_catalog` |
 | Is the server healthy? | `health` |
 | Server/rule version + update check | `version` |
-| Search all memory | `memory_recall` |
+| **Answer** from team memory | `memory_think` |
+| **Search** raw records / debug retrieval | `memory_recall` (`explain=true`) |
+| Token-budgeted context pack | `memory_assemble_context` |
 | Store preference/fact/event/note | `memory_remember` |
 | Log every chat + distillation | `memory_session_*` |
+| Read session turns | `memory_session_get` |
+| Check guarded-write approval status | `memory_approval_status` |
 | Browse timeline | `memory_episodes_list` |
-| Versioned how-to | `memory_procedure_set` / `memory_procedure_get` |
-| List playbooks | `memory_procedures_list` |
+| Atomic skill (building block) | `memory_skill_get` / `memory_skill_set` |
+| Playbook (orchestration) | `memory_playbook_get` / `memory_playbook_set` |
+| Resolve playbook → skills | `memory_skill_resolve` |
 | Vision / OKRs / mission | `memory_strategic_*` or `scope=["strategic"]` |
 | Tasks / assignees / blockers | `work_*` or `scope=["work"]` |
 | Task progress notes | `work_comment_add` / `work_comment_list` |
 | Structured relationships | `memory_graph_*` |
 | Client incremental state | `memory_state_get` / `memory_state_set` |
-| Remove a bad memory | `memory_forget` (user-requested only) |
+| Remove semantic/episodic memory | `memory_forget` |
+| Retire playbook or skill | `memory_forget_procedure` / `memory_forget_skill` |
+| Background agent on a task | `agent_run_create` |
+| Multi-stage workflow loop | `workflow_start` / `workflow_advance` |
 
 ## Never
 
@@ -378,3 +355,4 @@ to write to the local rule file. See **Staying current** above.
 - Don't fabricate hits — if `memory_recall` is empty, say so.
 - Don't store secrets, tokens, or credentials in any memory tool.
 - Don't open a second `memory_session_open` when state already has a `session_id` for this chat.
+- Don't store atomic instructions as playbooks — use `memory_skill_set`.
