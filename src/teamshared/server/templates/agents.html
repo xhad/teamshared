@@ -10,18 +10,28 @@
     <form method="post" action="/app/agents/add" class="inline-form">
       {{ cm.csrf_field() }}
       <input name="name" placeholder="New agent name" required />
+      <select name="runtime" title="Runtime">
+        <option value="user">User agent (local, pulls work via MCP)</option>
+        <option value="cloud">Cloud agent (server-run, can auto-trigger)</option>
+      </select>
       <button type="submit">Add agent</button>
     </form>
+    <p class="muted" style="margin-top:.5rem">
+      <strong>User agents</strong> run on a teammate's machine and pull assigned
+      work over MCP. <strong>Cloud agents</strong> are executed by the server's
+      background worker, so assigning one a task can run it automatically.
+    </p>
   </div>
 
   <div class="panel" style="margin-top:1rem">
     {% if agents %}
     <table>
-      <thead><tr><th>Name</th><th>Kind</th><th>Status</th><th>Created</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Runtime</th><th>Kind</th><th>Status</th><th>Created</th><th></th></tr></thead>
       <tbody>
         {% for a in agents %}
         <tr>
           <td>{{ a.name }}</td>
+          <td><span class="status-pill">{{ a.runtime }}</span></td>
           <td>{{ a.kind }}</td>
           <td><span class="status-pill {{ a.status }}">{{ a.status }}</span></td>
           <td>{{ a.created }}</td>

@@ -165,13 +165,21 @@ class AdminService:
         return ok
 
     async def create_agent(
-        self, ctx: RequestContext, *, name: str, kind: str = "agent"
+        self,
+        ctx: RequestContext,
+        *,
+        name: str,
+        kind: str = "agent",
+        runtime: str = "user",
     ) -> UUID:
         await ctx.authorizer.require(ctx.principal, Permissions.ORG_ADMIN)
+        if runtime not in {"user", "cloud"}:
+            raise ValueError(f"invalid agent runtime: {runtime!r}")
         async with self.db.org(ctx.org_id) as conn:
             cur = await conn.execute(
-                "INSERT INTO agents (org_id, name, kind) VALUES (%s,%s,%s) RETURNING id",
-                (str(ctx.org_id), name, kind),
+                "INSERT INTO agents (org_id, name, kind, runtime) "
+                "VALUES (%s,%s,%s,%s) RETURNING id",
+                (str(ctx.org_id), name, kind, runtime),
             )
             row = await cur.fetchone()
         assert row is not None
@@ -186,14 +194,30 @@ class AdminService:
         await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_READ)
         async with self.db.org(ctx.org_id) as conn:
             cur = await conn.execute(
-                "SELECT id, name, kind, status, created_at FROM agents ORDER BY created_at"
+                "SELECT id, name, kind, status, created_at, runtime "
+                "FROM agents ORDER BY created_at"
             )
             rows = await cur.fetchall()
         return [
             {"id": str(r[0]), "name": r[1], "kind": r[2], "status": r[3],
-             "created_at": r[4].isoformat() if r[4] else None}
+             "created_at": r[4].isoformat() if r[4] else None,
+             "runtime": r[5]}
             for r in rows
         ]
+
+    async def set_agent_runtime(
+        self, ctx: RequestContext, agent_id: UUID, runtime: str
+    ) -> bool:
+        """Switch an agent between ``user`` (local/MCP) and ``cloud`` (server-run)."""
+        await ctx.authorizer.require(ctx.principal, Permissions.ORG_ADMIN)
+        if runtime not in {"user", "cloud"}:
+            raise ValueError(f"invalid agent runtime: {runtime!r}")
+        async with self.db.org(ctx.org_id) as conn:
+            cur = await conn.execute(
+                "UPDATE agents SET runtime = %s WHERE id = %s",
+                (runtime, str(agent_id)),
+            )
+        return cur.rowcount > 0
 
     async def set_agent_status(
         self, ctx: RequestContext, agent_id: UUID, status: str

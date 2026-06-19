@@ -706,6 +706,18 @@ class MemoryFacade:
             request_id=ctx.request_id,
             after={"title": title, "status": "active"},
         )
+        if resolved_assignee_type == "agent" and resolved_assignee_id:
+            try:
+                await self.services.agent_run_service().maybe_autorun_on_assign(
+                    ctx,
+                    work_id=UUID(str(row["id"])),
+                    agent_id=resolved_assignee_id,
+                )
+            except Exception as exc:
+                log.warning(
+                    "work_create_autorun_failed",
+                    work_id=str(row["id"]), error=str(exc),
+                )
         out = _serialize_work(row)
         out["approval_status"] = "active"
         return out
@@ -801,6 +813,16 @@ class MemoryFacade:
             request_id=ctx.request_id,
             after=fields,
         )
+        if fields.get("assignee_type") == "agent" and fields.get("assignee_id"):
+            try:
+                await self.services.agent_run_service().maybe_autorun_on_assign(
+                    ctx, work_id=UUID(work_id), agent_id=fields["assignee_id"],
+                )
+            except Exception as exc:
+                log.warning(
+                    "work_assign_autorun_failed",
+                    work_id=work_id, error=str(exc),
+                )
         return _serialize_work(row)
 
     async def work_close(

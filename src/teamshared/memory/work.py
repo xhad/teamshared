@@ -317,6 +317,21 @@ class WorkStore:
             row = await cur.fetchone()
         return row[0] if row else None
 
+    async def get_agent(self, org_id: UUID, agent_id: UUID) -> dict[str, Any] | None:
+        """Fetch an agent's identity + runtime (``user`` vs ``cloud``)."""
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                "SELECT id, name, kind, status, runtime FROM agents WHERE id = %s",
+                (str(agent_id),),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row[0], "name": row[1], "kind": row[2],
+            "status": row[3], "runtime": row[4],
+        }
+
     async def resolve_user_id_by_email(self, org_id: UUID, email: str) -> UUID | None:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(

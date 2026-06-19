@@ -745,7 +745,11 @@ def register_console_routes(
         members: list[dict[str, str]] = []
         try:
             for a in await services.admin.list_agents(_ctx(principal)):
-                agents.append({"id": str(a.get("id")), "name": a.get("name") or ""})
+                agents.append({
+                    "id": str(a.get("id")),
+                    "name": a.get("name") or "",
+                    "runtime": a.get("runtime") or "user",
+                })
             for m in await services.admin.list_members(_ctx(principal)):
                 members.append({
                     "id": str(m.get("user_id")),
@@ -1285,7 +1289,8 @@ def register_console_routes(
             data = await services.admin.list_agents(_ctx(principal))
             agents = [
                 {"id": d["id"], "name": d["name"], "kind": d["kind"],
-                 "status": d["status"], "created": _dt(d.get("created_at"), 10)}
+                 "status": d["status"], "runtime": d.get("runtime") or "user",
+                 "created": _dt(d.get("created_at"), 10)}
                 for d in data
             ]
             return agents, ""
@@ -1520,7 +1525,7 @@ def register_console_routes(
         if not agent_id:
             return RedirectResponse(f"/app/work/{work_id}?flash=error", status_code=303)
         try:
-            await services.agent_run_service().assign_and_run(
+            result = await services.agent_run_service().assign(
                 _ctx(principal),
                 work_id=UUID(work_id),
                 agent_id=UUID(agent_id),
@@ -1531,7 +1536,8 @@ def register_console_routes(
         except Exception as exc:
             log.warning("work_assign_agent_failed", error=str(exc))
             return RedirectResponse(f"/app/work/{work_id}?flash=error", status_code=303)
-        return RedirectResponse(f"/app/work/{work_id}?flash=run_queued", status_code=303)
+        flash = "run_queued" if result.get("runtime") == "cloud" else "assigned"
+        return RedirectResponse(f"/app/work/{work_id}?flash={flash}", status_code=303)
 
     async def agent_add(request: Request) -> Response:
         principal = _session(request)
@@ -1541,9 +1547,12 @@ def register_console_routes(
         if deny:
             return deny
         name = str(form.get("name") or "").strip()
+        runtime = str(form.get("runtime") or "user").strip() or "user"
         if name:
             try:
-                await services.admin.create_agent(_ctx(principal), name=name)
+                await services.admin.create_agent(
+                    _ctx(principal), name=name, runtime=runtime,
+                )
             except Exception as exc:
                 log.warning("agent_add_failed", error=str(exc))
         return RedirectResponse("/app/agents", status_code=303)

@@ -48,6 +48,9 @@ def _service() -> tuple[AgentRunService, MagicMock, MagicMock, MagicMock]:
     )
     work = MagicMock()
     work.get = AsyncMock(return_value={"id": WORK_ID, "title": "Ship it"})
+    work.get_agent = AsyncMock(
+        return_value={"id": AGENT_ID, "name": "bot", "runtime": "cloud"}
+    )
     work.update = AsyncMock()
     work.add_comment = AsyncMock()
     queue = MagicMock()
@@ -87,6 +90,64 @@ async def test_assign_and_run_requires_permission() -> None:
     ctx = _ctx()
     await svc.assign_and_run(ctx, work_id=WORK_ID, agent_id=AGENT_ID)
     ctx.authorizer.require.assert_awaited()  # type: ignore[attr-defined]
+
+
+async def test_assign_and_run_rejects_user_agent() -> None:
+    from teamshared.agents.service import AgentNotRunnableError
+
+    svc, _runs, work, queue = _service()
+    work.get_agent = AsyncMock(
+        return_value={"id": AGENT_ID, "name": "cursor", "runtime": "user"}
+    )
+    ctx = _ctx()
+    with pytest.raises(AgentNotRunnableError):
+        await svc.assign_and_run(ctx, work_id=WORK_ID, agent_id=AGENT_ID)
+    queue.enqueue.assert_not_awaited()
+
+
+async def test_assign_user_agent_assigns_without_running() -> None:
+    svc, runs, work, queue = _service()
+    work.get_agent = AsyncMock(
+        return_value={"id": AGENT_ID, "name": "cursor", "runtime": "user"}
+    )
+    ctx = _ctx()
+    result = await svc.assign(ctx, work_id=WORK_ID, agent_id=AGENT_ID)
+    assert result == {"assigned": True, "runtime": "user", "run": None}
+    work.update.assert_awaited_once()
+    runs.create.assert_not_awaited()
+    queue.enqueue.assert_not_awaited()
+    work.add_comment.assert_awaited()
+
+
+async def test_assign_cloud_agent_queues_run() -> None:
+    svc, runs, _work, queue = _service()
+    ctx = _ctx()
+    result = await svc.assign(ctx, work_id=WORK_ID, agent_id=AGENT_ID)
+    assert result["assigned"] is True
+    assert result["runtime"] == "cloud"
+    runs.create.assert_awaited_once()
+    queue.enqueue.assert_awaited_once()
+
+
+async def test_maybe_autorun_skips_user_agent() -> None:
+    svc, runs, work, queue = _service()
+    work.get_agent = AsyncMock(
+        return_value={"id": AGENT_ID, "name": "cursor", "runtime": "user"}
+    )
+    ctx = _ctx()
+    out = await svc.maybe_autorun_on_assign(ctx, work_id=WORK_ID, agent_id=AGENT_ID)
+    assert out is None
+    runs.create.assert_not_awaited()
+    queue.enqueue.assert_not_awaited()
+
+
+async def test_maybe_autorun_runs_cloud_agent() -> None:
+    svc, runs, _work, queue = _service()
+    ctx = _ctx()
+    out = await svc.maybe_autorun_on_assign(ctx, work_id=WORK_ID, agent_id=AGENT_ID)
+    assert out is not None
+    runs.create.assert_awaited_once()
+    queue.enqueue.assert_awaited_once()
 
 
 async def test_cancel_flags_and_comments() -> None:

@@ -325,7 +325,8 @@ def build_api_app(
         ctx = _ctx(request, services)
         body = await _json(request)
         aid = await services.admin.create_agent(
-            ctx, name=body["name"], kind=body.get("kind", "agent")
+            ctx, name=body["name"], kind=body.get("kind", "agent"),
+            runtime=body.get("runtime", "user"),
         )
         return JSONResponse({"id": str(aid)}, status_code=201)
 

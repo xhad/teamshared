@@ -29,6 +29,15 @@ class AgentRunNotFoundError(Exception):
     """Raised when a run id does not resolve within the caller's org."""
 
 
+class AgentNotRunnableError(Exception):
+    """Raised when a server-side run is requested for a non-cloud agent.
+
+    Only ``runtime='cloud'`` agents are executed by the background worker. A
+    ``user`` agent (a teammate's local Cursor/Codex over MCP) pulls work from its
+    queue instead, so the server must not try to run a model on its behalf.
+    """
+
+
 class AgentRunService:
     def __init__(
         self, runs: AgentRunStore, work: WorkStore, queue: StreamQueue
@@ -66,6 +75,15 @@ class AgentRunService:
         work = await self.work.get(ctx.org_id, work_id)
         if work is None:
             raise AgentRunNotFoundError(f"work item {work_id} not found")
+
+        agent = await self.work.get_agent(ctx.org_id, agent_id)
+        if agent is None:
+            raise AgentRunNotFoundError(f"agent {agent_id} not found")
+        if agent.get("runtime") != "cloud":
+            raise AgentNotRunnableError(
+                f"agent {agent.get('name') or agent_id!r} is a user agent; only "
+                "cloud agents can be run server-side (it pulls work via MCP)"
+            )
 
         run = await self.runs.create(
             ctx.org_id,
@@ -109,6 +127,72 @@ class AgentRunService:
             work_id=str(work_id), enqueued=bool(enqueued),
         )
         return run
+
+    async def assign(
+        self,
+        ctx: RequestContext,
+        *,
+        work_id: UUID,
+        agent_id: UUID,
+        playbook_name: str | None = None,
+        playbook_version: int | None = None,
+        model: str | None = None,
+        provider: str | None = None,
+    ) -> dict[str, Any]:
+        """Assign a work item to an agent, auto-running it iff it is a cloud agent.
+
+        Cloud agents are executed by the background worker, so assigning one
+        queues a run immediately. User agents pull work from their queue over
+        MCP, so this just records the assignment.
+        """
+        await ctx.authorizer.require(ctx.principal, Permissions.AGENTRUN_WRITE)
+        work = await self.work.get(ctx.org_id, work_id)
+        if work is None:
+            raise AgentRunNotFoundError(f"work item {work_id} not found")
+        agent = await self.work.get_agent(ctx.org_id, agent_id)
+        if agent is None:
+            raise AgentRunNotFoundError(f"agent {agent_id} not found")
+
+        if agent.get("runtime") == "cloud":
+            run = await self.assign_and_run(
+                ctx,
+                work_id=work_id,
+                agent_id=agent_id,
+                playbook_name=playbook_name,
+                playbook_version=playbook_version,
+                model=model,
+                provider=provider,
+            )
+            return {"assigned": True, "runtime": "cloud", "run": run}
+
+        await self.work.update(
+            ctx.org_id, work_id,
+            fields={"assignee_type": "agent", "assignee_id": agent_id},
+        )
+        await self._comment(
+            ctx, work_id,
+            f"Assigned to user agent `{agent.get('name') or agent_id}`; it will "
+            "pick this up from its queue over MCP.",
+        )
+        log.info(
+            "agent_assigned",
+            org_id=str(ctx.org_id), work_id=str(work_id),
+            agent_id=str(agent_id), runtime="user",
+        )
+        return {"assigned": True, "runtime": "user", "run": None}
+
+    async def maybe_autorun_on_assign(
+        self, ctx: RequestContext, *, work_id: UUID, agent_id: UUID
+    ) -> dict[str, Any] | None:
+        """Queue a run when a cloud agent becomes a task's assignee.
+
+        Best-effort hook for the generic ``work_update`` path: returns the queued
+        run (or ``None`` for user agents) and never raises for a user agent.
+        """
+        agent = await self.work.get_agent(ctx.org_id, agent_id)
+        if agent is None or agent.get("runtime") != "cloud":
+            return None
+        return await self.assign_and_run(ctx, work_id=work_id, agent_id=agent_id)
 
     async def cancel(self, ctx: RequestContext, run_id: UUID) -> dict[str, Any]:
         await ctx.authorizer.require(ctx.principal, Permissions.AGENTRUN_WRITE)
