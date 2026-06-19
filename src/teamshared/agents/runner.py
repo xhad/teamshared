@@ -39,6 +39,8 @@ from teamshared.logging import get_logger
 from teamshared.memory.context_assembler import ContextAssembler
 from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.procedural import OrgProceduralStore
+from teamshared.memory.skills import OrgSkillStore
+from teamshared.playbook.compose import expand_playbook_skills
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.work import WorkStore
 from teamshared.metrics import METRICS
@@ -84,6 +86,7 @@ class AgentRunner:
         facade: MemoryFacade,
         work: WorkStore,
         procedural: OrgProceduralStore,
+        skills: OrgSkillStore,
         ingestion: IngestionPipeline,
         orchestrator: WorkflowOrchestrator | None = None,
     ) -> None:
@@ -92,6 +95,7 @@ class AgentRunner:
         self.facade = facade
         self.work = work
         self.procedural = procedural
+        self.skills = skills
         self.ingestion = ingestion
         self.orchestrator = orchestrator
         self.assembler = ContextAssembler(facade)
@@ -181,13 +185,27 @@ class AgentRunner:
         if not name:
             return None
         version = run.get("playbook_version")
-        pb = await self.procedural.get_procedure(rc.org_id, name, version)
-        if pb is None:
-            raise PlaybookUnavailableError(
-                f"Playbook '{name}' is unavailable (missing, pending approval, "
-                "or quarantined)."
-            )
-        # Pin the exact resolved version for reproducibility.
+        if isinstance(name, str) and name.startswith("__skill__:"):
+            skill_name = name.removeprefix("__skill__:")
+            skill = await self.skills.get_skill(rc.org_id, skill_name, version)
+            if skill is None:
+                raise PlaybookUnavailableError(
+                    f"Skill '{skill_name}' is unavailable (missing, pending approval, "
+                    "or quarantined)."
+                )
+            pb = {
+                "name": skill["name"],
+                "version": skill["version"],
+                "steps_md": skill.get("body_md") or "",
+                "tool_recipe": None,
+            }
+        else:
+            pb = await self.procedural.get_procedure(rc.org_id, name, version)
+            if pb is None:
+                raise PlaybookUnavailableError(
+                    f"Playbook '{name}' is unavailable (missing, pending approval, "
+                    "or quarantined)."
+                )
         await self.runs.mark(
             rc.org_id, rc.run_id,
             playbook_name=pb["name"], playbook_version=pb["version"],
@@ -251,9 +269,14 @@ class AgentRunner:
                 "## TeamShared operating rules (authoritative)\n\n" + rule_md
             )
         if playbook:
+            steps = await expand_playbook_skills(
+                self.skills,
+                rc.org_id,
+                steps_md=playbook.get("steps_md") or "",
+                tool_recipe=playbook.get("tool_recipe"),
+            )
             system_parts.append(
-                f"## Playbook: {playbook['name']} (v{playbook['version']})\n\n"
-                + (playbook.get("steps_md") or "")
+                f"## Playbook: {playbook['name']} (v{playbook['version']})\n\n{steps}"
             )
 
         user_parts = [

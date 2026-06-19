@@ -25,12 +25,13 @@ product/
 
 ## Current state
 
-The graph was built from **internal product intent only** (`prod-plan.md`,
-`plan.md`, `memory-wiki-plan.md`, plus `README.md`/`AGENTS.md`). Corpus health is
-**thin** — there is no captured user research yet. The headline finding: the plan
-is detailed, but the core bets (teams want shared memory; orgs will pay; shared-by-
-default is desired; distillation is trustworthy) have **zero user evidence**.
-See `knowledge/assumption-audit.md`.
+The graph was built from **internal product intent** (`prod-plan.md`,
+`plan.md`, `memory-wiki-plan.md`, plus `README.md`/`AGENTS.md`) and **two
+external signals** (`company-brain-yc-rfs.md`, `gbrain-competitor-research.md`).
+Corpus health is still **thin** — there is no captured user research yet. The
+headline finding: the plan is detailed, but the core bets have **zero user
+evidence**. GBrain is now the primary named competitor (see
+`knowledge/gbrain-competitor-analysis.md`). See `knowledge/assumption-audit.md`.
 
 ## How to move it forward
 

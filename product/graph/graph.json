@@ -1,13 +1,13 @@
 {
   "meta": {
-    "generated": "2026-06-05T17:45:00Z",
-    "sourceCount": 5,
-    "sourceTypes": ["prd", "memo", "research", "doc"],
+    "generated": "2026-06-19T18:00:00Z",
+    "sourceCount": 7,
+    "sourceTypes": ["research", "prd", "memo", "doc"],
     "health": "thin",
     "notes": [
-      "All five sources are internal-author product intent (plans, design memos, architecture docs). Zero user-research artifacts (no interviews, tickets, or support threads). Source-type diversity is effectively one: 'what the team intends', not 'what users said'.",
-      "None of the source files carry YAML frontmatter; types were inferred: prod-plan.md=prd/memo, plan.md=research+memo, memory-wiki-plan.md=design memo, teamshared-readme.md=doc, teamshared-agents.md=doc. Add `type:` frontmatter to make this explicit.",
-      "Because the corpus is intent-only, most product claims are Assumption nodes by construction. This is the correct, honest result for a thin/internal corpus — not a defect."
+      "Seven sources: five internal product-intent docs (symlinked) plus two external research artifacts (company-brain-yc-rfs.md, gbrain-competitor-research.md). Still zero user-interview or support-ticket evidence.",
+      "gbrain-competitor-research.md is single-source competitive intelligence from public GBrain marketing/docs — not validated by users or buyers.",
+      "Internal sources lack YAML frontmatter; types inferred. External research files have proper frontmatter."
     ]
   },
   "nodes": [
@@ -37,11 +37,27 @@
       ]
     },
     {
+      "id": "segment-company-brain-builders",
+      "type": "Segment",
+      "label": "Founders building 'company brain' products (YC RFS category)",
+      "provenance": [
+        { "source": "company-brain-yc-rfs.md", "quote": "If you're building this, you should apply to YC." }
+      ]
+    },
+    {
+      "id": "segment-power-user-operators",
+      "type": "Segment",
+      "label": "Power users running personal autonomous agents (OpenClaw/Hermes)",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "GBrain is designed to be installed and operated by an AI agent." }
+      ]
+    },
+    {
       "id": "need-shared-context",
       "type": "Need",
       "label": "Share memory across users, agents, projects, and tools",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Think of TeamShared as infrastructure for \u201cshared agent context\u201d across an organization." }
+        { "source": "prod-plan.md", "quote": "Think of TeamShared as infrastructure for \"shared agent context\" across an organization." }
       ]
     },
     {
@@ -61,11 +77,51 @@
       ]
     },
     {
+      "id": "need-synthesized-answers",
+      "type": "Need",
+      "label": "Get synthesized answers with citations, not raw page lists",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "Search gives you raw pages. GBrain gives you the answer." }
+      ]
+    },
+    {
+      "id": "need-gap-analysis-in-recall",
+      "type": "Need",
+      "label": "Know what the brain doesn't know yet (staleness / holes)",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "an honest note on what the brain doesn't know yet. The gap analysis is the differentiator." }
+      ]
+    },
+    {
+      "id": "need-company-executable-skills",
+      "type": "Need",
+      "label": "Turn institutional knowledge into executable skills for AI automation",
+      "provenance": [
+        { "source": "company-brain-yc-rfs.md", "quote": "turns it into an executable skills file for AI." }
+      ]
+    },
+    {
       "id": "pain-context-rot",
       "type": "Pain",
       "label": "Context rot from stuffing full history into the window",
       "provenance": [
         { "source": "plan.md", "quote": "keeping the entire chat history in the model's context window (which leads to \"context rot\")" }
+      ]
+    },
+    {
+      "id": "pain-amnesiac-coding-agents",
+      "type": "Pain",
+      "label": "Coding agents amnesiac about everything that isn't code",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "your coding agent stops being amnesiac about everything that isn't code." }
+      ]
+    },
+    {
+      "id": "pain-fragmented-company-knowledge",
+      "type": "Pain",
+      "label": "Critical company know-how scattered across heads, email, Slack, tickets",
+      "provenance": [
+        { "source": "company-brain-yc-rfs.md", "quote": "Every company has critical know-how scattered everywhere. Some of it lives in people's heads." }
       ]
     },
     {
@@ -123,7 +179,7 @@
       "type": "Feature",
       "label": "Human console + continuously-updating memory wiki",
       "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "One server-rendered web app \u2014 the **team mind** \u2014 where a human signs in to:" }
+        { "source": "memory-wiki-plan.md", "quote": "One server-rendered web app — the **team mind** — where a human signs in to:" }
       ]
     },
     {
@@ -140,6 +196,46 @@
       "label": "MCP-native agent memory interface",
       "provenance": [
         { "source": "prod-plan.md", "quote": "MCP-native interface" }
+      ]
+    },
+    {
+      "id": "feature-gbrain-think",
+      "type": "Feature",
+      "label": "GBrain synthesis layer (gbrain think) with gap analysis",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "the only one that does synthesis, graph traversal, and gap analysis in one box." }
+      ]
+    },
+    {
+      "id": "feature-gbrain-graph-autolink",
+      "type": "Feature",
+      "label": "GBrain self-wiring knowledge graph (zero LLM on write)",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "creates typed edges (`attended`, `works_at`, `invested_in`, `founded`, `advises`) with zero LLM calls." }
+      ]
+    },
+    {
+      "id": "feature-gbrain-dream-cycle",
+      "type": "Feature",
+      "label": "GBrain autonomous dream cycle (cron enrichment overnight)",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "Cron-driven enrichment runs while you sleep: dedup people pages, fix citations, score salience, find contradictions, prep tomorrow's tasks." }
+      ]
+    },
+    {
+      "id": "feature-gbrain-company-brain",
+      "type": "Feature",
+      "label": "GBrain company brain (per-user OAuth-scoped slices, leak-tested)",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "Each person on the team gets their own slice of the brain, scoped by login." }
+      ]
+    },
+    {
+      "id": "feature-gbrain-schema-packs",
+      "type": "Feature",
+      "label": "GBrain schema packs (typed page taxonomy, agent-evolvable)",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "gbrain doesn't have a fixed layout. It ships with bundled schema packs and lets you author your own when none fit." }
       ]
     },
     {
@@ -183,6 +279,15 @@
       ]
     },
     {
+      "id": "comp-gbrain",
+      "type": "Competitor",
+      "label": "GBrain (garrytan/gbrain) — personal + company brain for OpenClaw/Hermes",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "Garry Tan (YC CEO) positions GBrain as the production brain behind OpenClaw and Hermes agent deployments." },
+        { "source": "company-brain-yc-rfs.md", "quote": "We need Garry's G-Brain, but for every business in the world." }
+      ]
+    },
+    {
       "id": "insight-four-pillars",
       "type": "Insight",
       "label": "Agent memory splits into four pillars (working/semantic/episodic/procedural)",
@@ -199,6 +304,31 @@
       ]
     },
     {
+      "id": "insight-yc-validates-company-brain",
+      "type": "Insight",
+      "label": "YC RFS validates 'company brain' as a venture category; names GBrain as reference implementation",
+      "provenance": [
+        { "source": "company-brain-yc-rfs.md", "quote": "I think every company in the world is going to need one." }
+      ]
+    },
+    {
+      "id": "insight-gbrain-distribution-lead",
+      "type": "Insight",
+      "label": "GBrain has distribution lead: 23k stars, YC CEO author, native OpenClaw/Hermes wiring",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "23.4k GitHub stars, YC CEO author, named in YC RFS, native OpenClaw/Hermes integration" }
+      ]
+    },
+    {
+      "id": "insight-ingest-philosophy-tension",
+      "type": "Insight",
+      "label": "TeamShared (consent-first) and GBrain (aggressive signal capture) diverge on ingestion philosophy",
+      "provenance": [
+        { "source": "memory-wiki-plan.md", "quote": "No data is captured or pulled without explicit human approval" },
+        { "source": "gbrain-competitor-research.md", "quote": "My agent ingests meetings, emails, tweets, voice calls, and original ideas while I sleep." }
+      ]
+    },
+    {
       "id": "outcome-production-ready",
       "type": "Outcome",
       "label": "Evolve TeamShared from PoC to production for multi-tenant org customers",
@@ -210,56 +340,70 @@
       "id": "assumption-teams-want-shared-memory",
       "type": "Assumption",
       "label": "Teams actually want cross-agent shared memory",
-      "risk": "The entire product thesis. If teams don't want a shared agent brain (vs. per-agent or per-user memory), every roadmap phase is built on sand.",
+      "risk": "The entire product thesis. If teams don't want a shared agent brain, every roadmap phase is built on sand.",
       "provenance": []
     },
     {
       "id": "assumption-buyers-pay-for-memory-infra",
       "type": "Assumption",
       "label": "Orgs will pay for 'shared agent context' as infrastructure",
-      "risk": "Pricing and GTM viability. No willingness-to-pay evidence exists in the corpus; the business model is assumed.",
+      "risk": "Pricing/GTM viability; GBrain is MIT/open-source — willingness-to-pay for TeamShared-hosted infra is unvalidated.",
       "provenance": []
     },
     {
       "id": "assumption-consent-is-adoption-gate",
       "type": "Assumption",
       "label": "Consent-first capture friction is what gates adoption",
-      "risk": "A whole implementation phase. Consent-first is declared a 'hard constraint' / locked decision, but no user or buyer is on record demanding it.",
+      "risk": "GBrain ships aggressive ingestion as the default value prop. If buyers want breadth over consent, TeamShared's constraint is a competitive handicap.",
       "provenance": []
     },
     {
       "id": "assumption-connectors-drive-adoption",
       "type": "Assumption",
       "label": "Slack/GitHub/Notion/etc. connectors are the adoption lever",
-      "risk": "Connector roadmap sequencing. The integration list is asserted; no evidence says these are what makes a team adopt.",
+      "risk": "GBrain already ingests meetings/email/tweets/voice via recipes. Connector roadmap may be table stakes, not differentiation.",
       "provenance": []
     },
     {
       "id": "assumption-enterprise-security-gates-deals",
       "type": "Assumption",
       "label": "SSO/SAML/SOC2 gate the deals worth chasing",
-      "risk": "Phase 3 enterprise investment. If early design partners don't gate on enterprise security, this is sequenced too early.",
+      "risk": "GBrain company-brain tutorial targets 10-50 person teams with OAuth — may win design partners before TeamShared enterprise phase.",
       "provenance": []
     },
     {
       "id": "assumption-shared-brain-default-desired",
       "type": "Assumption",
       "label": "Default cross-agent visibility (shared brain) is what users want",
-      "risk": "The core read-path default. If users expect isolation-by-default, an open 'shared brain' is a trust and security liability, not a feature.",
+      "risk": "GBrain company brain scopes per-login slices. If isolation-by-default wins, TeamShared's open recall default is a trust risk.",
       "provenance": []
     },
     {
       "id": "assumption-humans-engage-wiki",
       "type": "Assumption",
       "label": "Humans will actually browse the memory wiki/console",
-      "risk": "The console + curator + wiki build (a full phase). If humans never visit /app, that's a large investment with no audience.",
+      "risk": "GBrain optimizes for agent-query (`gbrain think`) not human browsing. Wiki investment may not match how winners get used.",
       "provenance": []
     },
     {
       "id": "assumption-distill-quality",
       "type": "Assumption",
       "label": "LLM distillation yields durable, low-noise memory worth recalling",
-      "risk": "Recall quality — the product's core value. If distilled/curated memory is noisy or wrong, retrieval degrades and trust collapses.",
+      "risk": "GBrain's gap analysis and eval CI gates set a higher bar for synthesis quality than raw distillation.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-gbrain-is-primary-competitor",
+      "type": "Assumption",
+      "label": "GBrain is the primary direct competitor (not Pinecone/LangChain category players)",
+      "risk": "Positioning and roadmap sequencing. If buyers self-host GBrain, TeamShared's managed multi-tenant pitch may miss the market.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-synthesis-gap-required",
+      "type": "Assumption",
+      "label": "Synthesis + gap analysis is required to win (not just hybrid recall)",
+      "risk": "Product investment. TeamShared recall returns records; GBrain `think` returns answers. Missing synthesis may feel like a search engine.",
       "provenance": []
     }
   ],
@@ -280,6 +424,24 @@
       "to": "pain-context-rot",
       "provenance": [
         { "source": "plan.md", "quote": "keeping the entire chat history in the model's context window (which leads to \"context rot\")" }
+      ]
+    },
+    {
+      "id": "e-poweruser-amnesiac",
+      "type": "experiences",
+      "from": "segment-power-user-operators",
+      "to": "pain-amnesiac-coding-agents",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "your coding agent stops being amnesiac about everything that isn't code." }
+      ]
+    },
+    {
+      "id": "e-companybrain-fragmented",
+      "type": "experiences",
+      "from": "segment-company-brain-builders",
+      "to": "pain-fragmented-company-knowledge",
+      "provenance": [
+        { "source": "company-brain-yc-rfs.md", "quote": "Some of it is buried in old email accounts, Slack threads, support tickets, and databases." }
       ]
     },
     {
@@ -310,6 +472,15 @@
       ]
     },
     {
+      "id": "e-ycrfs-need-skills",
+      "type": "requests",
+      "from": "segment-company-brain-builders",
+      "to": "need-company-executable-skills",
+      "provenance": [
+        { "source": "company-brain-yc-rfs.md", "quote": "Then AI systems can use that skills file to actually do the work safely and consistently." }
+      ]
+    },
+    {
       "id": "e-jit-supports-recall",
       "type": "supports",
       "from": "insight-jit-retrieval",
@@ -328,6 +499,33 @@
       ]
     },
     {
+      "id": "e-yc-validates-category",
+      "type": "supports",
+      "from": "insight-yc-validates-company-brain",
+      "to": "need-shared-context",
+      "provenance": [
+        { "source": "company-brain-yc-rfs.md", "quote": "The company brain becomes the missing layer between raw company data and reliable AI automation." }
+      ]
+    },
+    {
+      "id": "e-gbrain-think-supports-synthesis",
+      "type": "supports",
+      "from": "feature-gbrain-think",
+      "to": "need-synthesized-answers",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "composes a synthesized answer across the results with explicit citations to the source pages" }
+      ]
+    },
+    {
+      "id": "e-gbrain-think-supports-gap",
+      "type": "supports",
+      "from": "feature-gbrain-think",
+      "to": "need-gap-analysis-in-recall",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "The gap analysis is the differentiator." }
+      ]
+    },
+    {
       "id": "e-cloudflare-competes-curator",
       "type": "competes-with",
       "from": "comp-cloudflare",
@@ -343,6 +541,61 @@
       "to": "feature-curator",
       "provenance": [
         { "source": "plan.md", "quote": "use specialized sub-agents to summarize past interactions into distilled facts and preferences" }
+      ]
+    },
+    {
+      "id": "e-gbrain-competes-mcp",
+      "type": "competes-with",
+      "from": "comp-gbrain",
+      "to": "feature-mcp-native",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "GBrain exposes 30+ tools over MCP (stdio and HTTP)." }
+      ]
+    },
+    {
+      "id": "e-gbrain-competes-wiki",
+      "type": "competes-with",
+      "from": "comp-gbrain",
+      "to": "feature-wiki",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "Your knowledge lives in a regular git repo (your \"brain repo\") as markdown files." }
+      ]
+    },
+    {
+      "id": "e-gbrain-competes-curator",
+      "type": "competes-with",
+      "from": "comp-gbrain",
+      "to": "feature-curator",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "Cron-driven enrichment runs while you sleep: dedup people pages, fix citations, score salience, find contradictions" }
+      ]
+    },
+    {
+      "id": "e-gbrain-competes-multitenant",
+      "type": "competes-with",
+      "from": "comp-gbrain",
+      "to": "feature-multi-tenant",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "federated, multi-user, OAuth-scoped institutional memory for a 10-50 person team." }
+      ]
+    },
+    {
+      "id": "e-gbrain-competes-rbac",
+      "type": "competes-with",
+      "from": "comp-gbrain",
+      "to": "feature-rbac",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "When you query, you only see what you're allowed to see — never another person's notes, never another team's data." }
+      ]
+    },
+    {
+      "id": "e-consent-contradicts-gbrain-ingest",
+      "type": "contradicts",
+      "from": "feature-consent-capture",
+      "to": "feature-gbrain-dream-cycle",
+      "provenance": [
+        { "source": "memory-wiki-plan.md", "quote": "No data is captured or pulled without explicit human approval" },
+        { "source": "gbrain-competitor-research.md", "quote": "Signal detector runs on every message your agent receives." }
       ]
     },
     {
@@ -378,7 +631,7 @@
       "from": "feature-consent-capture",
       "to": "assumption-consent-is-adoption-gate",
       "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "Capture | **Consent-first, client-sanitized, push-only** (see \u00a76)" }
+        { "source": "memory-wiki-plan.md", "quote": "Capture | **Consent-first, client-sanitized, push-only**" }
       ]
     },
     {
@@ -424,6 +677,24 @@
       "to": "assumption-distill-quality",
       "provenance": [
         { "source": "memory-wiki-plan.md", "quote": "Distill prompt extracts only durable knowledge; curator compacts further" }
+      ]
+    },
+    {
+      "id": "a-gbrain-primary-competitor",
+      "type": "assumes",
+      "from": "comp-gbrain",
+      "to": "assumption-gbrain-is-primary-competitor",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "GBrain and TeamShared both target **shared institutional memory for AI agents** in the YC \"company brain\" category." }
+      ]
+    },
+    {
+      "id": "a-synthesis-required",
+      "type": "assumes",
+      "from": "need-synthesized-answers",
+      "to": "assumption-synthesis-gap-required",
+      "provenance": [
+        { "source": "gbrain-competitor-research.md", "quote": "Synthesis moat: gap analysis in answers is a differentiated UX TeamShared curator does not yet mirror explicitly" }
       ]
     }
   ]

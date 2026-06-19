@@ -291,6 +291,14 @@ class Settings(BaseSettings):
     neo4j_url: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "neo4j"
+    autolink_enabled: bool = Field(
+        default=True,
+        description="Extract entity refs on memory write and create graph edges (zero LLM).",
+    )
+    postgres_graph_fallback: bool = Field(
+        default=True,
+        description="Use Postgres memory_graph_edges when Neo4j is unavailable.",
+    )
 
     distill_interval_seconds: int = 30
 

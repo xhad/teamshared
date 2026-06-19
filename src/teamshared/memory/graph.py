@@ -101,19 +101,19 @@ class GraphStore:
         """Return entities related to ``name`` within ``org_id`` up to ``depth`` hops."""
         if self._driver is None:
             raise RuntimeError("GraphStore not connected")
+        hops = max(1, min(int(depth), 4))
         async with self._driver.session() as session:
             result = await session.run(
-                """
-                MATCH (start:Entity {org_id: $org_id, name: $name})-[r:RELATES*1..$depth]-(o:Entity)
+                f"""
+                MATCH (start:Entity {{org_id: $org_id, name: $name}})-[r:RELATES*1..{hops}]-(o:Entity)
                 WHERE o.org_id = $org_id
                 RETURN o.name AS name, [rel in r | rel.predicate] AS predicates,
-                       length(r) AS hops
+                       size(r) AS hops
                 ORDER BY hops ASC
                 LIMIT $limit
                 """,
                 org_id=org_id,
                 name=name,
-                depth=depth,
                 limit=limit,
             )
             rows = [dict(record) async for record in result]

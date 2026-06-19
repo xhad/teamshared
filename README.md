@@ -144,21 +144,36 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | Tool                        | Purpose                                                      |
 | --------------------------- | ------------------------------------------------------------ |
 | `health`                    | Liveness + dependency check                                  |
-| `memory_recall`             | Hybrid search (`repo=` / `github=` softly boost scoped tags) |
+| `version`                   | Server + memory-rule version check                           |
+| `memory_tools_catalog`      | Discover tools by tier/group + `tool_recipe` shapes          |
+| `memory_recall`             | Hybrid search — raw ranked records (`explain=true` for attribution) |
+| `memory_think`              | Synthesized answer with citations + gap analysis (GBrain `think` parity) |
 | `memory_remember`           | Write a fact / preference / event / note (`repo=` / `github=` scope tags) |
 | `memory_assemble_context`   | One parallel, token-budgeted, cited context pack across all pillars + graph |
 | `memory_session_open`       | Start a working-memory session                               |
 | `memory_session_append`     | Append a turn                                                |
 | `memory_session_close`      | Close + enqueue for distillation                             |
+| `memory_session_get`        | Read session metadata and turns                              |
 | `memory_episodes_list`      | Browse the episodic timeline                                 |
-| `memory_procedure_get`      | Fetch a stored procedure                                     |
-| `memory_procedure_set`      | Store a new version of a procedure                           |
-| `memory_procedures_list`    | List all procedures                                          |
+| `memory_approval_status`    | Check pending_approval/quarantined write status              |
+| `memory_procedure_get`      | Fetch a stored playbook (`expand_skills` inlines skills)     |
+| `memory_procedure_set`      | Store a new version of a playbook                            |
+| `memory_procedures_list`      | List playbooks (summaries by default)                        |
+| `memory_playbook_get`       | Alias for `memory_procedure_get`                             |
+| `memory_playbook_set`       | Alias for `memory_procedure_set`                             |
+| `memory_playbooks_list`     | Alias for `memory_procedures_list`                           |
+| `memory_forget_procedure`   | Soft-delete a playbook by name                               |
+| `memory_skill_get`          | Fetch a stored skill (atomic building block)                 |
+| `memory_skill_set`          | Store a new version of a skill                               |
+| `memory_skills_list`        | List skills (summaries by default)                           |
+| `memory_skill_resolve`      | Resolve playbook `tool_recipe.skills` to full records        |
+| `memory_forget_skill`       | Soft-delete a skill by name                                  |
 | `memory_strategic_statement_get` / `_set` | Active or propose vision/mission/purpose      |
 | `memory_strategic_plan_*`   | List/get/propose OKR cycles                                  |
 | `memory_strategic_objective_set` | Propose an objective under a plan                     |
 | `memory_strategic_key_result_set` | Propose a measurable key result                      |
 | `memory_strategic_initiative_set` | Propose a strategic initiative                       |
+| `memory_strategic_entity_get` | Fetch objective, key_result, initiative, plan, or statement |
 | `work_list`                 | List org work items (status, assignee, mine, sort, exclude_closed) |
 | `work_get`                  | Fetch one work item                                          |
 | `work_create`               | Create a task (active immediately for humans and agents)     |
@@ -195,7 +210,7 @@ Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients)
 | `project_section_add`       | Add an ordered section (list group / board column)           |
 | `project_section_list`      | List a project's sections                                    |
 | `project_status_post`       | Post an on-track / at-risk / off-track status update         |
-| `memory_graph_relate`       | Add an explicit (subject)-[predicate]->(object) edge (Neo4j) |
+| `memory_graph_relate`       | Add an explicit edge (`object_entity` = target) (Neo4j)       |
 | `memory_graph_related`      | Walk the graph from an entity, up to N hops (Neo4j)          |
 | `memory_state_get`          | Read token+repo scoped JSON state (client bookkeeping)         |
 | `memory_state_set`          | Write token+repo scoped JSON state                           |

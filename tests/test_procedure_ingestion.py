@@ -55,6 +55,7 @@ def _pipeline() -> tuple[IngestionPipeline, AsyncMock, AsyncMock]:
         procedural,
         MagicMock(),
         MagicMock(),
+        MagicMock(),
     )
     return pipe, procedural, approvals
 

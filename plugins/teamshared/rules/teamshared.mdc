@@ -260,18 +260,35 @@ Browse the episodic timeline (distilled sessions and logged events).
 
 Default: all agents' episodes (shared brain).
 
-### `memory_procedure_get` / `memory_procedure_set` / `memory_procedures_list`
+### `memory_skill_get` / `memory_skill_set` / `memory_skills_list`
 
-Versioned playbooks in Postgres (markdown steps agents read and follow).
+Atomic instruction building blocks (like Cursor `SKILL.md`). **Not** playbooks.
 
 | Tool | When |
 |---|---|
-| `memory_procedure_get` | Fetch by `name`, optional `version` (latest if omitted) |
-| `memory_procedure_set` | Store new version: `name`, `steps_md`, optional `description`, `tool_recipe`, `tags` |
-| `memory_procedures_list` | Discover playbooks; optional `tag`, `limit` |
+| `memory_skill_get` | Fetch by `name`, optional `version` |
+| `memory_skill_set` | Store new version: `name`, `body_md`, optional `description`, `tool_hints`, `tags` |
+| `memory_skills_list` | Discover skills; optional `tag`, `limit`, `offset` |
+| `memory_skill_resolve` | Expand a playbook's `tool_recipe.skills` to full records |
+| `memory_forget_skill` | Soft-delete all active versions of a skill by name |
 
-Each `memory_procedure_set` call creates a new version — use stable names
-(e.g. `ship-pr`, `debug-flaky-test`).
+### `memory_procedure_get` / `memory_procedure_set` / `memory_procedures_list`
+
+Versioned **playbooks** (orchestration). Compose skills via `tool_recipe.skills`.
+Aliases: `memory_playbook_get`, `memory_playbook_set`, `memory_playbooks_list`.
+
+| Tool | When |
+|---|---|
+| `memory_procedure_get` | Fetch by `name`; `expand_skills=true` inlines skill bodies |
+| `memory_procedure_set` | Store new version: `name`, `steps_md`, `tool_recipe`, `tags` |
+| `memory_procedures_list` | Discover playbooks; `include_body=false` (default) for summaries |
+| `memory_skill_resolve` | Resolve `tool_recipe.skills` without fetching the full playbook |
+| `memory_forget_procedure` | Soft-delete all active versions of a playbook |
+
+`tool_recipe` shapes: call `memory_tools_catalog` → `tool_recipe_shapes`.
+
+Each `memory_procedure_set` / `memory_skill_set` call creates a **new version**
+(not upsert). Use stable names (e.g. `ship-pr`, `debug-flaky-test`).
 
 ### `memory_strategic_*`
 
@@ -316,7 +333,7 @@ Explicit entity relationships (Neo4j when enabled; otherwise no-op with
 
 | Tool | Use |
 |---|---|
-| `memory_graph_relate` | `subject`, `predicate`, `object`, optional `weight`, optional `agent` |
+| `memory_graph_relate` | `subject`, `predicate`, `object_entity`, optional `weight`, optional `agent` |
 | `memory_graph_related` | Expand neighbors of `name`, `depth` (1–4), `limit` |
 
 Use for structured facts vector recall would obscure (e.g. `alice` → `works_on` → `teamshared`).
@@ -354,22 +371,31 @@ to write to the local rule file. See **Staying current** above.
 
 ## Quick chooser
 
+**Tiers:** `core` = every session; `extended` = writes/debug; `human` = workflows.
+Call `memory_tools_catalog(scope="memory", tier="core")` when unsure.
+
 | Need | Tool |
 |---|---|
+| Discover tools + `tool_recipe` shapes | `memory_tools_catalog` |
 | Is the server healthy? | `health` |
 | Server/rule version + update check | `version` |
-| Search all memory | `memory_recall` |
+| Search all memory (default includes `skill`) | `memory_recall` |
+| Token-budgeted context pack | `memory_assemble_context` |
 | Store preference/fact/event/note | `memory_remember` |
 | Log every chat + distillation | `memory_session_*` |
+| Read session turns | `memory_session_get` |
+| Check guarded-write approval status | `memory_approval_status` |
 | Browse timeline | `memory_episodes_list` |
-| Versioned how-to | `memory_procedure_set` / `memory_procedure_get` |
-| List playbooks | `memory_procedures_list` |
+| Atomic skill (building block) | `memory_skill_get` / `memory_skill_set` |
+| Playbook (orchestration) | `memory_playbook_get` / `memory_playbook_set` |
+| Resolve playbook → skills | `memory_skill_resolve` |
 | Vision / OKRs / mission | `memory_strategic_*` or `scope=["strategic"]` |
 | Tasks / assignees / blockers | `work_*` or `scope=["work"]` |
 | Task progress notes | `work_comment_add` / `work_comment_list` |
 | Structured relationships | `memory_graph_*` |
 | Client incremental state | `memory_state_get` / `memory_state_set` |
-| Remove a bad memory | `memory_forget` (user-requested only) |
+| Remove semantic/episodic memory | `memory_forget` |
+| Retire playbook or skill | `memory_forget_procedure` / `memory_forget_skill` |
 
 ## Never
 

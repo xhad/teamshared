@@ -129,7 +129,31 @@ async def _run_live(
         else:
             report.fail("memory_procedure_set", str(created))
 
-        print("[5/15] memory_recall (procedural — seeded + new)")
+        skill_name = f"teamshared.smoke-skill-{run_id}"
+        print(f"[4b/17] memory_skill_set ({skill_name})")
+        skill = await _call(
+            client,
+            "memory_skill_set",
+            {
+                "name": skill_name,
+                "description": f"Smoke skill {run_id}",
+                "body_md": f"# Smoke skill\n\nMarker `{marker}`\n",
+                "tags": ["smoke", "ephemeral"],
+            },
+        )
+        if skill and skill.get("name") == skill_name:
+            report.ok("memory_skill_set", f"v{skill.get('version')}")
+        else:
+            report.fail("memory_skill_set", str(skill))
+
+        print("[4c/17] memory_tools_catalog")
+        catalog = await _call(client, "memory_tools_catalog", {"scope": "memory", "tier": "core"})
+        if catalog.get("count", 0) >= 5 and "tool_recipe_shapes" in catalog:
+            report.ok("memory_tools_catalog", f"{catalog.get('count')} tools")
+        else:
+            report.fail("memory_tools_catalog", str(catalog))
+
+        print("[5/17] memory_recall (procedural — seeded + new)")
         proc_recall = await _call(
             client,
             "memory_recall",
@@ -141,8 +165,19 @@ async def _run_live(
         else:
             report.fail("memory_recall/procedural", f"records={proc_recall.get('records')}")
 
+        print("[5b/17] memory_recall (skill pillar)")
+        skill_recall = await _call(
+            client,
+            "memory_recall",
+            {"query": f"smoke skill {marker}", "scope": ["skill"], "k": 10},
+        )
+        if skill_recall.get("counts_by_pillar", {}).get("skill", 0) >= 0:
+            report.ok("memory_recall/skill", str(skill_recall.get("counts_by_pillar")))
+        else:
+            report.fail("memory_recall/skill", str(skill_recall))
+
         # --- semantic / episodic writes ---
-        print(f"[6/15] memory_remember (semantic marker {marker})")
+        print(f"[6/17] memory_remember (semantic marker {marker})")
         remembered = await _call(
             client,
             "memory_remember",
@@ -235,7 +270,18 @@ async def _run_live(
         else:
             report.fail("memory_recall/new-write", f"records={fresh.get('records')}")
 
-        print("[10/15] memory_recall (pre-existing memories)")
+        print(f"[9b/17] memory_think (synthesis + gaps — {marker})")
+        thought = await _call(
+            client,
+            "memory_think",
+            {"query": f"what do we know about {marker}", "k": 8},
+        )
+        if thought.get("answer_md") and "sources_used" in thought:
+            report.ok("memory_think", f"sources={thought.get('sources_used')} gaps={len(thought.get('gaps') or [])}")
+        else:
+            report.fail("memory_think", str(thought))
+
+        print("[10/17] memory_recall (pre-existing memories)")
         existing_ok = True
         existing_details: list[str] = []
         for label, needles in existing_queries:
@@ -263,7 +309,7 @@ async def _run_live(
         related_write = await _call(
             client,
             "memory_graph_relate",
-            {"subject": marker, "predicate": "smoke_tested_by", "object": "teamshared"},
+            {"subject": marker, "predicate": "smoke_tested_by", "object_entity": "teamshared"},
         )
         if related_write.get("ok") is True:
             report.ok("memory_graph_relate", "graph enabled")
@@ -540,7 +586,7 @@ async def _run_in_memory() -> SmokeReport:
             graph = await _call(
                 client,
                 "memory_graph_relate",
-                {"subject": "a", "predicate": "b", "object": "c"},
+                {"subject": "a", "predicate": "b", "object_entity": "c"},
             )
             if graph.get("reason") == "graph_disabled":
                 report.ok("memory_graph_relate", "graph_disabled")

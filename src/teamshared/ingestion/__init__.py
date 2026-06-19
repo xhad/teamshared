@@ -16,6 +16,7 @@ from teamshared.ingestion.pipeline import (
     IngestionRejected,
     IngestionResult,
     ProcedureIngestionResult,
+    SkillIngestionResult,
 )
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "InjectionVerdict",
     "PIIFinding",
     "ProcedureIngestionResult",
+    "SkillIngestionResult",
     "redact_pii",
     "scan_pii",
     "screen_injection",

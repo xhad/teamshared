@@ -152,6 +152,7 @@ class WorkStore:
         sort_dir: WorkSortDir = "desc",
         limit: int = 50,
         project_id: UUID | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         clauses = ["status = %s"]
         params: list[Any] = [approval_status]
@@ -178,6 +179,7 @@ class WorkStore:
             params.append(str(initiative_id))
         order = _order_clause(sort, sort_dir)
         params.append(limit)
+        params.append(offset)
         where = " AND ".join(clauses)
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
@@ -192,7 +194,7 @@ class WorkStore:
                 FROM work_items
                 WHERE {where}
                 ORDER BY {order}
-                LIMIT %s
+                LIMIT %s OFFSET %s
                 """,
                 tuple(params),
             )

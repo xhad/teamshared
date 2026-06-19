@@ -1,0 +1,27 @@
+{
+  "description": "Named-entity retrieval bench — hard-gates title/subject matches.",
+  "cases": [
+    {
+      "name": "subject_exact_match",
+      "query": "alice engineering lead",
+      "candidates": ["mem-alice-fact", "mem-unrelated-1", "mem-unrelated-2"],
+      "expected_ids": ["mem-alice-fact"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "keyword_rescues_vector_miss",
+      "query": "Acme AI series B",
+      "candidates": ["mem-acme-overview", "mem-other-company"],
+      "keyword_only": ["mem-acme-overview"],
+      "expected_ids": ["mem-acme-overview"],
+      "min_hit_at_5": 1.0
+    },
+    {
+      "name": "repo_tag_boost_candidate",
+      "query": "teamshared postgres port",
+      "candidates": ["mem-teamshared-ops", "mem-generic-db"],
+      "expected_ids": ["mem-teamshared-ops"],
+      "min_hit_at_5": 1.0
+    }
+  ]
+}

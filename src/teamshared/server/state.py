@@ -16,6 +16,7 @@ from teamshared.memory.agent_state import AgentStateStore
 from teamshared.memory.audit import AuditLog
 from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.graph import GraphStore
+from teamshared.memory.graph_pg import PostgresGraphStore
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.working import WorkingMemory
 from teamshared.server.services import ProductionServices
@@ -39,7 +40,7 @@ class ServerState:
     services: ProductionServices
     facade: MemoryFacade
     audit: AuditLog
-    graph: GraphStore | None = None
+    graph: GraphStore | PostgresGraphStore | None = None
     audit_db: TenantDb | None = None
 
 

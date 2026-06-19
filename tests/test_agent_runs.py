@@ -202,7 +202,7 @@ def _runner(monkeypatch: pytest.MonkeyPatch, *, output: str, playbook: dict | No
     runner = AgentRunner(
         settings=Settings(_env_file=None),
         runs=runs, facade=facade, work=work,
-        procedural=procedural, ingestion=ingestion,
+        procedural=procedural, skills=MagicMock(), ingestion=ingestion,
     )
 
     async def _fake_principal(org_id, agent_id):

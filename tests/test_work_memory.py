@@ -63,7 +63,7 @@ def _work_pipeline() -> tuple[IngestionPipeline, AsyncMock, AsyncMock]:
     audit = MagicMock()
     audit.record = AsyncMock()
     pipe = IngestionPipeline(
-        MagicMock(), approvals, audit, MagicMock(), MagicMock(), work,
+        MagicMock(), approvals, audit, MagicMock(), MagicMock(), MagicMock(), work,
     )
     return pipe, work, approvals
 
@@ -137,7 +137,7 @@ async def test_approval_decide_work_activate(monkeypatch: pytest.MonkeyPatch) ->
     db = MagicMock()
     conn = MagicMock()
     cur = MagicMock()
-    cur.fetchone = AsyncMock(return_value=(None, None, None, None, str(WORK_ID)))
+    cur.fetchone = AsyncMock(return_value=(None, None, None, None, None, str(WORK_ID)))
     conn.execute = AsyncMock(return_value=cur)
     conn.__aenter__ = AsyncMock(return_value=conn)
     conn.__aexit__ = AsyncMock(return_value=False)
@@ -223,6 +223,7 @@ async def test_work_close_emits_episodic_event() -> None:
         working=MagicMock(),
         agent_state=MagicMock(),
         procedural=MagicMock(),
+        skills=MagicMock(),
         strategic=MagicMock(),
         graph=None,
     )

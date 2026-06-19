@@ -29,6 +29,7 @@ from uuid import UUID
 from teamshared.identity.rbac import Permissions
 from teamshared.logging import get_logger
 from teamshared.memory.audit import AuditLog
+from teamshared.memory.hybrid import merge_vector_keyword
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.types import MemoryRecord, MemoryScope, RecallResult, TimeRange
@@ -40,7 +41,7 @@ from teamshared.telemetry import span
 log = get_logger(__name__)
 
 DEFAULT_SCOPE: tuple[MemoryScope, ...] = (
-    "semantic", "episodic", "procedural", "strategic", "work",
+    "semantic", "episodic", "procedural", "skill", "strategic", "work",
 )
 
 PILLAR_WEIGHTS: dict[str, float] = {
@@ -49,6 +50,7 @@ PILLAR_WEIGHTS: dict[str, float] = {
     "work": 0.92,
     "episodic": 0.9,
     "procedural": 0.85,
+    "skill": 0.88,
     "working": 0.7,
 }
 
@@ -75,6 +77,7 @@ class SecureRetrieval:
         k: int = 8,
         time_range: TimeRange | None = None,
         author_agent_id: UUID | None = None,
+        explain: bool = False,
     ) -> RecallResult:
         # (3) pre-check -- fail closed before any retrieval.
         await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_READ)
@@ -111,7 +114,17 @@ class SecureRetrieval:
                         org_id=ctx.org_id, query=query, scope_filter=scope_filter, k=k,
                         author_agent_id=author_agent_id,
                     )
-                merged = _merge_by_id(vec, kw)
+                merged = merge_vector_keyword(vec, kw)
+                if explain:
+                    vec_ids = {r.id for r in vec}
+                    for r in merged:
+                        meta = dict(r.metadata)
+                        meta["matched_vector"] = r.id in vec_ids
+                        meta["matched_keyword"] = r.id not in vec_ids or r.id in {
+                            x.id for x in kw
+                        }
+                        meta["merge"] = "rrf"
+                        r.metadata = meta
                 counts["semantic_episodic"] = len(merged)
                 records.extend(merged)
             except Exception as exc:
@@ -127,6 +140,15 @@ class SecureRetrieval:
             except Exception as exc:
                 log.warning("retrieval_procedural_failed", error=str(exc))
                 errors["procedural"] = str(exc)
+
+        if want("skill"):
+            try:
+                skill_hits = await self._skill_search(ctx, query, k)
+                counts["skill"] = len(skill_hits)
+                records.extend(skill_hits)
+            except Exception as exc:
+                log.warning("retrieval_skill_failed", error=str(exc))
+                errors["skill"] = str(exc)
 
         if want("strategic"):
             try:
@@ -208,15 +230,46 @@ class SecureRetrieval:
             )
         return out
 
-
-def _merge_by_id(primary: Sequence[MemoryRecord], extra: Sequence[MemoryRecord]) -> list[MemoryRecord]:
-    seen = {r.id for r in primary}
-    merged = list(primary)
-    for r in extra:
-        if r.id not in seen:
-            merged.append(r)
-            seen.add(r.id)
-    return merged
+    async def _skill_search(
+        self, ctx: RequestContext, query: str, k: int
+    ) -> list[MemoryRecord]:
+        async with ctx.db.org(ctx.org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT DISTINCT ON (name)
+                    id, name, version, description, body_md, tags, created_by, created_at,
+                    ts_rank(
+                        to_tsvector('english',
+                            coalesce(name,'') || ' ' || coalesce(description,'') || ' ' || coalesce(body_md,'')),
+                        plainto_tsquery('english', %s)
+                    ) AS rank
+                FROM skills
+                WHERE status = 'active'
+                  AND to_tsvector('english',
+                        coalesce(name,'') || ' ' || coalesce(description,'') || ' ' || coalesce(body_md,''))
+                      @@ plainto_tsquery('english', %s)
+                ORDER BY name, version DESC, rank DESC
+                LIMIT %s
+                """,
+                (query, query, k),
+            )
+            rows = await cur.fetchall()
+        out: list[MemoryRecord] = []
+        for r in rows:
+            out.append(
+                MemoryRecord(
+                    id=str(r[0]),
+                    pillar="skill",
+                    kind="skill",
+                    content=f"{r[1]} (v{r[2]}): {r[3] or (r[4] or '')[:200]}",
+                    agent=r[6],
+                    tags=list(r[5] or []),
+                    score=float(r[8]) if r[8] is not None else None,
+                    created_at=r[7],
+                    org_id=ctx.org_id,
+                )
+            )
+        return out
 
 
 def _rerank(records: list[MemoryRecord], *, k: int) -> list[MemoryRecord]:

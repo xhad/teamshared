@@ -8,8 +8,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-MemoryKind = Literal["fact", "preference", "event", "note", "procedure"]
-MemoryScope = Literal["working", "semantic", "episodic", "procedural", "strategic", "work", "all"]
+MemoryKind = Literal["fact", "preference", "event", "note", "procedure", "skill"]
+MemoryScope = Literal[
+    "working", "semantic", "episodic", "procedural", "skill", "strategic", "work", "all",
+]
 
 StrategicStatementKind = Literal["vision", "mission", "purpose"]
 StrategicEntityType = Literal["statement", "plan", "objective", "key_result", "initiative"]
@@ -18,6 +20,25 @@ StrategicEntityStatus = Literal[
     "pending_approval", "active", "superseded", "rejected", "closed", "quarantined"
 ]
 KeyResultTrackStatus = Literal["on_track", "at_risk", "off_track", "done"]
+
+WorkStatus = Literal["backlog", "todo", "in_progress", "blocked", "done", "cancelled"]
+WorkPriority = Literal["urgent", "high", "normal", "low"]
+WorkItemType = Literal["task", "milestone", "approval"]
+WorkSort = Literal["updated_at", "priority", "work_status", "created_at"]
+WorkSortDir = Literal["asc", "desc"]
+SessionRole = Literal["user", "assistant", "tool", "system"]
+AssigneeType = Literal["user", "agent"]
+AgentRunStatus = Literal["queued", "running", "completed", "failed", "paused", "cancelled"]
+WorkflowRunStatus = Literal["running", "paused", "completed", "failed", "cancelled"]
+ProjectView = Literal["list", "board", "timeline", "calendar"]
+ProjectStatusState = Literal["on_track", "at_risk", "off_track"]
+WorkflowAdvanceDecision = Literal["approve", "reject"]
+ToolCatalogScope = Literal["memory", "work", "all"]
+
+# Default pillars searched when memory_recall scope is omitted.
+DEFAULT_RECALL_SCOPES: tuple[MemoryScope, ...] = (
+    "semantic", "episodic", "procedural", "skill", "strategic", "work", "working",
+)
 
 # First-party memory metadata (migration 004). ``MemoryItemScope`` is the
 # access scope of a stored item; ``MemoryScope`` above is the retrieval pillar.
@@ -103,3 +124,35 @@ class RecallResult(BaseModel):
     records: list[MemoryRecord]
     counts_by_pillar: dict[str, int] = Field(default_factory=dict)
     errors_by_pillar: dict[str, str] = Field(default_factory=dict)
+
+
+ThinkGapKind = Literal["stale", "missing", "contradicts", "low_confidence"]
+
+
+class ThinkCitation(BaseModel):
+    """A source record cited in a synthesized answer."""
+
+    memory_id: str
+    pillar: str
+    snippet: str
+    agent: str | None = None
+
+
+class ThinkGap(BaseModel):
+    """Something the brain does not know or may be wrong about."""
+
+    kind: ThinkGapKind
+    claim: str
+    detail: str | None = None
+    memory_ids: list[str] = Field(default_factory=list)
+
+
+class ThinkResult(BaseModel):
+    """Synthesized answer with citations and explicit gaps (``gbrain think`` parity)."""
+
+    query: str
+    answer_md: str
+    citations: list[ThinkCitation] = Field(default_factory=list)
+    gaps: list[ThinkGap] = Field(default_factory=list)
+    sources_used: int = 0
+    counts_by_pillar: dict[str, int] = Field(default_factory=dict)

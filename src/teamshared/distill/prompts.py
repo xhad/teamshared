@@ -107,3 +107,55 @@ def build_curator_message(
     else:
         lines.append("  (none)")
     return "\n".join(lines)
+
+
+THINKER_SYSTEM = """\
+You answer questions using ONLY the team memory excerpts provided.
+
+You will receive:
+- QUERY: the user's question.
+- SOURCES: numbered memory excerpts, each with [id], pillar, and content.
+
+Produce a single JSON object matching this schema, and NOTHING else:
+
+{
+  "answer_md": "<synthesized answer as GitHub-flavored markdown with inline [n] citation markers>",
+  "citations": [
+    {"index": <1-based source number>, "memory_id": "<id from source>", "claim": "<short cited claim>"}
+  ]
+}
+
+Rules:
+- Write a direct, useful answer — not a list of sources to read.
+- Every factual claim must have at least one [n] citation marker matching a source number.
+- Use ONLY information in SOURCES. Do not invent facts.
+- If sources conflict, state the conflict plainly and prefer the most recent.
+- If sources are insufficient, say what is missing in the answer itself.
+- Keep ``answer_md`` under 800 words. Output VALID JSON, no markdown fences.
+"""
+
+
+def build_thinker_message(
+    query: str,
+    sources: list[dict[str, str]],
+    gaps: list[dict[str, str]],
+) -> str:
+    """Render the per-query user message for :data:`THINKER_SYSTEM`."""
+    lines = [f"QUERY: {query}", "SOURCES:"]
+    if sources:
+        for i, src in enumerate(sources, 1):
+            lines.append(
+                f"  [{i}] id={src.get('id','?')} pillar={src.get('pillar','?')} "
+                f"agent={src.get('agent') or 'unknown'} "
+                f"date={src.get('date') or 'unknown'}"
+            )
+            lines.append(f"      {src.get('content', '')}")
+    else:
+        lines.append("  (no relevant memory found)")
+    lines.append("GAPS (pre-detected; mention in answer if relevant):")
+    if gaps:
+        for g in gaps:
+            lines.append(f"  - ({g.get('kind','?')}) {g.get('claim','')}")
+    else:
+        lines.append("  (none)")
+    return "\n".join(lines)

@@ -39,6 +39,7 @@ def _facade(*, override: Principal) -> MemoryFacade:
         working=MagicMock(),
         agent_state=MagicMock(),
         procedural=MagicMock(),
+        skills=MagicMock(),
         strategic=MagicMock(),
         graph=None,
     )

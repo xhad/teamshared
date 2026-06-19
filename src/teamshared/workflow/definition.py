@@ -51,6 +51,8 @@ class Stage:
     agent: str | None = None
     playbook: str | None = None
     playbook_version: int | None = None
+    skill: str | None = None
+    skill_version: int | None = None
     title: str | None = None
     on_done: str | None = None
     on_approve: str | None = None
@@ -137,6 +139,12 @@ def _parse_stage(raw: Any, index: int) -> Stage:
             f"stage '{stage_id}' playbook_version must be an integer"
         )
 
+    skill_version_raw = raw.get("skill_version")
+    if skill_version_raw is not None and not isinstance(skill_version_raw, int):
+        raise WorkflowDefinitionError(
+            f"stage '{stage_id}' skill_version must be an integer"
+        )
+
     return Stage(
         id=stage_id,
         owner=owner,
@@ -144,6 +152,8 @@ def _parse_stage(raw: Any, index: int) -> Stage:
         agent=_as_str(raw.get("agent"), "agent"),
         playbook=_as_str(raw.get("playbook"), "playbook"),
         playbook_version=version_raw,
+        skill=_as_str(raw.get("skill"), "skill"),
+        skill_version=skill_version_raw,
         title=_as_str(raw.get("title"), "title"),
         on_done=_as_str(raw.get("on_done"), "on_done"),
         on_approve=_as_str(raw.get("on_approve"), "on_approve"),

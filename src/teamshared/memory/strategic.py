@@ -451,6 +451,73 @@ class OrgStrategicStore:
             )
         return out
 
+    async def get_objective(self, org_id: UUID, objective_id: UUID) -> dict[str, Any] | None:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT id, org_id, plan_id, title, description_md, owner_type, owner_id,
+                       sort_order, status, created_by, created_at
+                FROM strategic_objectives WHERE id = %s
+                """,
+                (str(objective_id),),
+            )
+            row = await cur.fetchone()
+        return _objective_row(row) if row else None
+
+    async def get_key_result(self, org_id: UUID, key_result_id: UUID) -> dict[str, Any] | None:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT id, org_id, objective_id, title, description_md,
+                       metric_target, metric_current, metric_unit, track_status,
+                       status, created_by, created_at
+                FROM strategic_key_results WHERE id = %s
+                """,
+                (str(key_result_id),),
+            )
+            row = await cur.fetchone()
+        return _key_result_row(row) if row else None
+
+    async def get_initiative(self, org_id: UUID, initiative_id: UUID) -> dict[str, Any] | None:
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT id, org_id, plan_id, objective_id, key_result_id, title,
+                       description_md, status, created_by, created_at
+                FROM strategic_initiatives WHERE id = %s
+                """,
+                (str(initiative_id),),
+            )
+            row = await cur.fetchone()
+        return _initiative_row(row) if row else None
+
+    async def get_entity(
+        self,
+        org_id: UUID,
+        entity_type: StrategicEntityType,
+        entity_id: UUID,
+    ) -> dict[str, Any] | None:
+        if entity_type == "objective":
+            return await self.get_objective(org_id, entity_id)
+        if entity_type == "key_result":
+            return await self.get_key_result(org_id, entity_id)
+        if entity_type == "initiative":
+            return await self.get_initiative(org_id, entity_id)
+        if entity_type == "plan":
+            return await self.get_plan(org_id, entity_id)
+        if entity_type == "statement":
+            async with self.db.org(org_id) as conn:
+                cur = await conn.execute(
+                    """
+                    SELECT id, org_id, kind, content_md, version, status, created_by, created_at
+                    FROM strategic_statements WHERE id = %s
+                    """,
+                    (str(entity_id),),
+                )
+                row = await cur.fetchone()
+            return _statement_row(row) if row else None
+        return None
+
     async def stats(self, org_id: UUID) -> dict[str, int]:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(

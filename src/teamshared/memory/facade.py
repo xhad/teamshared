@@ -29,9 +29,20 @@ from teamshared.memory.context_assembler import (
 )
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import OrgProceduralStore
+from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.strategic import OrgStrategicStore
-from teamshared.memory.types import MemoryKind, MemoryRecord, MemoryScope, RecallResult, TimeRange
+from teamshared.memory.types import (
+    DEFAULT_RECALL_SCOPES,
+    MemoryKind,
+    MemoryRecord,
+    MemoryScope,
+    RecallResult,
+    ThinkResult,
+    TimeRange,
+)
+from teamshared.memory.think import synthesize
+from teamshared.playbook.compose import expand_playbook_skills, parse_skill_refs
 from teamshared.memory.working import WorkingMemory
 from teamshared.server.services import ProductionServices
 from teamshared.workflow.definition import parse_definition
@@ -44,6 +55,7 @@ _PILLAR_WEIGHTS: dict[str, float] = {
     "work": 0.92,
     "episodic": 0.9,
     "procedural": 0.85,
+    "skill": 0.88,
     "working": 0.7,
 }
 
@@ -63,6 +75,7 @@ class MemoryFacade:
         working: WorkingMemory,
         agent_state: AgentStateStore,
         procedural: OrgProceduralStore,
+        skills: OrgSkillStore,
         strategic: OrgStrategicStore,
         graph: GraphStore | None,
     ) -> None:
@@ -71,6 +84,7 @@ class MemoryFacade:
         self.working = working
         self.agent_state = agent_state
         self.procedural = procedural
+        self.skills = skills
         self.strategic = strategic
         self.graph = graph
 
@@ -179,11 +193,13 @@ class MemoryFacade:
         caller_agent: str | None,
         repo: str | None = None,
         github: str | None = None,
+        verbose: bool = True,
+        explain: bool = False,
     ) -> RecallResult:
         ctx = self._ctx(principal)
         durable = [
             s for s in scopes
-            if s in {"semantic", "episodic", "procedural", "strategic", "work", "all"}
+            if s in {"semantic", "episodic", "procedural", "skill", "strategic", "work", "all"}
         ]
         author_id: UUID | None = None
         if agent_filter:
@@ -195,7 +211,7 @@ class MemoryFacade:
         if durable:
             result = await self.services.retrieval().search(
                 ctx, query, scopes=durable, k=k, time_range=time_range,
-                author_agent_id=author_id,
+                author_agent_id=author_id, explain=explain,
             )
         records = list(result.records)
         counts = dict(result.counts_by_pillar)
@@ -208,9 +224,59 @@ class MemoryFacade:
             except Exception as exc:
                 errors["working"] = str(exc)
         ranked = _rerank(records, k=k, repo=repo, github=github)
+        if not verbose:
+            ranked = [_summarize_record(r) for r in ranked]
         return RecallResult(
             query=query, records=ranked, counts_by_pillar=counts, errors_by_pillar=errors
         )
+
+    async def think(
+        self,
+        principal: Principal,
+        *,
+        query: str,
+        k: int = 12,
+        repo: str | None = None,
+        github: str | None = None,
+        token_budget: int = DEFAULT_TOKEN_BUDGET,
+        caller_agent: str | None = None,
+    ) -> ThinkResult:
+        """Synthesized answer with citations and gap analysis (GBrain ``think`` parity)."""
+        recall = await self.recall(
+            principal,
+            query=query,
+            scopes=list(DEFAULT_RECALL_SCOPES),
+            k=k,
+            time_range=None,
+            agent_filter=None,
+            caller_agent=caller_agent,
+            repo=repo,
+            github=github,
+            verbose=True,
+        )
+        result = await synthesize(
+            self.services.settings,
+            query=query,
+            records=recall.records,
+            token_budget=token_budget,
+        )
+        result.counts_by_pillar = {**recall.counts_by_pillar, **result.counts_by_pillar}
+        ctx = self._ctx(principal)
+        await self.services.audit.record(
+            agent=ctx.principal.attribution,
+            action="memory.think",
+            org_id=ctx.org_id,
+            actor_type=ctx.principal.type,
+            actor_id=ctx.principal.id,
+            resource_type="memory",
+            payload={
+                "query": query,
+                "sources_used": result.sources_used,
+                "gaps": len(result.gaps),
+            },
+            request_id=ctx.request_id,
+        )
+        return result
 
     async def assemble_context(
         self,
@@ -272,9 +338,58 @@ class MemoryFacade:
         return {"memory_id": memory_id, "deleted": ok}
 
     async def procedure_get(
-        self, principal: Principal, *, name: str, version: int | None
+        self,
+        principal: Principal,
+        *,
+        name: str,
+        version: int | None,
+        expand_skills: bool = False,
     ) -> dict[str, Any] | None:
-        return await self.procedural.get_procedure(principal.org_id, name, version)
+        proc = await self.procedural.get_procedure(principal.org_id, name, version)
+        if proc is None:
+            return None
+        if expand_skills:
+            steps = await expand_playbook_skills(
+                self.skills,
+                principal.org_id,
+                steps_md=proc.get("steps_md") or "",
+                tool_recipe=proc.get("tool_recipe"),
+            )
+            proc = dict(proc)
+            proc["steps_md"] = steps
+            proc["content_md"] = steps
+        else:
+            proc = dict(proc)
+            proc["content_md"] = proc.get("steps_md")
+        return proc
+
+    async def skill_resolve(
+        self,
+        principal: Principal,
+        *,
+        playbook_name: str,
+        playbook_version: int | None = None,
+    ) -> dict[str, Any] | None:
+        proc = await self.procedural.get_procedure(
+            principal.org_id, playbook_name, playbook_version
+        )
+        if proc is None:
+            return None
+        refs = parse_skill_refs(proc.get("tool_recipe"))
+        resolved: list[dict[str, Any]] = []
+        for ref in refs:
+            skill = await self.skills.get_skill(principal.org_id, ref.name, ref.version)
+            resolved.append({
+                "name": ref.name,
+                "version": ref.version,
+                "available": skill is not None,
+                "skill": skill,
+            })
+        return {
+            "playbook": proc["name"],
+            "playbook_version": proc.get("version"),
+            "skills": resolved,
+        }
 
     async def procedure_set(
         self,
@@ -310,10 +425,152 @@ class MemoryFacade:
         return proc
 
     async def procedures_list(
-        self, principal: Principal, *, tag: str | None, limit: int
+        self,
+        principal: Principal,
+        *,
+        tag: str | None,
+        limit: int,
+        offset: int = 0,
+        include_body: bool = False,
     ) -> dict[str, Any]:
-        rows = await self.procedural.list_procedures(principal.org_id, tag=tag, limit=limit)
-        return {"count": len(rows), "procedures": rows}
+        rows = await self.procedural.list_procedures(
+            principal.org_id, tag=tag, limit=limit, offset=offset,
+        )
+        items = [_summarize_playbook(r, include_body=include_body) for r in rows]
+        next_offset = offset + len(rows) if len(rows) == limit else None
+        return {"count": len(items), "procedures": items, "next_offset": next_offset}
+
+    async def skill_get(
+        self, principal: Principal, *, name: str, version: int | None
+    ) -> dict[str, Any] | None:
+        skill = await self.skills.get_skill(principal.org_id, name, version)
+        if skill is None:
+            return None
+        out = dict(skill)
+        out["content_md"] = out.get("body_md")
+        return out
+
+    async def skill_get(
+        self, principal: Principal, *, name: str, version: int | None
+    ) -> dict[str, Any] | None:
+        return await self.skills.get_skill(principal.org_id, name, version)
+
+    async def skill_set(
+        self,
+        principal: Principal,
+        *,
+        name: str,
+        body_md: str,
+        description: str | None,
+        tool_hints: dict[str, Any] | None,
+        tags: list[str] | None,
+        agent_override: str | None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal,
+            agent_override,
+            operation="skill_set",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        ctx.request_id = caller_ctx.request_id
+        result = await self.services.ingestion().ingest_skill(
+            ctx,
+            name=name,
+            body_md=body_md,
+            description=description,
+            tool_hints=tool_hints,
+            tags=tags,
+            agent=writer.display or writer.attribution,
+        )
+        row = dict(result.skill)
+        row["status"] = result.status
+        return row
+
+    async def skills_list(
+        self,
+        principal: Principal,
+        *,
+        tag: str | None,
+        limit: int,
+        offset: int = 0,
+        include_body: bool = False,
+    ) -> dict[str, Any]:
+        rows = await self.skills.list_skills(
+            principal.org_id, tag=tag, limit=limit, offset=offset,
+        )
+        items = [_summarize_skill(r, include_body=include_body) for r in rows]
+        next_offset = offset + len(rows) if len(rows) == limit else None
+        return {"count": len(items), "skills": items, "next_offset": next_offset}
+
+    async def forget_procedure(
+        self, principal: Principal, *, name: str, reason: str
+    ) -> dict[str, Any]:
+        count = await self.procedural.forget_by_name(principal.org_id, name)
+        await self.services.audit.record(
+            agent=principal.attribution,
+            action="procedure.forget",
+            org_id=principal.org_id,
+            actor_type=principal.type,
+            actor_id=principal.id,
+            resource_type="procedure",
+            payload={"name": name, "reason": reason, "versions": count},
+        )
+        return {"name": name, "deleted_versions": count, "reason": reason}
+
+    async def forget_skill(
+        self, principal: Principal, *, name: str, reason: str
+    ) -> dict[str, Any]:
+        count = await self.skills.forget_by_name(principal.org_id, name)
+        await self.services.audit.record(
+            agent=principal.attribution,
+            action="skill.forget",
+            org_id=principal.org_id,
+            actor_type=principal.type,
+            actor_id=principal.id,
+            resource_type="skill",
+            payload={"name": name, "reason": reason, "versions": count},
+        )
+        return {"name": name, "deleted_versions": count, "reason": reason}
+
+    async def approval_status(
+        self,
+        principal: Principal,
+        *,
+        memory_id: str | None = None,
+        procedure_id: str | None = None,
+        skill_id: str | None = None,
+    ) -> dict[str, Any]:
+        row = await self.services.approvals.lookup_write_status(
+            principal.org_id,
+            memory_id=UUID(memory_id) if memory_id else None,
+            procedure_id=int(procedure_id) if procedure_id else None,
+            skill_id=int(skill_id) if skill_id else None,
+        )
+        return row or {"status": "not_found"}
+
+    async def session_get(
+        self, principal: Principal, *, session_id: str
+    ) -> dict[str, Any]:
+        await self._require_session_owner(principal, session_id)
+        meta = await self.working.get_metadata(principal.org_id, session_id)
+        turns = await self.working.get_turns(principal.org_id, session_id)
+        return {"session_id": session_id, "metadata": meta, "turns": turns, "turn_count": len(turns)}
+
+    async def strategic_entity_get(
+        self,
+        principal: Principal,
+        *,
+        entity_type: str,
+        entity_id: str,
+    ) -> dict[str, Any] | None:
+        row = await self.strategic.get_entity(
+            principal.org_id,
+            entity_type,  # type: ignore[arg-type]
+            UUID(entity_id),
+        )
+        return _serialize_strategic(row) if row else None
 
     async def strategic_statement_get(
         self, principal: Principal, *, kind: str
@@ -580,6 +837,7 @@ class MemoryFacade:
         sort_dir: str,
         limit: int,
         project_id: str | None = None,
+        offset: int = 0,
     ) -> dict[str, Any]:
         ctx = self._ctx(principal)
         await ctx.authorizer.require(ctx.principal, Permissions.WORK_READ)
@@ -610,10 +868,13 @@ class MemoryFacade:
             sort_dir=sort_dir,  # type: ignore[arg-type]
             limit=limit,
             project_id=UUID(project_id) if project_id else None,
+            offset=offset,
         )
+        next_offset = offset + len(rows) if len(rows) == limit else None
         return {
             "count": len(rows),
             "items": [_serialize_work(r) for r in rows],
+            "next_offset": next_offset,
         }
 
     async def work_get(self, principal: Principal, *, work_id: str) -> dict[str, Any] | None:
@@ -934,18 +1195,33 @@ class MemoryFacade:
         agent: str,
         playbook_name: str | None = None,
         playbook_version: int | None = None,
+        skill_name: str | None = None,
+        skill_version: int | None = None,
         model: str | None = None,
     ) -> dict[str, Any]:
         ctx = self._ctx(principal)
         agent_id = await self.services.work.resolve_agent_id(principal.org_id, agent)
         if agent_id is None:
             raise ValueError(f"No active agent named {agent!r} in this org.")
+        effective_playbook = playbook_name
+        effective_version = playbook_version
+        if skill_name and not playbook_name:
+            skill = await self.skills.get_skill(
+                principal.org_id, skill_name, skill_version
+            )
+            if skill is None:
+                raise ValueError(
+                    f"Skill {skill_name!r} is unavailable (missing, pending approval, "
+                    "or quarantined)."
+                )
+            effective_playbook = f"__skill__:{skill_name}"
+            effective_version = skill.get("version")
         run = await self.services.agent_run_service().assign_and_run(
             ctx,
             work_id=UUID(work_id),
             agent_id=agent_id,
-            playbook_name=playbook_name,
-            playbook_version=playbook_version,
+            playbook_name=effective_playbook,
+            playbook_version=effective_version,
             model=model,
         )
         return cast("dict[str, Any]", _serialize_deep(run))
@@ -1475,6 +1751,8 @@ def _render_workflow_steps_md(
         bits = [f"**{stage.get('id')}** ({owner}"]
         if stage.get("playbook"):
             bits.append(f", playbook `{stage['playbook']}`")
+        if stage.get("skill"):
+            bits.append(f", skill `{stage['skill']}`")
         if stage.get("agent"):
             bits.append(f", agent `{stage['agent']}`")
         bits.append(")")
@@ -1592,3 +1870,26 @@ def _rerank(
         return score
 
     return sorted(records, key=score_of, reverse=True)[:k]
+
+
+def _summarize_record(record: MemoryRecord) -> MemoryRecord:
+    snippet = (record.content or "")[:200]
+    return record.model_copy(update={"content": snippet, "metadata": {}})
+
+
+def _summarize_playbook(row: dict[str, Any], *, include_body: bool) -> dict[str, Any]:
+    out = dict(row)
+    if not include_body:
+        out.pop("steps_md", None)
+        if out.get("tool_recipe") is not None:
+            out["tool_recipe"] = {"skills": (out.get("tool_recipe") or {}).get("skills")}
+    out["content_md"] = row.get("steps_md") if include_body else (row.get("description") or "")
+    return out
+
+
+def _summarize_skill(row: dict[str, Any], *, include_body: bool) -> dict[str, Any]:
+    out = dict(row)
+    if not include_body:
+        out.pop("body_md", None)
+    out["content_md"] = row.get("body_md") if include_body else (row.get("description") or "")
+    return out

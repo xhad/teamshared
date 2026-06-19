@@ -22,7 +22,9 @@ from teamshared.ingestion.injection import InjectionVerdict, screen_injection
 from teamshared.ingestion.pii import PIIFinding, has_hard_secret, redact_pii, scan_pii
 from teamshared.logging import get_logger
 from teamshared.memory.audit import AuditLog
+from teamshared.memory.autolink import GraphBackend, apply_autolink
 from teamshared.memory.procedural import OrgProceduralStore
+from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.types import MemoryItemScope, MemoryKind, MemorySource, Visibility
@@ -55,6 +57,14 @@ class ProcedureIngestionResult:
 
 
 @dataclass
+class SkillIngestionResult:
+    skill: dict[str, Any]
+    status: str               # active | pending_approval | quarantined
+    pii: list[PIIFinding] = field(default_factory=list)
+    injection: InjectionVerdict | None = None
+
+
+@dataclass
 class StrategicIngestionResult:
     entity: dict[str, Any]
     entity_type: str
@@ -78,15 +88,21 @@ class IngestionPipeline:
         approvals: ApprovalQueue,
         audit: AuditLog,
         procedural: OrgProceduralStore,
+        skills: OrgSkillStore,
         strategic: OrgStrategicStore,
         work: WorkStore,
+        graph: GraphBackend | None = None,
+        autolink_enabled: bool = True,
     ) -> None:
         self.vector_store = vector_store
         self.approvals = approvals
         self.audit = audit
         self.procedural = procedural
+        self.skills = skills
         self.strategic = strategic
         self.work = work
+        self.graph = graph
+        self.autolink_enabled = autolink_enabled
 
     async def ingest(
         self,
@@ -173,6 +189,15 @@ class IngestionPipeline:
             resource_type="memory", target_id=str(memory_id), request_id=ctx.request_id,
             after={"status": status, "scope": scope, "visibility": visibility, "source": source},
         )
+        if status == "active" and self.graph is not None and self.autolink_enabled:
+            await apply_autolink(
+                self.graph,
+                content=safe_content,
+                subject=subject,
+                tags=tags,
+                org_id=str(ctx.org_id),
+                agent=ctx.principal.attribution,
+            )
         return IngestionResult(
             memory_id=memory_id, status=status, pii=findings, injection=verdict
         )
@@ -261,6 +286,92 @@ class IngestionPipeline:
         )
         return ProcedureIngestionResult(
             procedure=row, status=status, pii=findings, injection=verdict
+        )
+
+    async def ingest_skill(
+        self,
+        ctx: RequestContext,
+        *,
+        name: str,
+        body_md: str,
+        description: str | None = None,
+        tool_hints: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        agent: str,
+        source: MemorySource = "agent",
+    ) -> SkillIngestionResult:
+        """Guarded write path for versioned agent skills."""
+        await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
+
+        parts = [name, description or "", body_md]
+        if tool_hints is not None:
+            parts.append(json.dumps(tool_hints, sort_keys=True))
+        screen_text = "\n".join(parts)
+
+        findings = scan_pii(screen_text)
+        if has_hard_secret(findings):
+            await self.audit.record(
+                agent=ctx.principal.attribution,
+                action="skill.rejected_secret",
+                org_id=ctx.org_id,
+                actor_type=ctx.principal.type,
+                actor_id=ctx.principal.id,
+                resource_type="skill",
+                request_id=ctx.request_id,
+                payload={"name": name, "findings": [f.kind for f in findings]},
+            )
+            raise IngestionRejected("content contains a hard secret and was not stored")
+
+        if findings:
+            safe_body = redact_pii(body_md)
+            safe_description = redact_pii(description) if description else None
+        else:
+            safe_body = body_md
+            safe_description = description
+
+        verdict = screen_injection(screen_text)
+        needs_review = source in {"connector", "extraction"}
+        if verdict.quarantine:
+            status = "quarantined"
+        elif needs_review:
+            status = "pending_approval"
+        else:
+            status = "active"
+
+        row = await self.skills.set_skill(
+            ctx.org_id,
+            name,
+            safe_body,
+            agent=agent,
+            tool_hints=tool_hints,
+            tags=tags,
+            description=safe_description,
+            status=status,
+        )
+
+        if status != "active":
+            reason = "prompt_injection_suspected" if verdict.quarantine else "review_required"
+            METRICS.ingestion_quarantined.inc(status=status, reason=reason)
+            await self.approvals.enqueue_skill(
+                ctx.org_id,
+                int(row["id"]),
+                reason=reason,
+                requested_by=ctx.principal.id,
+            )
+
+        await self.audit.record(
+            agent=ctx.principal.attribution,
+            action="skill.create",
+            org_id=ctx.org_id,
+            actor_type=ctx.principal.type,
+            actor_id=ctx.principal.id,
+            resource_type="skill",
+            target_id=str(row["id"]),
+            request_id=ctx.request_id,
+            after={"name": name, "version": row["version"], "status": status, "source": source},
+        )
+        return SkillIngestionResult(
+            skill=row, status=status, pii=findings, injection=verdict
         )
 
     async def ingest_strategic_statement(

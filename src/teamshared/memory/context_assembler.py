@@ -35,7 +35,7 @@ log = get_logger(__name__)
 # Pillars assembled by default. ``working`` is caller-scoped (handled by recall
 # when ``caller_agent`` is set); the rest are the shared-brain durable pillars.
 DEFAULT_ASSEMBLE_SCOPES: tuple[MemoryScope, ...] = (
-    "semantic", "episodic", "procedural", "strategic", "work", "working",
+    "semantic", "episodic", "procedural", "skill", "strategic", "work", "working",
 )
 
 # Roughly 4 chars per token -- good enough to budget a pack without a tokenizer.
@@ -47,7 +47,7 @@ _SNIPPET_MAX_CHARS = 240
 
 # Render order: instructions (procedural) first, then facts, then state.
 _PILLAR_ORDER: tuple[str, ...] = (
-    "procedural", "semantic", "graph", "strategic", "work", "episodic", "working",
+    "procedural", "skill", "semantic", "graph", "strategic", "work", "episodic", "working",
 )
 
 

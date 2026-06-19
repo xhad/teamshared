@@ -332,25 +332,35 @@ class OrgProceduralStore:
         return dict(zip(fields, row, strict=False))
 
     async def list_procedures(
-        self, org_id: UUID, *, tag: str | None = None, limit: int = 100
+        self, org_id: UUID, *, tag: str | None = None, limit: int = 100, offset: int = 0
     ) -> list[dict[str, Any]]:
         async with self.db.org(org_id) as conn:
             if tag:
                 cur = await conn.execute(
                     f"SELECT DISTINCT ON (name) {self._SELECT}, status FROM procedures "
                     f"WHERE status = 'active' AND %s = ANY(tags) "
-                    f"ORDER BY name, version DESC LIMIT %s",
-                    (tag, limit),
+                    f"ORDER BY name, version DESC LIMIT %s OFFSET %s",
+                    (tag, limit, offset),
                 )
             else:
                 cur = await conn.execute(
                     f"SELECT DISTINCT ON (name) {self._SELECT}, status FROM procedures "
-                    f"WHERE status = 'active' ORDER BY name, version DESC LIMIT %s",
-                    (limit,),
+                    f"WHERE status = 'active' ORDER BY name, version DESC LIMIT %s OFFSET %s",
+                    (limit, offset),
                 )
             rows = await cur.fetchall()
         fields = (*self._FIELDS, "status")
         return [dict(zip(fields, r, strict=False)) for r in rows]
+
+    async def forget_by_name(self, org_id: UUID, name: str) -> int:
+        """Soft-delete every active version of a playbook name."""
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                "UPDATE procedures SET status = 'soft_deleted' "
+                "WHERE name = %s AND status = 'active'",
+                (name,),
+            )
+            return cur.rowcount or 0
 
     async def stats(self, org_id: UUID) -> dict[str, Any]:
         async with self.db.org(org_id) as conn:

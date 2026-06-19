@@ -29,7 +29,29 @@ from teamshared.clients.agent_setup import (
 )
 from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
-from teamshared.memory.types import MemoryKind, MemoryScope, StrategicStatementKind, TimeRange
+from teamshared.memory.types import (
+    AgentRunStatus,
+    AssigneeType,
+    DEFAULT_RECALL_SCOPES,
+    KeyResultTrackStatus,
+    MemoryKind,
+    MemoryScope,
+    ProjectStatusState,
+    ProjectView,
+    SessionRole,
+    StrategicEntityType,
+    StrategicStatementKind,
+    TimeRange,
+    ToolCatalogScope,
+    WorkItemType,
+    WorkPriority,
+    WorkSort,
+    WorkSortDir,
+    WorkflowAdvanceDecision,
+    WorkflowRunStatus,
+    WorkStatus,
+)
+from teamshared.server.tool_catalog import list_tools
 from teamshared.server.health import check_components
 from teamshared.server.state import get_state
 
@@ -116,11 +138,29 @@ def register_tools(mcp: Any) -> None:
         return out
 
     @mcp.tool()
+    async def memory_tools_catalog(
+        scope: Annotated[
+            ToolCatalogScope,
+            Field(description="memory, work, or all tool groups"),
+        ] = "all",
+        tier: Annotated[
+            str | None,
+            Field(description="Optional filter: core, extended, or human"),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Discover teamshared MCP tools by tier and group with copy-paste examples.
+
+        Call once per session when unsure which tool to use. Also returns
+        ``tool_recipe_shapes`` documenting playbook ``tool_recipe`` JSON.
+        """
+        return list_tools(scope=scope, tier=tier)
+
+    @mcp.tool()
     async def memory_remember(
         content: Annotated[str, Field(description="Free-form text to remember")],
         kind: Annotated[
             MemoryKind,
-            Field(description="What kind of memory: fact, preference, event, note, procedure"),
+            Field(description="fact, preference, event, or note (not procedure/skill)"),
         ] = "note",
         subject: Annotated[
             str | None,
@@ -161,13 +201,22 @@ def register_tools(mcp: Any) -> None:
         """Write a durable memory into the caller's org.
 
         ``fact`` / ``preference`` / ``note`` -> semantic pillar. ``event`` ->
-        episodic. ``procedure`` -> rejected; use ``memory_procedure_set``.
+        episodic. ``procedure`` / ``skill`` -> rejected; use ``memory_procedure_set`` /
+        ``memory_skill_set``.
         Routed through the guarded ingestion pipeline (dedup, PII, injection
         screening, approval routing) under RLS. When ``repo`` / ``github`` are
         given the memory is tagged ``repo:<slug>`` / ``github:<owner>/<repo>``.
         """
         if kind == "procedure":
-            raise ValueError("Use memory_procedure_set for procedures, not memory_remember.")
+            raise ValueError(
+                'Use memory_procedure_set (or memory_playbook_set), not memory_remember. '
+                'Example: memory_procedure_set(name="ship-pr", steps_md="# Ship\\n1. ...")'
+            )
+        if kind == "skill":
+            raise ValueError(
+                'Use memory_skill_set, not memory_remember. '
+                'Example: memory_skill_set(name="ship-pr", body_md="# Ship PR\\n1. ...")'
+            )
         state = get_state()
         principal = await _principal()
         return await state.facade.remember(
@@ -219,18 +268,26 @@ def register_tools(mcp: Any) -> None:
                 ),
             ),
         ] = None,
+        verbose: Annotated[
+            bool,
+            Field(description="When false, truncate record content and omit metadata"),
+        ] = True,
+        explain: Annotated[
+            bool,
+            Field(description="When true, include per-record retrieval attribution in metadata"),
+        ] = False,
     ) -> dict[str, Any]:
-        """Hybrid recall across the five memory pillars, within the caller's org.
+        """Hybrid recall across memory pillars within the caller's org.
 
-        Default behaviour is the shared brain on durable pillars (semantic,
-        episodic, procedural, strategic): callers see every agent's writes in
-        their org. Pass ``agent="cursor"`` to narrow to one agent's history.
-        Pass ``repo`` and/or ``github`` to softly boost workspace- or
-        GitHub-scoped memories. Working memory is always caller-scoped.
+        Default scope searches semantic, episodic, procedural, skill, strategic,
+        work, and working pillars (shared brain on durable pillars). Pass
+        ``agent="cursor"`` to narrow semantic/episodic to one agent's writes.
+        Pass ``repo`` / ``github`` to softly boost scoped memories.
+        Use ``explain=true`` to see vector/keyword/RRF attribution per record.
         """
         state = get_state()
         principal = await _principal()
-        scopes = scope or ["semantic", "episodic", "procedural", "strategic", "work", "working"]
+        scopes = scope or list(DEFAULT_RECALL_SCOPES)
         result = await state.facade.recall(
             principal,
             query=query,
@@ -241,6 +298,49 @@ def register_tools(mcp: Any) -> None:
             caller_agent=_caller_agent(),
             repo=repo,
             github=github,
+            verbose=verbose,
+            explain=explain,
+        )
+        return result.model_dump(mode="json")
+
+    @mcp.tool()
+    async def memory_think(
+        query: Annotated[
+            str,
+            Field(description="Question to answer from team memory"),
+        ],
+        k: Annotated[
+            int, Field(ge=1, le=50, description="Max source records to retrieve before synthesis")
+        ] = 12,
+        repo: Annotated[
+            str | None,
+            Field(description="Workspace slug; boosts repo-scoped memories in retrieval"),
+        ] = None,
+        github: Annotated[
+            str | None,
+            Field(description="GitHub owner/repo; boosts github-tagged memories"),
+        ] = None,
+        token_budget: Annotated[
+            int,
+            Field(ge=200, le=8000, description="Approx token budget for source packing"),
+        ] = 1500,
+    ) -> dict[str, Any]:
+        """Synthesized answer with citations and gap analysis (GBrain ``think`` parity).
+
+        Runs hybrid recall, then composes a cited prose answer plus explicit
+        gaps (stale, missing, contradicts, low confidence). Prefer this over
+        ``memory_recall`` when you need an answer, not a list of records.
+        """
+        state = get_state()
+        principal = await _principal()
+        result = await state.facade.think(
+            principal,
+            query=query,
+            k=k,
+            repo=repo,
+            github=github,
+            token_budget=token_budget,
+            caller_agent=_caller_agent(),
         )
         return result.model_dump(mode="json")
 
@@ -286,8 +386,8 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, Any]:
         """Assemble one token-budgeted, cited context pack for a task.
 
-        Fans recall across the durable pillars (semantic, episodic, procedural,
-        strategic, work, working) and the optional graph in parallel through the
+        Fans recall across semantic, episodic, procedural, skill, strategic,
+        work, working pillars and the optional graph in parallel through the
         secure retrieval path, then ranks and packs the result into a single
         sectioned markdown bundle. Use this once at the start of a task instead
         of issuing serial ``memory_recall`` / ``memory_procedure_get`` /
@@ -350,7 +450,7 @@ def register_tools(mcp: Any) -> None:
     @mcp.tool()
     async def memory_session_append(
         session_id: Annotated[str, Field(description="Session id from memory_session_open")],
-        role: Annotated[str, Field(description="user | assistant | tool | system")],
+        role: Annotated[SessionRole, Field(description="user, assistant, tool, or system")],
         content: Annotated[str, Field(description="Turn content")],
     ) -> dict[str, int]:
         """Append a turn to a working-memory session."""
@@ -380,6 +480,15 @@ def register_tools(mcp: Any) -> None:
         )
 
     @mcp.tool()
+    async def memory_session_get(
+        session_id: Annotated[str, Field(description="Session id from memory_session_open")],
+    ) -> dict[str, Any]:
+        """Read session metadata and turns (debug, handoff, append failure recovery)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.session_get(principal, session_id=session_id)
+
+    @mcp.tool()
     async def memory_episodes_list(
         topic: Annotated[str | None, Field(description="Substring match on topic")] = None,
         since: Annotated[datetime | None, Field(description="Lower bound on created_at")] = None,
@@ -404,19 +513,38 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def memory_procedure_get(
-        name: Annotated[str, Field(description="Procedure name")],
+        name: Annotated[str, Field(description="Playbook (procedure) name")],
         version: Annotated[
             int | None,
-            Field(description="Specific version (default: latest)"),
+            Field(description="Specific version (default: latest active)"),
         ] = None,
+        expand_skills: Annotated[
+            bool,
+            Field(description="Inline composed skill bodies into steps_md"),
+        ] = False,
     ) -> dict[str, Any] | None:
-        """Fetch a stored procedure by name (and optionally version)."""
+        """Fetch a stored playbook by name (and optionally version).
+
+        Set ``expand_skills=true`` to resolve ``tool_recipe.skills`` into the
+        returned ``steps_md`` / ``content_md`` (same as the background runner).
+        """
         state = get_state()
         principal = await _principal()
-        proc = await state.facade.procedure_get(principal, name=name, version=version)
+        proc = await state.facade.procedure_get(
+            principal, name=name, version=version, expand_skills=expand_skills,
+        )
         if proc is None:
             return None
         return _serialize_procedure(proc)
+
+    @mcp.tool(name="memory_playbook_get")
+    async def memory_playbook_get(
+        name: Annotated[str, Field(description="Playbook name")],
+        version: Annotated[int | None, Field(description="Specific version")] = None,
+        expand_skills: Annotated[bool, Field(description="Inline composed skills")] = False,
+    ) -> dict[str, Any] | None:
+        """Alias for ``memory_procedure_get``."""
+        return await memory_procedure_get(name=name, version=version, expand_skills=expand_skills)
 
     @mcp.tool()
     async def memory_procedure_set(
@@ -427,7 +555,14 @@ def register_tools(mcp: Any) -> None:
         ] = None,
         tool_recipe: Annotated[
             dict[str, Any] | None,
-            Field(description="Optional structured execution recipe (tool calls, params)"),
+            Field(
+                description=(
+                    "Optional recipe. Skills compose: "
+                    '{"skills": ["lint", "ship-pr"], "loop": {"max_iterations": 3}}. '
+                    "Workflow: {\"stages\": [...], \"loop\": {...}}. "
+                    "See memory_tools_catalog for full shapes."
+                ),
+            ),
         ] = None,
         tags: Annotated[list[str] | None, Field(description="Tags for discovery")] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
@@ -452,19 +587,171 @@ def register_tools(mcp: Any) -> None:
         )
         return _serialize_procedure(proc)
 
+    @mcp.tool(name="memory_playbook_set")
+    async def memory_playbook_set(
+        name: Annotated[str, Field(description="Playbook name (stable id)")],
+        steps_md: Annotated[str, Field(description="Markdown body the agent will read")],
+        description: Annotated[str | None, Field(description="One-line summary")] = None,
+        tool_recipe: Annotated[dict[str, Any] | None, Field(description="Skills or workflow graph")] = None,
+        tags: Annotated[list[str] | None, Field(description="Tags for discovery")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Alias for ``memory_procedure_set``."""
+        return await memory_procedure_set(
+            name=name, steps_md=steps_md, description=description,
+            tool_recipe=tool_recipe, tags=tags, agent=agent,
+        )
+
     @mcp.tool()
     async def memory_procedures_list(
         tag: Annotated[str | None, Field(description="Filter by tag")] = None,
         limit: Annotated[int, Field(ge=1, le=200)] = 50,
+        offset: Annotated[int, Field(ge=0, description="Pagination offset")] = 0,
+        include_body: Annotated[
+            bool, Field(description="Include full steps_md and tool_recipe")
+        ] = False,
     ) -> dict[str, Any]:
-        """List all procedures (latest version of each) in the caller's org."""
+        """List playbooks (latest version of each) in the caller's org."""
         state = get_state()
         principal = await _principal()
-        result = await state.facade.procedures_list(principal, tag=tag, limit=limit)
+        result = await state.facade.procedures_list(
+            principal, tag=tag, limit=limit, offset=offset, include_body=include_body,
+        )
         return {
             "count": result["count"],
             "procedures": [_serialize_procedure(r) for r in result["procedures"]],
+            "next_offset": result.get("next_offset"),
         }
+
+    @mcp.tool(name="memory_playbooks_list")
+    async def memory_playbooks_list(
+        tag: Annotated[str | None, Field(description="Filter by tag")] = None,
+        limit: Annotated[int, Field(ge=1, le=200)] = 50,
+        offset: Annotated[int, Field(ge=0)] = 0,
+        include_body: Annotated[bool, Field(description="Include full steps_md")] = False,
+    ) -> dict[str, Any]:
+        """Alias for ``memory_procedures_list``."""
+        return await memory_procedures_list(
+            tag=tag, limit=limit, offset=offset, include_body=include_body,
+        )
+
+    @mcp.tool()
+    async def memory_forget_procedure(
+        name: Annotated[str, Field(description="Playbook name to soft-delete")],
+        reason: Annotated[str, Field(description="Audit reason; required")],
+    ) -> dict[str, Any]:
+        """Soft-delete all active versions of a playbook by name."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.forget_procedure(principal, name=name, reason=reason)
+
+    @mcp.tool()
+    async def memory_skill_get(
+        name: Annotated[str, Field(description="Skill name")],
+        version: Annotated[
+            int | None,
+            Field(description="Specific version (default: latest active)"),
+        ] = None,
+    ) -> dict[str, Any] | None:
+        """Fetch a stored skill by name (and optionally version)."""
+        state = get_state()
+        principal = await _principal()
+        skill = await state.facade.skill_get(principal, name=name, version=version)
+        if skill is None:
+            return None
+        return _serialize_skill(skill)
+
+    @mcp.tool()
+    async def memory_skill_set(
+        name: Annotated[str, Field(description="Skill name (stable id)")],
+        body_md: Annotated[str, Field(description="Markdown body the agent will read")],
+        description: Annotated[
+            str | None, Field(description="One-line summary")
+        ] = None,
+        tool_hints: Annotated[
+            dict[str, Any] | None,
+            Field(description="Optional structured hints (preferred MCP tools, params)"),
+        ] = None,
+        tags: Annotated[list[str] | None, Field(description="Tags for discovery")] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Insert a new version of a skill. Each call creates a new version.
+
+        Skills are atomic instruction building blocks. Playbooks compose them via
+        ``tool_recipe.skills`` on ``memory_procedure_set``. Routed through the
+        guarded ingestion pipeline; only ``active`` skills are visible to recall
+        and ``memory_skill_get``.
+        """
+        state = get_state()
+        principal = await _principal()
+        row = await state.facade.skill_set(
+            principal,
+            name=name,
+            body_md=body_md,
+            description=description,
+            tool_hints=tool_hints,
+            tags=tags,
+            agent_override=agent,
+        )
+        return _serialize_skill(row)
+
+    @mcp.tool()
+    async def memory_skills_list(
+        tag: Annotated[str | None, Field(description="Filter by tag")] = None,
+        limit: Annotated[int, Field(ge=1, le=200)] = 50,
+        offset: Annotated[int, Field(ge=0, description="Pagination offset")] = 0,
+        include_body: Annotated[
+            bool, Field(description="Include full body_md and tool_hints")
+        ] = False,
+    ) -> dict[str, Any]:
+        """List all skills (latest version of each) in the caller's org."""
+        state = get_state()
+        principal = await _principal()
+        result = await state.facade.skills_list(
+            principal, tag=tag, limit=limit, offset=offset, include_body=include_body,
+        )
+        return {
+            "count": result["count"],
+            "skills": [_serialize_skill(r) for r in result["skills"]],
+            "next_offset": result.get("next_offset"),
+        }
+
+    @mcp.tool()
+    async def memory_skill_resolve(
+        playbook_name: Annotated[str, Field(description="Playbook whose skills to resolve")],
+        playbook_version: Annotated[
+            int | None, Field(description="Pin playbook version (default latest)")
+        ] = None,
+    ) -> dict[str, Any] | None:
+        """Resolve a playbook's ``tool_recipe.skills`` refs to full skill records."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.skill_resolve(
+            principal, playbook_name=playbook_name, playbook_version=playbook_version,
+        )
+
+    @mcp.tool()
+    async def memory_forget_skill(
+        name: Annotated[str, Field(description="Skill name to soft-delete")],
+        reason: Annotated[str, Field(description="Audit reason; required")],
+    ) -> dict[str, Any]:
+        """Soft-delete all active versions of a skill by name."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.forget_skill(principal, name=name, reason=reason)
+
+    @mcp.tool()
+    async def memory_approval_status(
+        memory_id: Annotated[str | None, Field(description="memory_items UUID")] = None,
+        procedure_id: Annotated[str | None, Field(description="Procedure row id from a write")] = None,
+        skill_id: Annotated[str | None, Field(description="Skill row id from a write")] = None,
+    ) -> dict[str, Any]:
+        """Check approval-queue status for a guarded write (pending/quarantined)."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.approval_status(
+            principal, memory_id=memory_id, procedure_id=procedure_id, skill_id=skill_id,
+        )
 
     @mcp.tool()
     async def memory_strategic_statement_get(
@@ -568,7 +855,7 @@ def register_tools(mcp: Any) -> None:
         metric_current: Annotated[float | None, Field(description="Current value")] = None,
         metric_unit: Annotated[str | None, Field(description="Unit, e.g. %")] = None,
         track_status: Annotated[
-            str, Field(description="on_track, at_risk, off_track, or done")
+            KeyResultTrackStatus, Field(description="on_track, at_risk, off_track, or done")
         ] = "on_track",
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
@@ -610,10 +897,25 @@ def register_tools(mcp: Any) -> None:
         )
 
     @mcp.tool()
+    async def memory_strategic_entity_get(
+        entity_type: Annotated[
+            StrategicEntityType,
+            Field(description="objective, key_result, initiative, plan, or statement"),
+        ],
+        entity_id: Annotated[str, Field(description="Entity UUID")],
+    ) -> dict[str, Any] | None:
+        """Fetch one strategic entity by type and id."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.strategic_entity_get(
+            principal, entity_type=entity_type, entity_id=entity_id,
+        )
+
+    @mcp.tool()
     async def work_list(
         work_status: Annotated[
-            str | None,
-            Field(description="Filter: backlog, todo, in_progress, blocked, done, cancelled"),
+            WorkStatus | None,
+            Field(description="Filter by workflow status"),
         ] = None,
         assignee: Annotated[
             str | None,
@@ -631,12 +933,10 @@ def register_tools(mcp: Any) -> None:
             bool,
             Field(description="Omit done/cancelled items (default true)"),
         ] = True,
-        sort: Annotated[
-            str,
-            Field(description="Sort key: updated_at, priority, work_status, created_at"),
-        ] = "updated_at",
-        sort_dir: Annotated[str, Field(description="asc or desc")] = "desc",
+        sort: Annotated[WorkSort, Field(description="Sort key")] = "updated_at",
+        sort_dir: Annotated[WorkSortDir, Field(description="asc or desc")] = "desc",
         limit: Annotated[int, Field(ge=1, le=200)] = 50,
+        offset: Annotated[int, Field(ge=0, description="Pagination offset")] = 0,
     ) -> dict[str, Any]:
         """List org work items (shared task queue for humans and agents)."""
         state = get_state()
@@ -651,6 +951,7 @@ def register_tools(mcp: Any) -> None:
             sort=sort,
             sort_dir=sort_dir,
             limit=limit,
+            offset=offset,
         )
 
     @mcp.tool()
@@ -667,11 +968,9 @@ def register_tools(mcp: Any) -> None:
         title: Annotated[str, Field(description="Short task title")],
         description_md: Annotated[str | None, Field(description="Optional markdown body")] = None,
         tags: Annotated[list[str] | None, Field(description="Optional tags")] = None,
-        work_status: Annotated[
-            str, Field(description="backlog, todo, in_progress, blocked, done, cancelled")
-        ] = "todo",
-        priority: Annotated[str, Field(description="urgent, high, normal, low")] = "normal",
-        assignee_type: Annotated[str | None, Field(description="user or agent")] = None,
+        work_status: Annotated[WorkStatus, Field(description="Initial workflow status")] = "todo",
+        priority: Annotated[WorkPriority, Field(description="urgent, high, normal, low")] = "normal",
+        assignee_type: Annotated[AssigneeType | None, Field(description="user or agent")] = None,
         assignee_id: Annotated[str | None, Field(description="Assignee UUID")] = None,
         assignee_agent: Annotated[
             str | None, Field(description="Assign to agent by name (e.g. cursor)")
@@ -695,9 +994,7 @@ def register_tools(mcp: Any) -> None:
             str | None, Field(description="Parent task UUID (makes this a subtask)")
         ] = None,
         start_at: Annotated[datetime | None, Field(description="Optional start datetime")] = None,
-        item_type: Annotated[
-            str, Field(description="task, milestone, or approval")
-        ] = "task",
+        item_type: Annotated[WorkItemType, Field(description="task, milestone, or approval")] = "task",
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
         """Create a work item. Created active immediately for humans and agents (no approval queue)."""
@@ -732,10 +1029,10 @@ def register_tools(mcp: Any) -> None:
         title: Annotated[str | None, Field(description="New title")] = None,
         description_md: Annotated[str | None, Field(description="New markdown body")] = None,
         tags: Annotated[list[str] | None, Field(description="Replace tags")] = None,
-        work_status: Annotated[str | None, Field(description="Workflow status")] = None,
-        priority: Annotated[str | None, Field(description="urgent, high, normal, low")] = None,
+        work_status: Annotated[WorkStatus | None, Field(description="Workflow status")] = None,
+        priority: Annotated[WorkPriority | None, Field(description="urgent, high, normal, low")] = None,
         blocked_reason: Annotated[str | None, Field(description="Why blocked (when status=blocked)")] = None,
-        assignee_type: Annotated[str | None, Field(description="user or agent")] = None,
+        assignee_type: Annotated[AssigneeType | None, Field(description="user or agent")] = None,
         assignee_id: Annotated[str | None, Field(description="Assignee UUID")] = None,
         assignee_agent: Annotated[str | None, Field(description="Assign to agent by name")] = None,
         assignee_email: Annotated[str | None, Field(description="Assign to user by email")] = None,
@@ -743,9 +1040,12 @@ def register_tools(mcp: Any) -> None:
         due_at: Annotated[datetime | None, Field(description="Due datetime")] = None,
         repo: Annotated[str | None, Field(description="Workspace slug tag")] = None,
         github: Annotated[str | None, Field(description="owner/repo tag")] = None,
+        parent_id: Annotated[
+            str | None, Field(description="Parent task UUID (reparent as subtask)")
+        ] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any] | None:
-        """Update a work item (status, assignee, priority, etc.). No re-approval required."""
+        """Update a work item (status, assignee, priority, parent, etc.)."""
         state = get_state()
         principal = await _principal()
         return await state.facade.work_update(
@@ -766,14 +1066,13 @@ def register_tools(mcp: Any) -> None:
             repo=repo,
             github=github,
             agent_override=agent,
+            parent_id=parent_id,
         )
 
     @mcp.tool()
     async def work_close(
         work_id: Annotated[str, Field(description="Work item UUID")],
-        work_status: Annotated[
-            str, Field(description="done or cancelled")
-        ] = "done",
+        work_status: Annotated[WorkStatus, Field(description="done or cancelled")] = "done",
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any] | None:
         """Mark a work item done or cancelled."""
@@ -821,6 +1120,11 @@ def register_tools(mcp: Any) -> None:
         playbook_version: Annotated[
             int | None, Field(description="Pin a specific playbook version")
         ] = None,
+        skill_name: Annotated[
+            str | None,
+            Field(description="Run using a single skill instead of a playbook"),
+        ] = None,
+        skill_version: Annotated[int | None, Field(description="Pin skill version")] = None,
         model: Annotated[
             str | None,
             Field(description="Override model for this run (defaults to server LLM model)"),
@@ -842,15 +1146,14 @@ def register_tools(mcp: Any) -> None:
             agent=agent,
             playbook_name=playbook_name,
             playbook_version=playbook_version,
+            skill_name=skill_name,
+            skill_version=skill_version,
             model=model,
         )
 
     @mcp.tool()
     async def agent_run_list(
-        status: Annotated[
-            str | None,
-            Field(description="Filter: queued, running, completed, failed, paused, cancelled"),
-        ] = None,
+        status: Annotated[AgentRunStatus | None, Field(description="Filter by run status")] = None,
         limit: Annotated[int, Field(ge=1, le=200)] = 50,
     ) -> dict[str, Any]:
         """List background agent runs in the caller's org (newest first)."""
@@ -895,9 +1198,9 @@ def register_tools(mcp: Any) -> None:
             Field(
                 description=(
                     "Ordered stage graph. Each stage: {id, owner: agent|human, "
-                    "agent?, playbook?, playbook_version?, advance: auto|manual, "
-                    "on_done?, on_approve?, on_reject?}. Routing targets are a "
-                    "stage id or a terminal sentinel ('done'|'cancelled')."
+                    "agent?, playbook?, playbook_version?, skill?, skill_version?, "
+                    "advance: auto|manual, on_done?, on_approve?, on_reject?}. "
+                    "Routing targets are a stage id or terminal ('done'|'cancelled')."
                 )
             ),
         ],
@@ -981,7 +1284,7 @@ def register_tools(mcp: Any) -> None:
     @mcp.tool()
     async def workflow_advance(
         step_id: Annotated[str, Field(description="Workflow step run UUID awaiting a human")],
-        decision: Annotated[str, Field(description="approve or reject")],
+        decision: Annotated[WorkflowAdvanceDecision, Field(description="approve or reject")],
     ) -> dict[str, Any]:
         """Resolve a human-gated workflow step, routing the item forward or back."""
         state = get_state()
@@ -1001,10 +1304,7 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def workflow_list(
-        status: Annotated[
-            str | None,
-            Field(description="Filter: running, paused, completed, failed, cancelled"),
-        ] = None,
+        status: Annotated[WorkflowRunStatus | None, Field(description="Filter by run status")] = None,
         limit: Annotated[int, Field(ge=1, le=200)] = 50,
     ) -> dict[str, Any]:
         """List workflow runs in the caller's org (newest first)."""
@@ -1026,9 +1326,7 @@ def register_tools(mcp: Any) -> None:
         name: Annotated[str, Field(description="Project name")],
         description_md: Annotated[str | None, Field(description="Optional markdown body")] = None,
         team_id: Annotated[str | None, Field(description="Owning team UUID")] = None,
-        default_view: Annotated[
-            str, Field(description="list, board, timeline, or calendar")
-        ] = "list",
+        default_view: Annotated[ProjectView, Field(description="list, board, timeline, or calendar")] = "list",
         color: Annotated[str | None, Field(description="Optional color label")] = None,
         owner_email: Annotated[str | None, Field(description="Owner member email")] = None,
         initiative_id: Annotated[
@@ -1150,7 +1448,7 @@ def register_tools(mcp: Any) -> None:
     async def project_status_post(
         project_id: Annotated[str, Field(description="Project UUID")],
         state_label: Annotated[
-            str, Field(description="on_track, at_risk, or off_track")
+            ProjectStatusState, Field(description="on_track, at_risk, or off_track")
         ] = "on_track",
         body_md: Annotated[str | None, Field(description="Status note (markdown ok)")] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
@@ -1291,7 +1589,7 @@ def register_tools(mcp: Any) -> None:
     async def memory_graph_relate(
         subject: Annotated[str, Field(description="Source entity")],
         predicate: Annotated[str, Field(description="Relationship label, e.g. 'works_on'")],
-        object: Annotated[str, Field(description="Target entity")],
+        object_entity: Annotated[str, Field(description="Target entity")],
         weight: Annotated[float, Field(ge=0.0, le=10.0)] = 1.0,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
@@ -1307,7 +1605,7 @@ def register_tools(mcp: Any) -> None:
             principal,
             subject=subject,
             predicate=predicate,
-            object_=object,
+            object_=object_entity,
             weight=weight,
             agent_override=agent,
         )
@@ -1378,6 +1676,17 @@ def register_tools(mcp: Any) -> None:
 
 def _serialize_procedure(proc: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = dict(proc)
+    if "id" in out:
+        out["id"] = str(out["id"])
+    if "org_id" in out and out["org_id"] is not None:
+        out["org_id"] = str(out["org_id"])
+    if isinstance(out.get("created_at"), datetime):
+        out["created_at"] = out["created_at"].isoformat()
+    return out
+
+
+def _serialize_skill(skill: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = dict(skill)
     if "id" in out:
         out["id"] = str(out["id"])
     if "org_id" in out and out["org_id"] is not None:

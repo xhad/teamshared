@@ -21,7 +21,7 @@ from fastmcp import Client, FastMCP
 
 from teamshared.identity.principal import Principal
 from teamshared.memory.context_assembler import ContextPack
-from teamshared.memory.types import RecallResult
+from teamshared.memory.types import RecallResult, ThinkResult
 from teamshared.server.state import ServerState, clear_state, set_state
 from teamshared.server.tools import register_tools
 
@@ -86,6 +86,14 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
             counts_by_pillar={"semantic_episodic": 1},
         )
     )
+    facade.think = AsyncMock(
+        return_value=ThinkResult(
+            query="q",
+            answer_md="Synthesized answer.",
+            sources_used=1,
+            counts_by_pillar={"semantic": 1},
+        )
+    )
     facade.session_open = AsyncMock(return_value={"session_id": "sess_abc", "agent": "anonymous"})
     facade.session_append = AsyncMock(return_value={"turn_count": 1})
     facade.session_close = AsyncMock(
@@ -107,7 +115,29 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
         }
     )
     facade.procedure_get = AsyncMock(return_value=None)
-    facade.procedures_list = AsyncMock(return_value={"count": 0, "procedures": []})
+    facade.procedures_list = AsyncMock(return_value={"count": 0, "procedures": [], "next_offset": None})
+    facade.skill_set = AsyncMock(
+        return_value={
+            "id": 1,
+            "name": "ship-pr",
+            "version": 1,
+            "description": "x",
+            "body_md": "do thing",
+            "tool_hints": None,
+            "tags": [],
+            "created_by": "anonymous",
+            "created_at": None,
+            "status": "active",
+        }
+    )
+    facade.skill_get = AsyncMock(return_value=None)
+    facade.skills_list = AsyncMock(return_value={"count": 0, "skills": [], "next_offset": None})
+    facade.skill_resolve = AsyncMock(return_value=None)
+    facade.forget_procedure = AsyncMock(return_value={"name": "p", "deleted_versions": 1})
+    facade.forget_skill = AsyncMock(return_value={"name": "s", "deleted_versions": 1})
+    facade.approval_status = AsyncMock(return_value={"status": "active"})
+    facade.session_get = AsyncMock(return_value={"session_id": "sess_abc", "turns": []})
+    facade.strategic_entity_get = AsyncMock(return_value=None)
     facade.strategic_statement_get = AsyncMock(return_value=None)
     facade.strategic_statement_set = AsyncMock(
         return_value={"kind": "vision", "status": "pending_approval", "id": "s1"}
@@ -118,7 +148,7 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.forget = AsyncMock(return_value={"memory_id": "m1", "deleted": True})
     facade.state_get = AsyncMock(return_value={"repo": "r", "key": "k", "value": None})
     facade.state_set = AsyncMock(return_value={"repo": "r", "key": "k", "stored": True})
-    facade.work_list = AsyncMock(return_value={"count": 0, "items": []})
+    facade.work_list = AsyncMock(return_value={"count": 0, "items": [], "next_offset": None})
     facade.work_get = AsyncMock(return_value=None)
     facade.work_create = AsyncMock(return_value={"id": "w1", "title": "t", "approval_status": "active"})
     facade.work_update = AsyncMock(return_value={"id": "w1", "work_status": "in_progress"})
@@ -288,6 +318,16 @@ async def test_memory_recall_returns_result_shape(
     assert "semantic" in data["counts_by_pillar"]
 
 
+async def test_memory_think_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    data = await _call(mcp, "memory_think", query="what about Alice", k=8)
+    assert data["answer_md"] == "Synthesized answer."
+    state.facade.think.assert_awaited_once()
+    assert state.facade.think.await_args.kwargs["query"] == "what about Alice"
+
+
 async def test_memory_assemble_context_delegates_to_facade(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:
@@ -356,7 +396,9 @@ async def test_memory_graph_tools_noop_when_disabled(
     assert related["records"] == []
     assert related["reason"] == "graph_disabled"
 
-    relate = await _call(mcp, "memory_graph_relate", subject="a", predicate="r", object="b")
+    relate = await _call(
+        mcp, "memory_graph_relate", subject="a", predicate="r", object_entity="b"
+    )
     assert relate["ok"] is False
     assert relate["reason"] == "graph_disabled"
 
@@ -373,6 +415,30 @@ async def test_memory_procedure_set_and_get(
 
     result = await _call(mcp, "memory_procedure_get", name="p1")
     assert result is None or result == {}
+
+
+async def test_memory_skill_set_and_get(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    stored = await _call(
+        mcp, "memory_skill_set", name="ship-pr", body_md="open PR", description="x"
+    )
+    assert stored["version"] == 1
+    state.facade.skill_set.assert_awaited_once()
+
+    result = await _call(mcp, "memory_skill_get", name="ship-pr")
+    assert result is None or result == {}
+
+
+async def test_memory_remember_rejects_skill_kind(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, _ = mcp_with_mocks
+    from fastmcp.exceptions import ToolError
+
+    with pytest.raises((ToolError, ValueError)):
+        await _call(mcp, "memory_remember", content="x", kind="skill")
 
 
 async def test_memory_strategic_statement_get(

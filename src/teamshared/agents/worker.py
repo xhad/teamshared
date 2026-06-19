@@ -30,6 +30,7 @@ from teamshared.memory.agent_state import AgentStateStore
 from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.graph import GraphStore
 from teamshared.memory.procedural import OrgProceduralStore
+from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.working import WorkingMemory
 from teamshared.queue.streams import StreamQueue
@@ -102,6 +103,7 @@ class AgentWorker:
             working=self.working,
             agent_state=AgentStateStore(self.working.client),
             procedural=OrgProceduralStore(self.services.tenant_db),
+            skills=OrgSkillStore(self.services.tenant_db),
             strategic=OrgStrategicStore(self.services.tenant_db),
             graph=self._graph,
         )
@@ -117,6 +119,7 @@ class AgentWorker:
             facade=facade,
             work=self.services.work,
             procedural=self.services.procedural,
+            skills=self.services.skills,
             ingestion=self.services.ingestion(),
             orchestrator=orchestrator,
         )

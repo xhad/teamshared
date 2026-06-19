@@ -8,6 +8,7 @@ MCP tool surface during the migration.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from teamshared.admin.service import AdminService
 from teamshared.agents.runs import AgentRunStore
@@ -27,6 +28,7 @@ from teamshared.memory.audit import AuditLog
 from teamshared.memory.embeddings import Embedder, build_embedder
 from teamshared.memory.hnsw_cache import HnswCache
 from teamshared.memory.procedural import OrgProceduralStore
+from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.projects import ProjectStore
 from teamshared.memory.retrieval import SecureRetrieval
 from teamshared.memory.service import MemoryService
@@ -52,6 +54,7 @@ class ProductionServices:
     embedder: Embedder
     vector_store: VectorStore
     procedural: OrgProceduralStore
+    skills: OrgSkillStore
     strategic: OrgStrategicStore
     work: WorkStore
     agent_runs: AgentRunStore
@@ -68,6 +71,7 @@ class ProductionServices:
     connectors: ConnectorService
     admin: AdminService
     consent: ConsentStore
+    graph: Any = None  # GraphStore | PostgresGraphStore | None — set at app startup
 
     def authorizer(self) -> Authorizer:
         """Fresh authorizer per request (its permission cache is request-scoped)."""
@@ -82,8 +86,11 @@ class ProductionServices:
             self.approvals,
             self.audit,
             self.procedural,
+            self.skills,
             self.strategic,
             self.work,
+            graph=self.graph,
+            autolink_enabled=self.settings.autolink_enabled,
         )
 
     def agent_run_service(self) -> AgentRunService:
@@ -128,6 +135,7 @@ def make_services(settings: Settings) -> ProductionServices:
         embedder=embedder,
         vector_store=vector_store,
         procedural=OrgProceduralStore(tenant_db),
+        skills=OrgSkillStore(tenant_db),
         strategic=OrgStrategicStore(tenant_db),
         work=WorkStore(tenant_db),
         agent_runs=AgentRunStore(tenant_db),
@@ -149,6 +157,7 @@ def make_services(settings: Settings) -> ProductionServices:
                 approvals,
                 audit,
                 OrgProceduralStore(tenant_db),
+                OrgSkillStore(tenant_db),
                 OrgStrategicStore(tenant_db),
                 WorkStore(tenant_db),
             ),

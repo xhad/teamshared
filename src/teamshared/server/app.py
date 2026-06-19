@@ -34,7 +34,9 @@ from teamshared.logging import configure_logging, get_logger
 from teamshared.memory.agent_state import AgentStateStore
 from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.graph import GraphStore
+from teamshared.memory.graph_pg import PostgresGraphStore
 from teamshared.memory.procedural import OrgProceduralStore
+from teamshared.memory.skills import OrgSkillStore
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.metrics import METRICS
 from teamshared.server.api import build_api_app
@@ -134,11 +136,12 @@ async def _init_state(
         log.warning("tenant_db_connect_failed", error=str(exc))
 
     procedural = OrgProceduralStore(services.tenant_db)
+    skills = OrgSkillStore(services.tenant_db)
     strategic = OrgStrategicStore(services.tenant_db)
     agent_state = AgentStateStore(working.client)
     audit = services.audit
 
-    graph: GraphStore | None = None
+    graph: GraphStore | PostgresGraphStore | None = None
     graph_candidate = GraphStore(
         settings.neo4j_url, settings.neo4j_user, settings.neo4j_password
     )
@@ -147,6 +150,17 @@ async def _init_state(
         graph = graph_candidate
     except Exception as exc:
         log.warning("graph_store_connect_failed", error=str(exc))
+        if settings.postgres_graph_fallback:
+            pg_graph = PostgresGraphStore(services.tenant_db)
+            try:
+                await pg_graph.connect()
+                graph = pg_graph
+                services.graph = pg_graph
+            except Exception as pg_exc:
+                log.warning("postgres_graph_connect_failed", error=str(pg_exc))
+
+    if graph is not None:
+        services.graph = graph
 
     facade = MemoryFacade(
         services=services,
@@ -154,6 +168,7 @@ async def _init_state(
         working=working,
         agent_state=agent_state,
         procedural=procedural,
+        skills=skills,
         strategic=strategic,
         graph=graph,
     )
