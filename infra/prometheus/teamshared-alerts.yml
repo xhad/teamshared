@@ -69,19 +69,8 @@ groups:
             Distill/curate jobs failed HMAC verification. Align
             TEAMSHARED_JOB_SIGNING_SECRET across server and workers.
 
-  - name: teamshared_capture_consent
+  - name: teamshared_capture
     rules:
-      - alert: TeamsharedCaptureConsentDeniedSpike
-        expr: rate(teamshared_consent_denied_capture_total[5m]) > 0.5
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: High rate of capture blocked by missing consent
-          description: >-
-            Agents are calling tools or /sessions/turns without an active
-            consent grant. Direct users to /app/consent to grant scopes.
-
       - alert: TeamsharedCrossTenantViolation
         expr: increase(teamshared_cross_tenant_violation_total[1m]) > 0
         for: 0m

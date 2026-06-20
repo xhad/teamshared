@@ -79,7 +79,6 @@ def _orgs(*orgs: tuple[uuid.UUID, uuid.UUID, str]) -> list[dict[str, object]]:
 def _build(
     *,
     owner_row: tuple | None = (OWNER_ID,),
-    consent: object | None = None,
     auth_disabled: bool = True,
     smtp: bool = False,
     orgs: list[dict[str, object]] | None = None,
@@ -116,8 +115,6 @@ def _build(
             has=AsyncMock(return_value=True),
         )
     )
-    if consent is not None:
-        services.consent = consent
 
     routes = register_console_routes(settings, services)
     app = Starlette(routes=routes)
@@ -1371,66 +1368,6 @@ def test_people_add_member_redirects() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Consent UI (Phase 2)
+# Consent UI (removed 2026-06-19) — capture is now gated only by
+# settings.capture_enabled; no consent_grants table or /app/consent surface.
 # --------------------------------------------------------------------------- #
-def _consent_stub() -> SimpleNamespace:
-    return SimpleNamespace(
-        list_grants=AsyncMock(
-            return_value=[
-                {
-                    "id": "g1", "agent": "cursor", "mode": "policy",
-                    "scope": ["tool_calls", "raw_turns"], "granted_by": str(OWNER_ID),
-                    "granted_at": "2026-05-28T10:00:00+00:00", "expires_at": None,
-                    "revoked_at": None, "status": "active",
-                }
-            ]
-        ),
-        grant=AsyncMock(return_value=uuid.uuid4()),
-        revoke=AsyncMock(return_value=True),
-    )
-
-
-def test_consent_redirects_when_unauthed() -> None:
-    client, _ = _build(consent=_consent_stub())
-    resp = client.get("/app/consent")
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/login"
-
-
-def test_consent_page_lists_grants() -> None:
-    consent = _consent_stub()
-    client, _ = _build(consent=consent)
-    _login(client)
-    resp = client.get("/app/consent")
-    assert resp.status_code == 200
-    assert "Capture &amp; consent" in resp.text
-    assert "cursor" in resp.text
-    assert "tool_calls, raw_turns" in resp.text
-    consent.list_grants.assert_awaited()
-
-
-def test_consent_grant_posts_and_redirects() -> None:
-    consent = _consent_stub()
-    client, _ = _build(consent=consent)
-    _login(client)
-    resp = _app_post(
-        client,
-        "/app/consent/grant",
-        {"agent": "hermes", "mode": "policy", "scope": "tool_calls"},
-    )
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/consent?flash=granted"
-    kwargs = consent.grant.await_args.kwargs
-    assert kwargs["agent"] == "hermes"
-    assert kwargs["mode"] == "policy"
-    assert kwargs["scope"] == ["tool_calls"]
-
-
-def test_consent_revoke_posts_and_redirects() -> None:
-    consent = _consent_stub()
-    client, _ = _build(consent=consent)
-    _login(client)
-    resp = _app_post(client, "/app/consent/g1/revoke")
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/consent?flash=revoked"
-    consent.revoke.assert_awaited_once()

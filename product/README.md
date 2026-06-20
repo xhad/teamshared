@@ -44,7 +44,7 @@ See `knowledge/assumption-audit.md`.
 3. **Standalone skills** (no graph needed) that fit TeamShared right now:
    - `metrics-tree` — TeamShared has no measurable outcome; give it one.
    - `narrative-review` — pressure-test `prod-plan.md` as an exec would.
-   - `spec-stress-test` — red-team the consent-first capture spec.
+   - `spec-stress-test` — red-team the capture/ingestion spec.
    - `tradeoff-frame` — frame shared-by-default vs isolated-by-default honestly.
 
 Run a playbook by fetching it from teamshared: `memory_procedure_get(name="graphify")`.

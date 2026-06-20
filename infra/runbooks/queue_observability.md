@@ -7,8 +7,7 @@
 | `teamshared_queue_depth` | `stream=distill\|curate` | Pending jobs in Redis lists |
 | `teamshared_queue_dead_letter_depth` | `stream=distill\|curate` | Poison/failed jobs |
 | `teamshared_queue_pending_depth` | `stream=curate` | Subjects debounced before curation |
-| `teamshared_capture_recorded_total` | `capability`, `source` | Turns recorded after consent |
-| `teamshared_consent_denied_capture_total` | `capability` | Blocked capture (no grant) |
+| `teamshared_capture_recorded_total` | `capability`, `source` | Turns recorded |
 | `teamshared_job_signature_invalid_total` | `queue` | HMAC rejections (4.1) |
 
 Gauges refresh on every `/metrics` scrape and on a background poll
@@ -36,6 +35,4 @@ into your Prometheus config. Tune thresholds to match
 1. **Distill backlog** — confirm distiller container (`teamshared worker`), Redis
    heartbeat key, Ollama/LLM errors in logs.
 2. **Dead letter** — inspect JSON entries in `working:distill:dead` / `working:curate:dead`.
-3. **Consent denied spike** — org admins grant scopes at `/app/consent` (`tool_calls`,
-   `raw_turns` as needed).
-4. **Signature invalid** — rotate/sync `TEAMSHARED_JOB_SIGNING_SECRET` on server + workers.
+3. **Signature invalid** — rotate/sync `TEAMSHARED_JOB_SIGNING_SECRET` on server + workers.

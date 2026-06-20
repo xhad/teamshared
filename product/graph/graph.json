@@ -1,13 +1,20 @@
 {
   "meta": {
-    "generated": "2026-06-19T18:00:00Z",
-    "sourceCount": 7,
-    "sourceTypes": ["research", "prd", "memo", "doc"],
+    "generated": "2026-06-19T20:50:00Z",
+    "sourceCount": 8,
+    "sourceTypes": [
+      "research",
+      "prd",
+      "memo",
+      "doc"
+    ],
     "health": "thin",
     "notes": [
-      "Seven sources: five internal product-intent docs (symlinked) plus two external research artifacts (company-brain-yc-rfs.md, gbrain-competitor-research.md). Still zero user-interview or support-ticket evidence.",
-      "gbrain-competitor-research.md is single-source competitive intelligence from public GBrain marketing/docs — not validated by users or buyers.",
-      "Internal sources lack YAML frontmatter; types inferred. External research files have proper frontmatter."
+      "Eight sources: five internal product-intent docs (symlinked) plus three external research artifacts (company-brain-yc-rfs.md, gbrain-competitor-research.md, shared-brain-landscape-2026.md). Still zero user-interview or support-ticket evidence.",
+      "shared-brain-landscape-2026.md is multi-source vendor/analyst competitive intelligence \u2014 still single-perspective (no buyers interviewed). Stronger than gbrain alone but not user research.",
+      "Internal sources lack YAML frontmatter; types inferred. External research files have proper frontmatter.",
+      "Corpus still meets the 'thin' rule: sourceCount < 8 OR uniqueTypes < 2. sourceCount now 8 but uniqueTypes is 1 (research/prd/memo/doc all classify as 'doc' under the schema's coarser types). Treated as thin; banner mandatory.",
+      "consent-first capture removed from the product (2026-06-19): feature-consent-capture node, assumption-consent-is-adoption-gate, insight-ingest-philosophy-tension, and related edges dropped from this graph pass. The memory-wiki-plan.md source still describes the retired design; it is retained as a historical artifact."
     ]
   },
   "nodes": [
@@ -16,7 +23,10 @@
       "type": "Segment",
       "label": "Multi-tenant organizations / teams",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "The system should allow teams, companies, and agentic workflows to share structured and unstructured memory across users, agents, projects, and tools." }
+        {
+          "source": "prod-plan.md",
+          "quote": "The system should allow teams, companies, and agentic workflows to share structured and unstructured memory across users, agents, projects, and tools."
+        }
       ]
     },
     {
@@ -24,8 +34,14 @@
       "type": "Segment",
       "label": "Enterprise buyers",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Enterprise security baseline" },
-        { "source": "prod-plan.md", "quote": "SSO/SAML/OIDC" }
+        {
+          "source": "prod-plan.md",
+          "quote": "Enterprise security baseline"
+        },
+        {
+          "source": "prod-plan.md",
+          "quote": "SSO/SAML/OIDC"
+        }
       ]
     },
     {
@@ -33,7 +49,10 @@
       "type": "Segment",
       "label": "Agents / agentic workflows (first-class identities)",
       "provenance": [
-        { "source": "plan.md", "quote": "Agents and API keys must be first-class identities with scoped permissions." }
+        {
+          "source": "plan.md",
+          "quote": "Agents and API keys must be first-class identities with scoped permissions."
+        }
       ]
     },
     {
@@ -41,7 +60,10 @@
       "type": "Segment",
       "label": "Founders building 'company brain' products (YC RFS category)",
       "provenance": [
-        { "source": "company-brain-yc-rfs.md", "quote": "If you're building this, you should apply to YC." }
+        {
+          "source": "company-brain-yc-rfs.md",
+          "quote": "If you're building this, you should apply to YC."
+        }
       ]
     },
     {
@@ -49,7 +71,21 @@
       "type": "Segment",
       "label": "Power users running personal autonomous agents (OpenClaw/Hermes)",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "GBrain is designed to be installed and operated by an AI agent." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "GBrain is designed to be installed and operated by an AI agent."
+        }
+      ]
+    },
+    {
+      "id": "segment-shared-brain-buyers",
+      "type": "Segment",
+      "label": "Teams shopping for a 'shared brain' across coding agents (Claude Code/Cursor/Codex/OpenClaw/Hermes)",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Multi-Agent Memory gives your AI agents a shared brain that works across machines, tools, and frameworks. Store a fact from Claude Code on your laptop, recall it from an OpenClaw agent on your server."
+        }
       ]
     },
     {
@@ -57,7 +93,10 @@
       "type": "Need",
       "label": "Share memory across users, agents, projects, and tools",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Think of TeamShared as infrastructure for \"shared agent context\" across an organization." }
+        {
+          "source": "prod-plan.md",
+          "quote": "Think of TeamShared as infrastructure for \"shared agent context\" across an organization."
+        }
       ]
     },
     {
@@ -65,7 +104,10 @@
       "type": "Need",
       "label": "Persistent recall without overwhelming the context window",
       "provenance": [
-        { "source": "plan.md", "quote": "give agents persistent, personalized recall without overwhelming their context windows" }
+        {
+          "source": "plan.md",
+          "quote": "give agents persistent, personalized recall without overwhelming their context windows"
+        }
       ]
     },
     {
@@ -73,7 +115,10 @@
       "type": "Need",
       "label": "No cross-tenant memory leakage",
       "provenance": [
-        { "source": "plan.md", "quote": "The system must prevent cross-tenant memory leakage by design, not only by convention." }
+        {
+          "source": "plan.md",
+          "quote": "The system must prevent cross-tenant memory leakage by design, not only by convention."
+        }
       ]
     },
     {
@@ -81,7 +126,10 @@
       "type": "Need",
       "label": "Get synthesized answers with citations, not raw page lists",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "Search gives you raw pages. GBrain gives you the answer." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "Search gives you raw pages. GBrain gives you the answer."
+        }
       ]
     },
     {
@@ -89,7 +137,10 @@
       "type": "Need",
       "label": "Know what the brain doesn't know yet (staleness / holes)",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "an honest note on what the brain doesn't know yet. The gap analysis is the differentiator." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "an honest note on what the brain doesn't know yet. The gap analysis is the differentiator."
+        }
       ]
     },
     {
@@ -97,7 +148,36 @@
       "type": "Need",
       "label": "Turn institutional knowledge into executable skills for AI automation",
       "provenance": [
-        { "source": "company-brain-yc-rfs.md", "quote": "turns it into an executable skills file for AI." }
+        {
+          "source": "company-brain-yc-rfs.md",
+          "quote": "turns it into an executable skills file for AI."
+        }
+      ]
+    },
+    {
+      "id": "need-bitemporal-facts",
+      "type": "Need",
+      "label": "Query what was true at a point in time (bi-temporal fact validity)",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Zep + Graphiti win on bi-temporality and score 71.2% on LongMemEval versus Mem0's 49%"
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "tracking when an event occurred and when it was ingested. Every graph edge (or relationship) includes explicit validity intervals (t_valid, t_invalid)."
+        }
+      ]
+    },
+    {
+      "id": "need-no-llm-at-query",
+      "type": "Need",
+      "label": "Sub-millisecond recall without LLM calls in the query path",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "It runs on one PostgreSQL + pgvector database (no second vector store, no graph database), uses no LLM at query time"
+        }
       ]
     },
     {
@@ -105,7 +185,10 @@
       "type": "Pain",
       "label": "Context rot from stuffing full history into the window",
       "provenance": [
-        { "source": "plan.md", "quote": "keeping the entire chat history in the model's context window (which leads to \"context rot\")" }
+        {
+          "source": "plan.md",
+          "quote": "keeping the entire chat history in the model's context window (which leads to \"context rot\")"
+        }
       ]
     },
     {
@@ -113,7 +196,10 @@
       "type": "Pain",
       "label": "Coding agents amnesiac about everything that isn't code",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "your coding agent stops being amnesiac about everything that isn't code." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "your coding agent stops being amnesiac about everything that isn't code."
+        }
       ]
     },
     {
@@ -121,7 +207,47 @@
       "type": "Pain",
       "label": "Critical company know-how scattered across heads, email, Slack, tickets",
       "provenance": [
-        { "source": "company-brain-yc-rfs.md", "quote": "Every company has critical know-how scattered everywhere. Some of it lives in people's heads." }
+        {
+          "source": "company-brain-yc-rfs.md",
+          "quote": "Every company has critical know-how scattered everywhere. Some of it lives in people's heads."
+        }
+      ]
+    },
+    {
+      "id": "pain-per-agent-silos",
+      "type": "Pain",
+      "label": "Per-agent memory silos: one engineer's agent learns nothing from another's",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "When one agent discovers something important, the others never learn about it. Existing solutions are either single-machine only, require paid cloud services, or treat memory as a flat key-value store without understanding that a fact and an event are fundamentally different things."
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Your engineers each run their own AI agents, but none of them can see what the others' agents learned."
+        }
+      ]
+    },
+    {
+      "id": "pain-flat-kv-no-kind",
+      "type": "Pain",
+      "label": "Flat key-value memory with no distinction between facts and events",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "treat memory as a flat key-value store without understanding that a fact and an event are fundamentally different things"
+        }
+      ]
+    },
+    {
+      "id": "pain-graph-build-cost",
+      "type": "Pain",
+      "label": "LLM calls during graph ingestion compound cost at scale",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "the biggest hidden cost across the field is LLM calls during ingestion: graph-construction approaches make several calls per memory add, which compounds at scale."
+        }
       ]
     },
     {
@@ -129,8 +255,14 @@
       "type": "Feature",
       "label": "Multi-tenant org architecture",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Multi-tenant organizations" },
-        { "source": "plan.md", "quote": "Every table containing customer data must include `org_id` or be clearly tenant-owned through a parent relation." }
+        {
+          "source": "prod-plan.md",
+          "quote": "Multi-tenant organizations"
+        },
+        {
+          "source": "plan.md",
+          "quote": "Every table containing customer data must include `org_id` or be clearly tenant-owned through a parent relation."
+        }
       ]
     },
     {
@@ -138,7 +270,10 @@
       "type": "Feature",
       "label": "Org/team/project/user/agent memory scopes",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Org-level, team-level, project-level, user-level, and agent-level memory scopes" }
+        {
+          "source": "prod-plan.md",
+          "quote": "Org-level, team-level, project-level, user-level, and agent-level memory scopes"
+        }
       ]
     },
     {
@@ -146,8 +281,14 @@
       "type": "Feature",
       "label": "Role-based access control + per-read permission checks",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Role-based access control" },
-        { "source": "prod-plan.md", "quote": "Fine-grained permission checks before retrieval" }
+        {
+          "source": "prod-plan.md",
+          "quote": "Role-based access control"
+        },
+        {
+          "source": "prod-plan.md",
+          "quote": "Fine-grained permission checks before retrieval"
+        }
       ]
     },
     {
@@ -155,7 +296,10 @@
       "type": "Feature",
       "label": "Audit logs for all memory and permission events",
       "provenance": [
-        { "source": "plan.md", "quote": "Audit logging for every memory read/write/delete/share event" }
+        {
+          "source": "plan.md",
+          "quote": "Audit logging for every memory read/write/delete/share event"
+        }
       ]
     },
     {
@@ -163,15 +307,10 @@
       "type": "Feature",
       "label": "Connectors (Slack, GitHub, Notion, Google Drive, Linear, MCP)",
       "provenance": [
-        { "source": "plan.md", "quote": "Connector architecture for Slack, GitHub, Notion, Google Drive, Linear, and MCP servers" }
-      ]
-    },
-    {
-      "id": "feature-consent-capture",
-      "type": "Feature",
-      "label": "Consent-first, client-sanitized capture",
-      "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "No data is captured or pulled without explicit human approval, and the client sanitizes it before it ever leaves the machine." }
+        {
+          "source": "plan.md",
+          "quote": "Connector architecture for Slack, GitHub, Notion, Google Drive, Linear, and MCP servers"
+        }
       ]
     },
     {
@@ -179,7 +318,10 @@
       "type": "Feature",
       "label": "Human console + continuously-updating memory wiki",
       "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "One server-rendered web app — the **team mind** — where a human signs in to:" }
+        {
+          "source": "memory-wiki-plan.md",
+          "quote": "One server-rendered web app \u2014 the **team mind** \u2014 where a human signs in to:"
+        }
       ]
     },
     {
@@ -187,7 +329,10 @@
       "type": "Feature",
       "label": "LLM distillation + curator synthesizing wiki pages",
       "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "a `CuratorWorker` synthesizes all facts + recent episodes + relations for a subject into one canonical markdown article" }
+        {
+          "source": "memory-wiki-plan.md",
+          "quote": "a `CuratorWorker` synthesizes all facts + recent episodes + relations for a subject into one canonical markdown article"
+        }
       ]
     },
     {
@@ -195,7 +340,32 @@
       "type": "Feature",
       "label": "MCP-native agent memory interface",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "MCP-native interface" }
+        {
+          "source": "prod-plan.md",
+          "quote": "MCP-native interface"
+        }
+      ]
+    },
+    {
+      "id": "feature-five-pillars",
+      "type": "Feature",
+      "label": "Five memory pillars (working/semantic/episodic/procedural/strategic + work)",
+      "provenance": [
+        {
+          "source": "prod-plan.md",
+          "quote": "TeamShared organizes memory across five pillars: Working, Semantic, Episodic, Procedural, and Strategic."
+        }
+      ]
+    },
+    {
+      "id": "feature-server-side-capture",
+      "type": "Feature",
+      "label": "Server-side ToolCallCaptureMiddleware + /sessions/turns ingest (capture not hook-dependent)",
+      "provenance": [
+        {
+          "source": "AGENTS.md",
+          "quote": "a `ToolCallCaptureMiddleware` plus the `POST /sessions/turns` ingest endpoint record turn-by-turn natural-language conversation across harnesses (gated by `capture_enabled`), so capture does not depend on Cursor-only `.ts` hooks"
+        }
       ]
     },
     {
@@ -203,7 +373,10 @@
       "type": "Feature",
       "label": "GBrain synthesis layer (gbrain think) with gap analysis",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "the only one that does synthesis, graph traversal, and gap analysis in one box." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "the only one that does synthesis, graph traversal, and gap analysis in one box."
+        }
       ]
     },
     {
@@ -211,7 +384,10 @@
       "type": "Feature",
       "label": "GBrain self-wiring knowledge graph (zero LLM on write)",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "creates typed edges (`attended`, `works_at`, `invested_in`, `founded`, `advises`) with zero LLM calls." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "creates typed edges (`attended`, `works_at`, `invested_in`, `founded`, `advises`) with zero LLM calls."
+        }
       ]
     },
     {
@@ -219,7 +395,10 @@
       "type": "Feature",
       "label": "GBrain autonomous dream cycle (cron enrichment overnight)",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "Cron-driven enrichment runs while you sleep: dedup people pages, fix citations, score salience, find contradictions, prep tomorrow's tasks." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "Cron-driven enrichment runs while you sleep: dedup people pages, fix citations, score salience, find contradictions, prep tomorrow's tasks."
+        }
       ]
     },
     {
@@ -227,7 +406,10 @@
       "type": "Feature",
       "label": "GBrain company brain (per-user OAuth-scoped slices, leak-tested)",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "Each person on the team gets their own slice of the brain, scoped by login." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "Each person on the team gets their own slice of the brain, scoped by login."
+        }
       ]
     },
     {
@@ -235,7 +417,158 @@
       "type": "Feature",
       "label": "GBrain schema packs (typed page taxonomy, agent-evolvable)",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "gbrain doesn't have a fixed layout. It ships with bundled schema packs and lets you author your own when none fit." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "gbrain doesn't have a fixed layout. It ships with bundled schema packs and lets you author your own when none fit."
+        }
+      ]
+    },
+    {
+      "id": "feature-hivemind-skill-codify",
+      "type": "Feature",
+      "label": "Hivemind: codify session traces into SKILL.md that propagates to team agents",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Hivemind doesn't just remember. It mines your team's traces for repeated patterns and codifies them into reusable skills that propagate back into every agent on the team. The agent your junior engineer used this morning is sharper because of what your senior engineer's agent figured out last week."
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "A background worker mines traces for repeated patterns and codifies them into `SKILL.md` files, scoped to your workspace."
+        }
+      ]
+    },
+    {
+      "id": "feature-hivemind-trace-capture",
+      "type": "Feature",
+      "label": "Hivemind: every session prompt/tool-call/response captured as structured trace in Deep Lake",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Captures every session's prompts, tool calls, and responses as structured traces in Deeplake"
+        }
+      ]
+    },
+    {
+      "id": "feature-memobase-rls",
+      "type": "Feature",
+      "label": "memobase: Postgres RLS per-user isolation + OAuth + cross-tool passport",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "PostgreSQL Row-Level Security ensures your memory is your own."
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Memobase is a persistent memory layer for AI agents that leverages the Model Context Protocol (MCP) to provide shared, long-term context across disparate tools like Claude, Cursor, and Windsurf."
+        }
+      ]
+    },
+    {
+      "id": "feature-memnos-no-llm-query",
+      "type": "Feature",
+      "label": "memnos: no LLM at query time + governance baked in (auth/ACL/audit/vault)",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "uses no LLM at query time, and ships with governance \u2014 token auth, namespace ACLs, audit log, and an encrypted secret vault \u2014 in the open-source build."
+        }
+      ]
+    },
+    {
+      "id": "feature-memnos-proxy-capture",
+      "type": "Feature",
+      "label": "memnos proxy: deterministic capture by relaying Anthropic/OpenAI base URLs untouched",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "It relays every request untouched (streaming included, keys forwarded, never stored) and captures both sides of each completed exchange."
+        }
+      ]
+    },
+    {
+      "id": "feature-memory-mcp-rrf",
+      "type": "Feature",
+      "label": "memory-mcp: hybrid BM25 + vector with RRF + bounded feedback rerank",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "search_memory | Hybrid vector + BM25 search with Reciprocal Rank Fusion. Supports optional, bounded feedback rerank behind a kill switch."
+        }
+      ]
+    },
+    {
+      "id": "feature-nexo-trust-forget",
+      "type": "Feature",
+      "label": "NEXO Brain: trust scoring + metacognitive guard + natural forgetting",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "NEXO Brain \u2014 Shared brain for AI agents. Persistent memory, semantic RAG, natural forgetting, metacognitive guard, trust scoring, 150+ MCP tools."
+        }
+      ]
+    },
+    {
+      "id": "feature-mam-fact-event-types",
+      "type": "Feature",
+      "label": "multi-agent-memory: distinct fact vs event memory kinds",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "treat memory as a flat key-value store without understanding that a fact and an event are fundamentally different things"
+        }
+      ]
+    },
+    {
+      "id": "feature-agent-memory-git-federation",
+      "type": "Feature",
+      "label": "xChuCx/agent-memory: git-native markdown, branch-aware, federation for cross-repo landscape stores",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Local, git-native project memory for AI coding agents. One MCP call in, structured memory updates out \u2014 current task state, decisions, conventions, pitfalls, per-module facts. Branch-aware. Secret-safe. Byte-preserving."
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Federation lets it reference shared, git-pinned, read-only 'landscape' stores, so an agent designing a cross-service feature sees the surrounding system map."
+        }
+      ]
+    },
+    {
+      "id": "feature-agent-memory-human-review",
+      "type": "Feature",
+      "label": "xChuCx/agent-memory: durable writes stage for human review (propose \u2192 apply)",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "durable changes stage for human review (review --diff \u2192 apply) instead of landing silently; and secrets/PII are scanned out before anything is written."
+        }
+      ]
+    },
+    {
+      "id": "feature-graphiti-bitemporal",
+      "type": "Feature",
+      "label": "Graphiti: bi-temporal context graph with valid_from / invalid_at on every edge",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Graphiti's context graphs track how facts change over time, maintain provenance to source data"
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Every graph edge (or relationship) includes explicit validity intervals (t_valid, t_invalid)."
+        }
+      ]
+    },
+    {
+      "id": "feature-neo4j-agent-memory-pole",
+      "type": "Feature",
+      "label": "Neo4j Agent Memory: POLE+O entities + reasoning traces (why the agent decided)",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "reasoning memory (decision traces and tool usage audits). That reasoning layer is unique. No other tool in this comparison stores why the agent made a decision, which matters for debugging and compliance."
+        }
       ]
     },
     {
@@ -243,7 +576,10 @@
       "type": "Competitor",
       "label": "Pinecone (vector DB) / pgvector category",
       "provenance": [
-        { "source": "plan.md", "quote": "Powered by vector databases (e.g., Pinecone) and knowledge graphs to provide rich, structured recall." }
+        {
+          "source": "plan.md",
+          "quote": "Powered by vector databases (e.g., Pinecone) and knowledge graphs to provide rich, structured recall."
+        }
       ]
     },
     {
@@ -251,7 +587,10 @@
       "type": "Competitor",
       "label": "Neo4j context/knowledge graphs",
       "provenance": [
-        { "source": "plan.md", "quote": "Neo4j is frequently used to build context graphs that track complex relationships between user entities and past actions." }
+        {
+          "source": "plan.md",
+          "quote": "Neo4j is frequently used to build context graphs that track complex relationships between user entities and past actions."
+        }
       ]
     },
     {
@@ -259,7 +598,10 @@
       "type": "Competitor",
       "label": "LangChain / LlamaIndex memory modules",
       "provenance": [
-        { "source": "plan.md", "quote": "LangChain and LlamaIndex offer built-in modules for both short-term conversational buffers and long-term memory RAG components." }
+        {
+          "source": "plan.md",
+          "quote": "LangChain and LlamaIndex offer built-in modules for both short-term conversational buffers and long-term memory RAG components."
+        }
       ]
     },
     {
@@ -267,7 +609,10 @@
       "type": "Competitor",
       "label": "Cloudflare Agent Memory (managed memory primitives)",
       "provenance": [
-        { "source": "plan.md", "quote": "Solutions like Cloudflare Agent Memory provide developers with built-in primitives that extract, store, and manage user details across multi-session interactions automatically." }
+        {
+          "source": "plan.md",
+          "quote": "Solutions like Cloudflare Agent Memory provide developers with built-in primitives that extract, store, and manage user details across multi-session interactions automatically."
+        }
       ]
     },
     {
@@ -275,16 +620,169 @@
       "type": "Competitor",
       "label": "Hindsight-style distillation sub-agents",
       "provenance": [
-        { "source": "plan.md", "quote": "Advanced architectures (like Hindsight) use specialized sub-agents to summarize past interactions into distilled facts and preferences" }
+        {
+          "source": "plan.md",
+          "quote": "Advanced architectures (like Hindsight) use specialized sub-agents to summarize past interactions into distilled facts and preferences"
+        }
       ]
     },
     {
       "id": "comp-gbrain",
       "type": "Competitor",
-      "label": "GBrain (garrytan/gbrain) — personal + company brain for OpenClaw/Hermes",
+      "label": "GBrain (garrytan/gbrain) \u2014 personal + company brain for OpenClaw/Hermes",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "Garry Tan (YC CEO) positions GBrain as the production brain behind OpenClaw and Hermes agent deployments." },
-        { "source": "company-brain-yc-rfs.md", "quote": "We need Garry's G-Brain, but for every business in the world." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "Garry Tan (YC CEO) positions GBrain as the production brain behind OpenClaw and Hermes agent deployments."
+        },
+        {
+          "source": "company-brain-yc-rfs.md",
+          "quote": "We need Garry's G-Brain, but for every business in the world."
+        }
+      ]
+    },
+    {
+      "id": "comp-mem0",
+      "type": "Competitor",
+      "label": "Mem0 \u2014 long-term memory layer for LLM applications/agents (55k\u2605, OpenMemory MCP branch)",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Mem0 is a long-term memory layer for LLM applications and AI agents that persists across/across sessions and users"
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Mem0 wins on speed of adoption and ecosystem (~55k GitHub stars as of May 2026)."
+        }
+      ]
+    },
+    {
+      "id": "comp-zep",
+      "type": "Competitor",
+      "label": "Zep / Graphiti \u2014 temporal knowledge graph (bi-temporal, 71% LongMemEval)",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Zep takes a different structural bet. Rather than flat vector storage, it builds a temporal knowledge graph using their open-source Graphiti library."
+        }
+      ]
+    },
+    {
+      "id": "comp-letta",
+      "type": "Competitor",
+      "label": "Letta (ex-MemGPT) \u2014 OS-paging metaphor, self-editing memory blocks",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "treat the LLM like an operating system managing its own memory. There's a 'main context' (RAM \u2014 what's in the prompt right now), a 'recall store' (recent conversation history), and an 'archival store' (external long-term storage)."
+        }
+      ]
+    },
+    {
+      "id": "comp-hivemind",
+      "type": "Competitor",
+      "label": "Hivemind (activeloopai) \u2014 cloud-backed shared brain for Claude Code/OpenClaw/Codex/Cursor/Hermes/pi",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Auto-learning, cloud-backed shared brain for Claude Code \u2022 OpenClaw \u2022 Codex \u2022 Cursor \u2022 Hermes \u2022 pi agents."
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "The project has garnered over 1,100 GitHub stars in its first day."
+        }
+      ]
+    },
+    {
+      "id": "comp-memobase",
+      "type": "Competitor",
+      "label": "memobase.ai \u2014 cross-tool memory passport, Postgres RLS, OAuth",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Memobase MCP = persistent shared memory."
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "PostgreSQL Row-Level Security ensures your memory is your own."
+        }
+      ]
+    },
+    {
+      "id": "comp-memnos",
+      "type": "Competitor",
+      "label": "memnos (thameema) \u2014 self-hosted, no LLM at query, governance baked in",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "memnos is a self-hosted memory server for AI agents. Your conversations are captured, distilled into facts, and recalled in later sessions \u2014 across Claude Code, Cursor, Windsurf, Codex, or anything that speaks MCP, REST, or an OpenAI/Anthropic-compatible base URL."
+        }
+      ]
+    },
+    {
+      "id": "comp-memory-mcp",
+      "type": "Competitor",
+      "label": "memory-mcp (isaacriehm) \u2014 Postgres+pgvector, RRF hybrid search, OAuth bridge",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "memory-mcp is a Model Context Protocol server that gives AI agents durable, searchable memory backed by PostgreSQL and pgvector."
+        }
+      ]
+    },
+    {
+      "id": "comp-nexo",
+      "type": "Competitor",
+      "label": "NEXO Brain (wazionapps) \u2014 local, trust scoring + forgetting + metacognitive guard",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "NEXO Brain \u2014 Shared brain for AI agents. Persistent memory, semantic RAG, natural forgetting, metacognitive guard, trust scoring, 150+ MCP tools."
+        }
+      ]
+    },
+    {
+      "id": "comp-multi-agent-memory",
+      "type": "Competitor",
+      "label": "multi-agent-memory (CMPSBL) \u2014 cross-machine fact/event store for OpenClaw/Claude Code/n8n mesh",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Multi-Agent Memory gives your AI agents a shared brain that works across machines, tools, and frameworks. Store a fact from Claude Code on your laptop, recall it from an OpenClaw agent on your server, and get a briefing from n8n \u2014 all through the same memory system."
+        }
+      ]
+    },
+    {
+      "id": "comp-agent-memory",
+      "type": "Competitor",
+      "label": "xChuCx/agent-memory \u2014 git-native markdown, branch-aware, federation",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Local, git-native project memory for AI coding agents. One MCP call in, structured memory updates out \u2014 current task state, decisions, conventions, pitfalls, per-module facts. Branch-aware. Secret-safe. Byte-preserving."
+        }
+      ]
+    },
+    {
+      "id": "comp-graphiti",
+      "type": "Competitor",
+      "label": "Graphiti (getzep, OSS) \u2014 bi-temporal context graphs on Neo4j/FalkorDB/Kuzu",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Graphiti is a framework for building and querying temporal context graphs for AI agents. Unlike static knowledge graphs, Graphiti's context graphs track how facts change over time, maintain provenance to source data"
+        }
+      ]
+    },
+    {
+      "id": "comp-neo4j-agent-memory",
+      "type": "Competitor",
+      "label": "Neo4j Agent Memory Service \u2014 POLE+O entities + reasoning traces (55\u2605)",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "neo4j-agent-memory in February 2026. With 55 GitHub stars, it is the least-known tool in this comparison."
+        }
       ]
     },
     {
@@ -292,7 +790,10 @@
       "type": "Insight",
       "label": "Agent memory splits into four pillars (working/semantic/episodic/procedural)",
       "provenance": [
-        { "source": "plan.md", "quote": "Modern agent memory is typically divided into four distinct architectures" }
+        {
+          "source": "plan.md",
+          "quote": "Modern agent memory is typically divided into four distinct architectures"
+        }
       ]
     },
     {
@@ -300,7 +801,10 @@
       "type": "Insight",
       "label": "Just-in-time retrieval beats keeping full history in-context",
       "provenance": [
-        { "source": "plan.md", "quote": "agents use pre-inference retrieval to surface only the most relevant episodic or semantic memories right when they are needed" }
+        {
+          "source": "plan.md",
+          "quote": "agents use pre-inference retrieval to surface only the most relevant episodic or semantic memories right when they are needed"
+        }
       ]
     },
     {
@@ -308,7 +812,10 @@
       "type": "Insight",
       "label": "YC RFS validates 'company brain' as a venture category; names GBrain as reference implementation",
       "provenance": [
-        { "source": "company-brain-yc-rfs.md", "quote": "I think every company in the world is going to need one." }
+        {
+          "source": "company-brain-yc-rfs.md",
+          "quote": "I think every company in the world is going to need one."
+        }
       ]
     },
     {
@@ -316,16 +823,84 @@
       "type": "Insight",
       "label": "GBrain has distribution lead: 23k stars, YC CEO author, native OpenClaw/Hermes wiring",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "23.4k GitHub stars, YC CEO author, named in YC RFS, native OpenClaw/Hermes integration" }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "23.4k GitHub stars, YC CEO author, named in YC RFS, native OpenClaw/Hermes integration"
+        }
       ]
     },
     {
-      "id": "insight-ingest-philosophy-tension",
+      "id": "insight-mcp-is-de-facto",
       "type": "Insight",
-      "label": "TeamShared (consent-first) and GBrain (aggressive signal capture) diverge on ingestion philosophy",
+      "label": "MCP is the de facto 'USB-C for memory' standard; all serious players expose memory through MCP",
       "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "No data is captured or pulled without explicit human approval" },
-        { "source": "gbrain-competitor-research.md", "quote": "My agent ingests meetings, emails, tweets, voice calls, and original ideas while I sleep." }
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Model Context Protocol \u2014 'USB-C for memory' proposed by Anthropic in November 2024 \u2014 has become the de facto standard for agent \u2194 external memory store communication. OpenMemory MCP from Mem0, Anthropic Memory Tool, Graphiti MCP server, Neo4j Agent Memory Service \u2014 all expose memory through MCP."
+        }
+      ]
+    },
+    {
+      "id": "insight-no-system-wins-3-of-8",
+      "type": "Insight",
+      "label": "No memory system wins on more than 3 of 8 dimensions; each leads on a distinct axis",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "No system wins in more than three of the eight dimensions. Mem0 wins on speed of adoption and ecosystem... Zep + Graphiti win on bi-temporality... Letta wins on self-editing memory and sleep-time compute. LangMem wins if you're already using LangGraph."
+        }
+      ]
+    },
+    {
+      "id": "insight-zep-vs-mem0-disputed",
+      "type": "Insight",
+      "label": "Zep's LongMemEval lead over Mem0 (71% vs 49%) is methodologically disputed",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Zep achieves 9[8].% on DMR (Deep Memory Retrieval)... 71.2% on [LongMemEval] with GPT-4o. Mem0 stops at 49%... are the subject of a methodological dispute \u2014 a corrected [calculation] indicates a score [lower] than Zep initially [reported]."
+        }
+      ]
+    },
+    {
+      "id": "insight-graphiti-bitemporal-closes-historical-query",
+      "type": "Insight",
+      "label": "Bi-temporal validity is the legitimate Graphiti moat for point-in-time queries; no rival matches it",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Graphiti's context graphs track how facts change over time, maintain provenance to source data"
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "tracking when an event occurred and when it was ingested. Every graph edge (or relationship) includes explicit validity intervals (t_valid, t_invalid)"
+        }
+      ]
+    },
+    {
+      "id": "insight-hivemind-skill-codify-is-teamshared-thesis",
+      "type": "Insight",
+      "label": "Hivemind ships the same skill-codification thesis as teamshared's skills pillar \u2014 but auto-mines from traces",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Hivemind doesn't just remember. It mines your team's traces for repeated patterns and codifies them into reusable skills that propagate back into every agent on the team."
+        },
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "A background worker mines traces for repeated patterns and codifies them into `SKILL.md` files, scoped to your workspace."
+        }
+      ]
+    },
+    {
+      "id": "insight-fact-vs-event-is-shared-intuition",
+      "type": "Insight",
+      "label": "Multiple rivals (multi-agent-memory, memnos, teamshared MemoryKind) independently converge on distinguishing facts from events",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Existing solutions... treat memory as a flat key-value store without understanding that a fact and an event are fundamentally different things."
+        }
       ]
     },
     {
@@ -333,7 +908,10 @@
       "type": "Outcome",
       "label": "Evolve TeamShared from PoC to production for multi-tenant org customers",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Create a detailed technical plan to evolve TeamShared from PoC to production for multi-tenant org customers." }
+        {
+          "source": "prod-plan.md",
+          "quote": "Create a detailed technical plan to evolve TeamShared from PoC to production for multi-tenant org customers."
+        }
       ]
     },
     {
@@ -347,14 +925,7 @@
       "id": "assumption-buyers-pay-for-memory-infra",
       "type": "Assumption",
       "label": "Orgs will pay for 'shared agent context' as infrastructure",
-      "risk": "Pricing/GTM viability; GBrain is MIT/open-source — willingness-to-pay for TeamShared-hosted infra is unvalidated.",
-      "provenance": []
-    },
-    {
-      "id": "assumption-consent-is-adoption-gate",
-      "type": "Assumption",
-      "label": "Consent-first capture friction is what gates adoption",
-      "risk": "GBrain ships aggressive ingestion as the default value prop. If buyers want breadth over consent, TeamShared's constraint is a competitive handicap.",
+      "risk": "Pricing/GTM viability; GBrain is MIT/open-source, Mem0/Zep/Letta all monetize cloud tiers ($19/$25/$249). TeamShared willingness-to-pay unvalidated.",
       "provenance": []
     },
     {
@@ -368,7 +939,7 @@
       "id": "assumption-enterprise-security-gates-deals",
       "type": "Assumption",
       "label": "SSO/SAML/SOC2 gate the deals worth chasing",
-      "risk": "GBrain company-brain tutorial targets 10-50 person teams with OAuth — may win design partners before TeamShared enterprise phase.",
+      "risk": "GBrain company-brain tutorial targets 10-50 person teams with OAuth \u2014 may win design partners before TeamShared enterprise phase.",
       "provenance": []
     },
     {
@@ -395,8 +966,8 @@
     {
       "id": "assumption-gbrain-is-primary-competitor",
       "type": "Assumption",
-      "label": "GBrain is the primary direct competitor (not Pinecone/LangChain category players)",
-      "risk": "Positioning and roadmap sequencing. If buyers self-host GBrain, TeamShared's managed multi-tenant pitch may miss the market.",
+      "label": "GBrain is the primary direct competitor (not the broader field)",
+      "risk": "Positioning and roadmap sequencing. The 2026 landscape shows Hivemind shipping the same skill-codification thesis, plus Mem0/Zep/Letta with orders of magnitude more adoption. If buyers pick a hosted platform, TeamShared's GBrain-only positioning misses the market.",
       "provenance": []
     },
     {
@@ -404,6 +975,27 @@
       "type": "Assumption",
       "label": "Synthesis + gap analysis is required to win (not just hybrid recall)",
       "risk": "Product investment. TeamShared recall returns records; GBrain `think` returns answers. Missing synthesis may feel like a search engine.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-bitemporal-not-needed",
+      "type": "Assumption",
+      "label": "Bi-temporal fact validity is not needed for TeamShared's buyer (timestamp-only facts suffice)",
+      "risk": "If buyers want point-in-time queries ('what did Sarah own in Q1'), Graphiti/Zep win decisively on a 22-point LongMemEval gap. The curator compensates by rewriting pages but cannot answer historical queries.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-auto-skill-mine-not-needed",
+      "type": "Assumption",
+      "label": "Explicit memory_skill_set is enough; an auto-trace-to-skill miner is not needed",
+      "risk": "Hivemind ships the auto-mine-from-traces loop now and pitches it as the headline differentiator. If buyers expect skills to compound automatically, TeamShared's manual skill authoring feels like a notepad vs Hivemind's database-backed brain.",
+      "provenance": []
+    },
+    {
+      "id": "assumption-benchmarks-not-needed",
+      "type": "Assumption",
+      "label": "TeamShared doesn't need a published benchmark number to compete",
+      "risk": "Mem0 published ECAI 2025; Zep claims 71% LongMemEval. Without a number, the strategic KPI ('reliable enough to trust') is asserted, not proven \u2014 buyers comparing platforms have no objective recall-quality signal.",
       "provenance": []
     }
   ],
@@ -414,7 +1006,22 @@
       "from": "segment-multi-tenant-orgs",
       "to": "need-shared-context",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "The system should allow teams, companies, and agentic workflows to share structured and unstructured memory across users, agents, projects, and tools." }
+        {
+          "source": "prod-plan.md",
+          "quote": "The system should allow teams, companies, and agentic workflows to share structured and unstructured memory across users, agents, projects, and tools."
+        }
+      ]
+    },
+    {
+      "id": "e-shared-brain-buyers-need-shared",
+      "type": "experiences",
+      "from": "segment-shared-brain-buyers",
+      "to": "need-shared-context",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Multi-Agent Memory gives your AI agents a shared brain that works across machines, tools, and frameworks."
+        }
       ]
     },
     {
@@ -423,7 +1030,10 @@
       "from": "segment-agents",
       "to": "pain-context-rot",
       "provenance": [
-        { "source": "plan.md", "quote": "keeping the entire chat history in the model's context window (which leads to \"context rot\")" }
+        {
+          "source": "plan.md",
+          "quote": "keeping the entire chat history in the model's context window (which leads to \"context rot\")"
+        }
       ]
     },
     {
@@ -432,7 +1042,34 @@
       "from": "segment-power-user-operators",
       "to": "pain-amnesiac-coding-agents",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "your coding agent stops being amnesiac about everything that isn't code." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "your coding agent stops being amnesiac about everything that isn't code."
+        }
+      ]
+    },
+    {
+      "id": "e-shared-brain-buyers-silos",
+      "type": "experiences",
+      "from": "segment-shared-brain-buyers",
+      "to": "pain-per-agent-silos",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "When one agent discovers something important, the others never learn about it."
+        }
+      ]
+    },
+    {
+      "id": "e-shared-brain-buyers-flat-kv",
+      "type": "experiences",
+      "from": "segment-shared-brain-buyers",
+      "to": "pain-flat-kv-no-kind",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "treat memory as a flat key-value store without understanding that a fact and an event are fundamentally different things"
+        }
       ]
     },
     {
@@ -441,7 +1078,10 @@
       "from": "segment-company-brain-builders",
       "to": "pain-fragmented-company-knowledge",
       "provenance": [
-        { "source": "company-brain-yc-rfs.md", "quote": "Some of it is buried in old email accounts, Slack threads, support tickets, and databases." }
+        {
+          "source": "company-brain-yc-rfs.md",
+          "quote": "Some of it is buried in old email accounts, Slack threads, support tickets, and databases."
+        }
       ]
     },
     {
@@ -450,7 +1090,10 @@
       "from": "segment-multi-tenant-orgs",
       "to": "feature-multi-tenant",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Multi-tenant organizations" }
+        {
+          "source": "prod-plan.md",
+          "quote": "Multi-tenant organizations"
+        }
       ]
     },
     {
@@ -459,7 +1102,10 @@
       "from": "segment-enterprise",
       "to": "feature-rbac",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Advanced RBAC/ABAC" }
+        {
+          "source": "prod-plan.md",
+          "quote": "Advanced RBAC/ABAC"
+        }
       ]
     },
     {
@@ -468,7 +1114,10 @@
       "from": "segment-enterprise",
       "to": "feature-audit-logs",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Advanced audit logs" }
+        {
+          "source": "prod-plan.md",
+          "quote": "Advanced audit logs"
+        }
       ]
     },
     {
@@ -477,7 +1126,10 @@
       "from": "segment-company-brain-builders",
       "to": "need-company-executable-skills",
       "provenance": [
-        { "source": "company-brain-yc-rfs.md", "quote": "Then AI systems can use that skills file to actually do the work safely and consistently." }
+        {
+          "source": "company-brain-yc-rfs.md",
+          "quote": "Then AI systems can use that skills file to actually do the work safely and consistently."
+        }
       ]
     },
     {
@@ -486,7 +1138,10 @@
       "from": "insight-jit-retrieval",
       "to": "need-recall-without-overwhelm",
       "provenance": [
-        { "source": "plan.md", "quote": "agents use pre-inference retrieval to surface only the most relevant episodic or semantic memories right when they are needed" }
+        {
+          "source": "plan.md",
+          "quote": "agents use pre-inference retrieval to surface only the most relevant episodic or semantic memories right when they are needed"
+        }
       ]
     },
     {
@@ -495,7 +1150,10 @@
       "from": "insight-four-pillars",
       "to": "need-shared-context",
       "provenance": [
-        { "source": "plan.md", "quote": "Semantic Memory (Long-Term): Stores facts, user profiles, preferences, and organizational knowledge." }
+        {
+          "source": "plan.md",
+          "quote": "Semantic Memory (Long-Term): Stores facts, user profiles, preferences, and organizational knowledge."
+        }
       ]
     },
     {
@@ -504,7 +1162,10 @@
       "from": "insight-yc-validates-company-brain",
       "to": "need-shared-context",
       "provenance": [
-        { "source": "company-brain-yc-rfs.md", "quote": "The company brain becomes the missing layer between raw company data and reliable AI automation." }
+        {
+          "source": "company-brain-yc-rfs.md",
+          "quote": "The company brain becomes the missing layer between raw company data and reliable AI automation."
+        }
       ]
     },
     {
@@ -513,7 +1174,10 @@
       "from": "feature-gbrain-think",
       "to": "need-synthesized-answers",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "composes a synthesized answer across the results with explicit citations to the source pages" }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "composes a synthesized answer across the results with explicit citations to the source pages"
+        }
       ]
     },
     {
@@ -522,7 +1186,58 @@
       "from": "feature-gbrain-think",
       "to": "need-gap-analysis-in-recall",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "The gap analysis is the differentiator." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "The gap analysis is the differentiator."
+        }
+      ]
+    },
+    {
+      "id": "e-graphiti-supports-bitemporal",
+      "type": "supports",
+      "from": "feature-graphiti-bitemporal",
+      "to": "need-bitemporal-facts",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Every graph edge (or relationship) includes explicit validity intervals (t_valid, t_invalid)."
+        }
+      ]
+    },
+    {
+      "id": "e-memnos-supports-no-llm",
+      "type": "supports",
+      "from": "feature-memnos-no-llm-query",
+      "to": "need-no-llm-at-query",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "uses no LLM at query time"
+        }
+      ]
+    },
+    {
+      "id": "e-hivemind-supports-skills",
+      "type": "supports",
+      "from": "feature-hivemind-skill-codify",
+      "to": "need-company-executable-skills",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "codifies them into reusable skills that propagate back into every agent on the team"
+        }
+      ]
+    },
+    {
+      "id": "e-mcp-de-facto-supports-mcp-native",
+      "type": "supports",
+      "from": "insight-mcp-is-de-facto",
+      "to": "feature-mcp-native",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "OpenMemory MCP from Mem0, Anthropic Memory Tool, Graphiti MCP server, Neo4j Agent Memory Service \u2014 all expose memory through MCP."
+        }
       ]
     },
     {
@@ -531,7 +1246,10 @@
       "from": "comp-cloudflare",
       "to": "feature-curator",
       "provenance": [
-        { "source": "plan.md", "quote": "built-in primitives that extract, store, and manage user details across multi-session interactions automatically" }
+        {
+          "source": "plan.md",
+          "quote": "built-in primitives that extract, store, and manage user details across multi-session interactions automatically"
+        }
       ]
     },
     {
@@ -540,7 +1258,10 @@
       "from": "comp-hindsight",
       "to": "feature-curator",
       "provenance": [
-        { "source": "plan.md", "quote": "use specialized sub-agents to summarize past interactions into distilled facts and preferences" }
+        {
+          "source": "plan.md",
+          "quote": "use specialized sub-agents to summarize past interactions into distilled facts and preferences"
+        }
       ]
     },
     {
@@ -549,7 +1270,10 @@
       "from": "comp-gbrain",
       "to": "feature-mcp-native",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "GBrain exposes 30+ tools over MCP (stdio and HTTP)." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "GBrain exposes 30+ tools over MCP (stdio and HTTP)."
+        }
       ]
     },
     {
@@ -558,7 +1282,10 @@
       "from": "comp-gbrain",
       "to": "feature-wiki",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "Your knowledge lives in a regular git repo (your \"brain repo\") as markdown files." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "Your knowledge lives in a regular git repo (your \"brain repo\") as markdown files."
+        }
       ]
     },
     {
@@ -567,7 +1294,10 @@
       "from": "comp-gbrain",
       "to": "feature-curator",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "Cron-driven enrichment runs while you sleep: dedup people pages, fix citations, score salience, find contradictions" }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "Cron-driven enrichment runs while you sleep: dedup people pages, fix citations, score salience, find contradictions"
+        }
       ]
     },
     {
@@ -576,7 +1306,10 @@
       "from": "comp-gbrain",
       "to": "feature-multi-tenant",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "federated, multi-user, OAuth-scoped institutional memory for a 10-50 person team." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "federated, multi-user, OAuth-scoped institutional memory for a 10-50 person team."
+        }
       ]
     },
     {
@@ -585,17 +1318,94 @@
       "from": "comp-gbrain",
       "to": "feature-rbac",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "When you query, you only see what you're allowed to see — never another person's notes, never another team's data." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "When you query, you only see what you're allowed to see \u2014 never another person's notes, never another team's data."
+        }
       ]
     },
     {
-      "id": "e-consent-contradicts-gbrain-ingest",
-      "type": "contradicts",
-      "from": "feature-consent-capture",
-      "to": "feature-gbrain-dream-cycle",
+      "id": "e-hivemind-competes-five-pillars",
+      "type": "competes-with",
+      "from": "comp-hivemind",
+      "to": "feature-five-pillars",
       "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "No data is captured or pulled without explicit human approval" },
-        { "source": "gbrain-competitor-research.md", "quote": "Signal detector runs on every message your agent receives." }
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Auto-learning, cloud-backed shared brain for Claude Code \u2022 OpenClaw \u2022 Codex \u2022 Cursor \u2022 Hermes \u2022 pi agents."
+        }
+      ]
+    },
+    {
+      "id": "e-hivemind-competes-server-side-capture",
+      "type": "competes-with",
+      "from": "comp-hivemind",
+      "to": "feature-server-side-capture",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Captures every session's prompts, tool calls, and responses as structured traces in Deeplake"
+        }
+      ]
+    },
+    {
+      "id": "e-memobase-competes-rbac",
+      "type": "competes-with",
+      "from": "comp-memobase",
+      "to": "feature-rbac",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "PostgreSQL Row-Level Security ensures your memory is your own."
+        }
+      ]
+    },
+    {
+      "id": "e-graphiti-competes-bitemporal",
+      "type": "competes-with",
+      "from": "comp-graphiti",
+      "to": "need-bitemporal-facts",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Graphiti's context graphs track how facts change over time, maintain provenance to source data"
+        }
+      ]
+    },
+    {
+      "id": "e-neo4j-agent-memory-competes-audit",
+      "type": "competes-with",
+      "from": "comp-neo4j-agent-memory",
+      "to": "feature-audit-logs",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "reasoning memory (decision traces and tool usage audits)"
+        }
+      ]
+    },
+    {
+      "id": "e-mam-competes-five-pillars",
+      "type": "competes-with",
+      "from": "comp-multi-agent-memory",
+      "to": "feature-five-pillars",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "treat memory as a flat key-value store without understanding that a fact and an event are fundamentally different things"
+        }
+      ]
+    },
+    {
+      "id": "e-zep-disputed-contradicts-zep-claim",
+      "type": "contradicts",
+      "from": "comp-mem0",
+      "to": "comp-zep",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "are the subject of a methodological dispute \u2014 a corrected [calculation] indicates a score [lower] than Zep initially [reported]"
+        }
       ]
     },
     {
@@ -604,7 +1414,22 @@
       "from": "need-no-cross-tenant-leak",
       "to": "outcome-production-ready",
       "provenance": [
-        { "source": "plan.md", "quote": "The system must prevent cross-tenant memory leakage by design, not only by convention." }
+        {
+          "source": "plan.md",
+          "quote": "The system must prevent cross-tenant memory leakage by design, not only by convention."
+        }
+      ]
+    },
+    {
+      "id": "e-bitemporal-blocks-production",
+      "type": "blocks",
+      "from": "need-bitemporal-facts",
+      "to": "outcome-production-ready",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Zep + Graphiti win on bi-temporality and score 71.2% on LongMemEval versus Mem0's 49% \u2014 a twenty-two percentage point gap."
+        }
       ]
     },
     {
@@ -613,7 +1438,10 @@
       "from": "outcome-production-ready",
       "to": "assumption-teams-want-shared-memory",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "TeamShared is currently a proof of concept for shared agent memory." }
+        {
+          "source": "prod-plan.md",
+          "quote": "TeamShared is currently a proof of concept for shared agent memory."
+        }
       ]
     },
     {
@@ -622,16 +1450,10 @@
       "from": "outcome-production-ready",
       "to": "assumption-buyers-pay-for-memory-infra",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "make it production ready for multi-tenant organization customers" }
-      ]
-    },
-    {
-      "id": "a-consent-assumes-gate",
-      "type": "assumes",
-      "from": "feature-consent-capture",
-      "to": "assumption-consent-is-adoption-gate",
-      "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "Capture | **Consent-first, client-sanitized, push-only**" }
+        {
+          "source": "prod-plan.md",
+          "quote": "make it production ready for multi-tenant organization customers"
+        }
       ]
     },
     {
@@ -640,7 +1462,10 @@
       "from": "feature-connectors",
       "to": "assumption-connectors-drive-adoption",
       "provenance": [
-        { "source": "plan.md", "quote": "Connector architecture for Slack, GitHub, Notion, Google Drive, Linear, and MCP servers" }
+        {
+          "source": "plan.md",
+          "quote": "Connector architecture for Slack, GitHub, Notion, Google Drive, Linear, and MCP servers"
+        }
       ]
     },
     {
@@ -649,7 +1474,10 @@
       "from": "feature-rbac",
       "to": "assumption-enterprise-security-gates-deals",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Enterprise security baseline" }
+        {
+          "source": "prod-plan.md",
+          "quote": "Enterprise security baseline"
+        }
       ]
     },
     {
@@ -658,7 +1486,10 @@
       "from": "need-shared-context",
       "to": "assumption-shared-brain-default-desired",
       "provenance": [
-        { "source": "prod-plan.md", "quote": "Shared memories across teams and agents" }
+        {
+          "source": "prod-plan.md",
+          "quote": "Shared memories across teams and agents"
+        }
       ]
     },
     {
@@ -667,7 +1498,10 @@
       "from": "feature-wiki",
       "to": "assumption-humans-engage-wiki",
       "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "browse the data** as a human-readable, continuously updating **wiki**" }
+        {
+          "source": "memory-wiki-plan.md",
+          "quote": "browse the data** as a human-readable, continuously updating **wiki**"
+        }
       ]
     },
     {
@@ -676,7 +1510,10 @@
       "from": "feature-curator",
       "to": "assumption-distill-quality",
       "provenance": [
-        { "source": "memory-wiki-plan.md", "quote": "Distill prompt extracts only durable knowledge; curator compacts further" }
+        {
+          "source": "memory-wiki-plan.md",
+          "quote": "Distill prompt extracts only durable knowledge; curator compacts further"
+        }
       ]
     },
     {
@@ -685,7 +1522,10 @@
       "from": "comp-gbrain",
       "to": "assumption-gbrain-is-primary-competitor",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "GBrain and TeamShared both target **shared institutional memory for AI agents** in the YC \"company brain\" category." }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "GBrain and TeamShared both target **shared institutional memory for AI agents** in the YC \"company brain\" category."
+        }
       ]
     },
     {
@@ -694,7 +1534,46 @@
       "from": "need-synthesized-answers",
       "to": "assumption-synthesis-gap-required",
       "provenance": [
-        { "source": "gbrain-competitor-research.md", "quote": "Synthesis moat: gap analysis in answers is a differentiated UX TeamShared curator does not yet mirror explicitly" }
+        {
+          "source": "gbrain-competitor-research.md",
+          "quote": "Synthesis moat: gap analysis in answers is a differentiated UX TeamShared curator does not yet mirror explicitly"
+        }
+      ]
+    },
+    {
+      "id": "a-hivemind-assumes-auto-mine",
+      "type": "assumes",
+      "from": "feature-hivemind-skill-codify",
+      "to": "assumption-auto-skill-mine-not-needed",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "A background worker mines traces for repeated patterns and codifies them into `SKILL.md` files, scoped to your workspace."
+        }
+      ]
+    },
+    {
+      "id": "a-zep-assumes-bitemporal",
+      "type": "assumes",
+      "from": "need-bitemporal-facts",
+      "to": "assumption-bitemporal-not-needed",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "Zep + Graphiti win on bi-temporality and score 71.2% on LongMemEval versus Mem0's 49%"
+        }
+      ]
+    },
+    {
+      "id": "a-benchmarks-assumes-not-needed",
+      "type": "assumes",
+      "from": "outcome-production-ready",
+      "to": "assumption-benchmarks-not-needed",
+      "provenance": [
+        {
+          "source": "shared-brain-landscape-2026.md",
+          "quote": "The Mem0 research paper published at ECAI 2025 (arXiv:2504.19413) established the first broad head-to-head comparison"
+        }
       ]
     }
   ]

@@ -1,14 +1,20 @@
-# Memory Wiki + Consent-First Capture — Design
+# Memory Wiki + Capture — Design (historical)
 
-> **Archived (2026-06):** this design shipped — the `/app` console, wiki
-> curator, and consent-gated capture are live. Kept for historical context;
-> see `README.md` and `AGENTS.md` for the current architecture.
+> **Archived (2026-06):** the `/app` console and wiki curator shipped and are
+> current. **The consent-first capture model described below was retired
+> (2026-06-19)** — capture is now gated only by the `capture_enabled` setting,
+> and the `consent_grants` table / `ConsentStore` / `/app/consent` UI were
+> removed. This document is retained as a historical design artifact; do not
+> implement anything from §6 (Consent-first capture) or the consent portions
+> of later sections. See `README.md` and `AGENTS.md` for the current
+> architecture.
 
-Status: proposal / design. Builds on `plan.md` (memory architecture) and
-`prod-plan.md` (multi-tenant production stack). This document captures the
-redesign of the teamshared **web app** and the **capture → curate → wiki**
-knowledge pipeline, with a **consent-first** governance model as a hard
-constraint.
+Status: proposal / design (historical). Builds on `plan.md` (memory
+architecture) and `prod-plan.md` (multi-tenant production stack). This
+document originally captured the redesign of the teamshared **web app** and
+the **capture → curate → wiki** knowledge pipeline, with a **consent-first**
+governance model as a hard constraint. The consent-first constraint has since
+been lifted — capture is flag-gated, not consent-gated.
 
 ---
 

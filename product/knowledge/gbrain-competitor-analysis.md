@@ -16,9 +16,9 @@ Tom Blomfield's YC RFS names it as the reference implementation.
 
 TeamShared and GBrain overlap on MCP agent memory, multi-user scoping, graph
 relationships, skills/playbooks, and overnight enrichment workers. They diverge on
-**ingestion philosophy** (consent-first vs aggressive capture), **answer shape**
-(records vs synthesized prose with gap analysis), and **go-to-market** (managed
-multi-tenant SaaS vs self-hosted open-source with agent-install protocol).
+**answer shape** (records vs synthesized prose with gap analysis) and
+**go-to-market** (managed multi-tenant SaaS vs self-hosted open-source with
+agent-install protocol).
 
 ---
 
@@ -32,11 +32,11 @@ multi-tenant SaaS vs self-hosted open-source with agent-install protocol).
 - GBrain's company brain is a newer tutorial layer ("10-50 person team, ~90 min");
   TeamShared has RLS, org-scoped API keys, OTP console, and approval queues shipped.
 
-**2. Consent-first capture is a TeamShared differentiator (if buyers want it)**
-- *Confidence: Multi-source (internal + competitor contrast)*
-- TeamShared: "No data is captured or pulled without explicit human approval" — `memory-wiki-plan.md`
-- GBrain: "Signal detector runs on every message" / ingests "while I sleep" — `gbrain-competitor-research.md`
-- The graph has an explicit `contradicts` edge between these philosophies.
+**2. Server-side ToolCallCaptureMiddleware is a TeamShared differentiator (capture not hook-dependent)**
+- *Confidence: Single-source (internal + shipped code)*
+- TeamShared: `ToolCallCaptureMiddleware` + `POST /sessions/turns` record every turn across harnesses (gated by `capture_enabled`) — `AGENTS.md`
+- GBrain: capture depends on per-harness hooks (`INSTALL_FOR_AGENTS.md`).
+- The graph previously carried an `feature-consent-capture` node; consent-first capture has since been removed from the product.
 
 **3. TeamShared has pillars GBrain doesn't market: work queue, strategic OKRs, approvals**
 - *Confidence: Single-source (internal + shipped code)*
@@ -63,7 +63,7 @@ multi-tenant SaaS vs self-hosted open-source with agent-install protocol).
 ### Gaps
 
 - No interviews with teams choosing between managed memory vs self-hosted GBrain.
-- No evidence on whether buyers value consent-first enough to accept thinner ingestion.
+- No evidence on whether buyers want aggressive auto-capture (GBrain) or a more conservative default.
 - No head-to-head recall quality benchmarks (TeamShared vs GBrain on same corpus).
 - GBrain pricing model unknown; TeamShared willingness-to-pay unvalidated.
 - Unknown whether enterprise buyers trust YC-CEO open-source vs vendor SaaS.
@@ -72,7 +72,7 @@ multi-tenant SaaS vs self-hosted open-source with agent-install protocol).
 
 1. When your team evaluated agent memory, did you try self-hosting (GBrain-style) or want a managed org service? What broke?
 2. Walk me through the last time an agent gave you wrong context — was the failure retrieval, synthesis, or permissions?
-3. Would you accept an agent ingesting Slack/email automatically, or does capture need explicit human consent per source?
+3. Would you accept an agent ingesting Slack/email automatically, or do you want a per-source capture gate?
 4. Do humans on your team browse a memory wiki, or do only agents query memory?
 5. What would make you pay for memory infrastructure vs run it on your own Postgres?
 
@@ -87,7 +87,7 @@ multi-tenant SaaS vs self-hosted open-source with agent-install protocol).
 | **Agent interface** | MCP (30+ tools) + CLI | MCP (~70 tools) | TeamShared breadth |
 | **Query UX** | `search` (chunks) + `think` (synthesis + gaps) | `memory_recall` (records) + curator wiki | GBrain synthesis |
 | **Graph** | Auto-link on write, zero LLM, typed edges | Optional Neo4j, `memory_graph_*` | GBrain maturity |
-| **Ingestion** | Aggressive (signal detector, webhooks, dream cycle) | Consent-first, client-sanitized | Philosophical fork |
+| **Ingestion** | Aggressive (signal detector, webhooks, dream cycle) | Server-side middleware, `capture_enabled` flag | Different defaults |
 | **Skills** | 43 markdown skills in skillpack | Skills pillar + procedural playbooks | Converging |
 | **Multi-user** | OAuth-scoped slices, leak fuzz-tested | RLS, RBAC, org isolation, OTP console | TeamShared ops depth |
 | **Work management** | Minions job queue (internal) | `work_*` MCP tools + `/app/work` | TeamShared |
@@ -104,12 +104,11 @@ multi-tenant SaaS vs self-hosted open-source with agent-install protocol).
 ### The decision
 
 How should TeamShared position against GBrain — compete head-on as a "company brain,"
-or differentiate as managed multi-tenant agent-memory infrastructure with consent and
-governance?
+or differentiate as managed multi-tenant agent-memory infrastructure with governance?
 
 **Options:**
 - **A.** Match GBrain feature-for-feature (synthesis, graph autolink, dream cycle, schema packs)
-- **B.** Double down on managed multi-tenant + consent + work/strategic/approvals (governance layer)
+- **B.** Double down on managed multi-tenant + work/strategic/approvals (governance layer)
 - **C.** Integrate/compatibility path — TeamShared as the team brain layer GBrain lacks (hosted org mode)
 - **D.** Ignore GBrain; pursue enterprise connectors and SSO as the wedge
 
@@ -117,7 +116,7 @@ governance?
 
 1. **Time-to-moat** — GBrain has 23k stars and eval CI; catching up on retrieval/synthesis is quarters of work.
 2. **Buyer persona** — power-user self-hoster (GBrain) vs team lead wanting managed infra (TeamShared).
-3. **Ingestion trust model** — breadth (capture everything) vs consent (capture only what's approved).
+3. **Ingestion trust model** — auto-capture breadth (GBrain) vs flag-gated server-side capture (TeamShared).
 4. **Answer shape** — raw recall + wiki vs synthesized answers with explicit gaps.
 5. **Revenue model** — open-source self-host vs hosted SaaS with org billing.
 
@@ -125,7 +124,7 @@ governance?
 
 **A — Feature parity**
 - Optimizes: competitive credibility in demos, answers "why not GBrain?"
-- Sacrifices: engineering bandwidth; may abandon consent constraint to match ingest breadth.
+- Sacrifices: engineering bandwidth; may need to match GBrain's ingest breadth.
 
 **B — Governance differentiation**
 - Optimizes: enterprise trust, approval queues, work/strategic pillars, managed ops.
@@ -150,7 +149,7 @@ governance?
 
 - 5 design-partner interviews where teams **chose self-hosted GBrain** and explain why TeamShared wouldn't work.
 - Recall/synthesis benchmark on identical corpus showing TeamShared within 10% of GBrain P@5.
-- Buyer saying "we'd pay for hosted memory **only if** capture is consent-gated" (validates B).
+- Buyer saying "we'd pay for hosted memory **only if** capture is flag-gated, not auto-on" (validates B).
 - Buyer saying "we need `think`-style answers, not record lists" (validates A investment in synthesis).
 
 **Unspoken axis:** GBrain's YC CEO author may make "build on GBrain" the default advice in the
@@ -164,7 +163,7 @@ These are implications, not mogkit recommendations:
 
 1. **Add `memory_think` or extend `memory_assemble_context`** with gap analysis ("what we don't know / what's stale") — closes the biggest UX gap vs GBrain.
 2. **Ship graph autolink on write** without LLM — GBrain proves this is high-ROI for retrieval.
-3. **Document the consent-first wedge** explicitly in positioning — don't hide it; it's the trust story for teams who won't run Garry's aggressive ingest.
+3. **Document the managed multi-tenant governance wedge** explicitly in positioning — don't hide it; it's the trust story for teams who won't run Garry's aggressive self-hosted ingest.
 4. **OpenClaw/Hermes compatibility** — ensure `install.sh` is as agent-friendly as `INSTALL_FOR_AGENTS.md`; same harnesses, different brain.
 5. **Run retrieval benchmarks** — even a small NamedThingBench-style suite would close the eval credibility gap.
 

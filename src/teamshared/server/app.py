@@ -391,15 +391,6 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
         from teamshared.server.state import get_state
 
         state = get_state()
-        # Consent-first: raw conversation turns require an active grant whose
-        # scope includes raw_turns. No grant -> 403, nothing recorded.
-        if not await state.services.consent.capture_allowed(
-            org_id, identity.agent, "raw_turns"
-        ):
-            METRICS.consent_denied_capture.inc(capability="raw_turns")
-            return JSONResponse(
-                {"recorded": 0, "consent_required": True}, status_code=403
-            )
         recorded = await ingest_turns(
             state.working,
             org_id,

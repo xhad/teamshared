@@ -444,7 +444,7 @@ def _landing_page_html() -> str:
             <li>Memory wiki — facts, episodes, and playbooks as a living knowledge base.</li>
             <li>Memory explorer — search and inspect records across every pillar.</li>
             <li>Agents &amp; keys — add agents, mint and revoke API keys.</li>
-            <li>Approvals &amp; consent — review captured memory before it goes live.</li>
+            <li>Approvals — review captured memory before it goes live.</li>
           </ul>
           <div class="split-actions">
             <a class="btn btn-primary" href="/login">Open the console</a>

@@ -147,8 +147,8 @@ in the YC "company brain" category. Overlap surfaces:
 | Synthesis | `gbrain think` with gap analysis | Curator worker + distillation |
 | Graph | Auto-link on write, typed edges, traversal | Neo4j optional; `memory_graph_*` |
 | Skills/playbooks | 43 markdown skills in skillpack | Procedural playbooks + new skills pillar |
-| Security | OAuth scopes, visibility filters, fuzz-tested leaks | RLS, RBAC, org isolation, consent capture |
-| Capture | Webhooks, inbox folder, signal detector on every message | Consent-first client-sanitized capture |
+| Security | OAuth scopes, visibility filters, fuzz-tested leaks | RLS, RBAC, org isolation, approval queue |
+| Capture | Webhooks, inbox folder, signal detector on every message | Server-side `ToolCallCaptureMiddleware`, `capture_enabled` flag |
 | Autonomous loop | Dream cycle cron (66 jobs in Garry's deploy) | Distiller + curator workers |
 | Distribution | Agent-install protocol, OpenClaw/Hermes native | Cursor plugin + `install.sh` |
 
@@ -157,7 +157,6 @@ in the YC "company brain" category. Overlap surfaces:
 - No explicit **five-pillar** memory taxonomy (working/semantic/episodic/procedural/strategic/work)
 - No **human approval queue** for agent writes called out in marketing
 - No **work queue** as first-class product surface (TeamShared `work_*` tools)
-- **Consent-first capture** is not a headline constraint — ingestion is aggressive by default
 - **Multi-org self-service** with email OTP console is not the GBrain story (OAuth/admin dashboard)
 
 ## Threat level signals

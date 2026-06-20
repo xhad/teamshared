@@ -18,7 +18,7 @@ properties + links)** and **verbs (action types + audit)** as one API. TeamShare
 today has strong nouns-in-text (memories, wiki, wikilinks, autolink) and scattered
 verbs (70+ MCP tools) without a unifying ontological contract. Closing that gap —
 lightly, without Foundry's weight — is a credible differentiation path alongside
-GBrain synthesis and consent-first capture.
+GBrain synthesis and the five-pillar memory taxonomy.
 
 **Headline recommendation:** add a thin **Org Ontology** layer: typed entity kinds,
 constrained link types, governed action types, and per-entity Object Views in the

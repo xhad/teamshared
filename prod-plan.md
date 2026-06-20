@@ -974,7 +974,7 @@ keeps `main` deployable; prefer feature flags and tests that pin contracts.
 |----|------|--------|
 | 0.1 | Prod config validator (`config_validate.py`, `TEAMSHARED_DEPLOYMENT_ENV`) | **Done** |
 | 0.2 | Route inventory test (`server/route_policy.py`) | **Done** |
-| 0.3 | Security metrics (`auth_rejected`, `otp_failed`, `consent_denied_capture`, `ingestion_quarantined`) | **Done** |
+| 0.3 | Security metrics (`auth_rejected`, `otp_failed`, `ingestion_quarantined`) | **Done** |
 
 **Exit:** invalid prod `.env` refuses startup; new routes fail CI without classification.
 
@@ -1008,7 +1008,7 @@ keeps `main` deployable; prefer feature flags and tests that pin contracts.
 |----|------|
 | 4.1 | HMAC-signed distill/curate jobs | **Done** |
 | 4.2 | Redis-backed rate limit + idempotency for multi-instance | **Done** |
-| 4.3 | Capture/consent + queue observability alerts | **Done** |
+| 4.3 | Capture + queue observability alerts | **Done** |
 
 ### Stage 5 — Enterprise layer (ongoing)
 

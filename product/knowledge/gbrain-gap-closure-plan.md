@@ -2,8 +2,8 @@
 
 Roadmap to close the **feature gaps** identified in
 `product/knowledge/gbrain-competitor-analysis.md` without abandoning TeamShared's
-differentiators (consent-first capture, managed multi-tenant governance, work/
-strategic/approval pillars).
+differentiators (managed multi-tenant governance, consent-free server-side
+capture, work/strategic/approval pillars).
 
 **Out of scope (intentional forks, not gaps):**
 - Aggressive signal-detector ingestion on every message
@@ -96,7 +96,7 @@ typed edges automatically — GBrain's +31 P@5 graph lift without LLM cost.
 
 ## Phase 4 — Dream cycle (scheduled maintenance)
 
-**Goal:** Overnight enrichment loop — GBrain's cron jobs without abandoning consent.
+**Goal:** Overnight enrichment loop — GBrain's cron jobs, scoped to already-ingested memory.
 
 | # | Task | Owner layer | Notes |
 |---|---|---|---|
@@ -107,7 +107,7 @@ typed edges automatically — GBrain's +31 P@5 graph lift without LLM cost.
 | 4.5 | `contradiction_sample` — paired retrieval + lightweight LLM judge (optional, cost-capped) | dream job | GBrain `suspected-contradictions` |
 | 4.6 | `curator_sweep` — enqueue dirty subjects not yet wiki-curated | reuses `curator_worker` | |
 | 4.7 | MCP `memory_dream_status` — last run, jobs completed, findings count | `server/tools.py` | Operator visibility |
-| 4.8 | Tests: dream job idempotency, consent boundary (no new external ingest) | `tests/test_dream_worker.py` | |
+| 4.8 | Tests: dream job idempotency, no new external ingest | `tests/test_dream_worker.py` | |
 
 **Exit criteria:** Nightly worker runs per org; `memory_think` gap block includes dream-cycle staleness/contradiction flags.
 

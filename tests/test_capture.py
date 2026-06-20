@@ -6,7 +6,6 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import fakeredis.aioredis
 import mcp.types as mt
@@ -42,10 +41,9 @@ async def memory(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[WorkingMemory
         await mem.close()
 
 
-def _state(memory: WorkingMemory, *, allow: bool = True) -> SimpleNamespace:
-    """Fake ServerState with a consent store that allows/denies capture."""
-    consent = SimpleNamespace(capture_allowed=AsyncMock(return_value=allow))
-    return SimpleNamespace(working=memory, services=SimpleNamespace(consent=consent))
+def _state(memory: WorkingMemory) -> SimpleNamespace:
+    """Fake ServerState — capture is now gated only by settings.capture_enabled."""
+    return SimpleNamespace(working=memory, services=SimpleNamespace())
 
 
 @dataclass
@@ -105,26 +103,6 @@ async def test_middleware_records_tool_call(
     assert len(sessions) == 1
     turns = await memory.get_turns(ORG, sessions[0]["session_id"])
     assert turns[0]["content"] == "memory_recall(query=hi) -> ok"
-
-
-async def test_middleware_skips_without_consent(
-    memory: WorkingMemory, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(capture_mod, "get_state", lambda: _state(memory, allow=False))
-    mw = ToolCallCaptureMiddleware(idle_seconds=1800, max_turns=200)
-
-    async def call_next(ctx: _Ctx) -> str:
-        return "result"
-
-    tokens = _bind("cursor")
-    try:
-        out = await mw.on_call_tool(_ctx("memory_recall", {"query": "hi"}), call_next)
-    finally:
-        _unbind(tokens)
-
-    assert out == "result"  # tool call still succeeds
-    # Capture is off without an active consent grant: nothing recorded.
-    assert await memory.list_open_sessions(ORG, "cursor", limit=5) == []
 
 
 async def test_middleware_skips_health(

@@ -8,9 +8,9 @@ cookie. The console home renders live memory-system stats from the existing
 stores via :func:`teamshared.server.state.get_state`.
 
 Sections: home overview, the wiki (topics/timeline/playbooks), read screens
-(memory/agents), govern surfaces (people/orgs/keys/consent/audit), and
-capture consent. Sections still unbuilt render a placeholder through the
-same shell so navigation works end to end.
+(memory/agents), govern surfaces (people/orgs/keys/audit). Sections still
+unbuilt render a placeholder through the same shell so navigation works end
+to end.
 """
 
 from __future__ import annotations
@@ -35,7 +35,6 @@ from teamshared.identity.principal import Principal
 from teamshared.identity.provisioning import signup_org
 from teamshared.identity.rbac import Permissions
 from teamshared.identity.sessions import issue_session, verify_session
-from teamshared.ingestion.consent import BASELINE_PROFILE, LOCKED_RULES, MODES, SCOPES
 from teamshared.logging import get_logger
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.wiki import slugify
@@ -103,7 +102,6 @@ NAV: list[tuple[str, str, str]] = [
     ("/app/people", "People", "people"),
     ("/app/orgs", "Organizations", "orgs"),
     ("/app/keys", "API Keys", "keys"),
-    ("/app/consent", "Consent", "consent"),
     ("/app/audit", "Audit", "audit"),
     ("/app/settings", "Settings", "settings"),
 ]
@@ -137,7 +135,6 @@ NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
             ("/app/orgs", "Organizations", "orgs"),
             ("/app/keys", "API Keys", "keys"),
             ("/app/ontology", "Ontology", "ontology"),
-            ("/app/consent", "Consent", "consent"),
             ("/app/audit", "Audit", "audit"),
             ("/app/settings", "Settings", "settings"),
         ],
@@ -2261,68 +2258,8 @@ def register_console_routes(
             headers=["When", "Agent", "Action", "Resource", "Target"], rows=rows, note=note,
         )
 
-    # --- consent (Phase 2) ----------------------------------------------
-
-    async def consent_page(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        ctx = await _shell(request, principal, "consent")
-        try:
-            grants = await services.consent.list_grants(principal.org_id)
-        except Exception as exc:
-            log.warning("consent_list_failed", error=str(exc))
-            grants = []
-        ctx.update(
-            {
-                "grants": grants,
-                "scopes": SCOPES,
-                "modes": MODES,
-                "baseline": BASELINE_PROFILE,
-                "locked": LOCKED_RULES,
-                "flash": request.query_params.get("flash") or "",
-            }
-        )
-        return _TEMPLATES.TemplateResponse(request, "consent.html", ctx)
-
-    async def consent_grant(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        agent = str(form.get("agent") or "").strip()
-        mode = str(form.get("mode") or "review")
-        scope = [str(s) for s in form.getlist("scope")]
-        if agent and mode in MODES:
-            try:
-                await services.consent.grant(
-                    principal.org_id,
-                    agent=agent,
-                    mode=mode,
-                    scope=scope,
-                    granted_by=principal.id,
-                )
-            except Exception as exc:
-                log.warning("consent_grant_failed", error=str(exc))
-                return RedirectResponse("/app/consent?flash=error", status_code=303)
-        return RedirectResponse("/app/consent?flash=granted", status_code=303)
-
-    async def consent_revoke(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        _, deny = await _verified_form(request)
-        if deny:
-            return deny
-        grant_id = request.path_params["grant_id"]
-        try:
-            await services.consent.revoke(principal.org_id, grant_id)
-        except Exception as exc:
-            log.warning("consent_revoke_failed", error=str(exc))
-            return RedirectResponse("/app/consent?flash=error", status_code=303)
-        return RedirectResponse("/app/consent?flash=revoked", status_code=303)
+    # --- consent (removed 2026-06-19) — capture is now gated only by
+    #     settings.capture_enabled; no per-agent consent grants. ---------
 
     def _placeholder(active: str, title: str) -> Any:
         async def handler(request: Request) -> Response:
@@ -2394,9 +2331,6 @@ def register_console_routes(
         Route("/app/keys/{key_id}/revoke", key_revoke, methods=["POST"]),
         Route("/app/ontology", ontology_page, methods=["GET"]),
         Route("/app/audit", audit_page, methods=["GET"]),
-        Route("/app/consent", consent_page, methods=["GET"]),
-        Route("/app/consent/grant", consent_grant, methods=["POST"]),
-        Route("/app/consent/{grant_id}/revoke", consent_revoke, methods=["POST"]),
         Route("/app/settings", settings_page, methods=["GET"]),
         Route("/app/settings/export", settings_export, methods=["GET"]),
         Route("/app/settings/purge", settings_purge, methods=["POST"]),

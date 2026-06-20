@@ -20,7 +20,6 @@ from teamshared.identity.accounts import AccountStore
 from teamshared.identity.api_keys import ApiKeyStore
 from teamshared.identity.rbac import Authorizer
 from teamshared.identity.roles import RoleStore
-from teamshared.ingestion.consent import ConsentStore
 from teamshared.ingestion.pipeline import IngestionPipeline
 from teamshared.logging import get_logger
 from teamshared.memory.audit import AuditLog
@@ -70,7 +69,6 @@ class ProductionServices:
     tenancy: TenancyRepository
     connectors: ConnectorService
     admin: AdminService
-    consent: ConsentStore
     graph: Any = None  # GraphStore | PostgresGraphStore | None — set at app startup
 
     def authorizer(self) -> Authorizer:
@@ -166,7 +164,6 @@ def make_services(settings: Settings) -> ProductionServices:
         admin=AdminService(
             tenant_db, roles, audit, export_max_items=settings.export_max_items
         ),
-        consent=ConsentStore(tenant_db),
     )
     return services
 

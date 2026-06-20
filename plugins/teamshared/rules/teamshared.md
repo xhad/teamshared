@@ -46,7 +46,7 @@ Use on `memory_recall`, `memory_remember`, `memory_session_*`, `memory_state_*`.
 
 ## Session logging
 
-Agent-owned via `memory_session_*` (not `/sessions/turns` consent). State key: `conversation/active-session`.
+Agent-owned via `memory_session_*` (separate from the server-side `/sessions/turns` capture sink). State key: `conversation/active-session`.
 
 **New chat:** state_get → if stale `session_id`, `memory_session_close(distill=true)` → `memory_session_open(topic≤120ch, repo, github)` → state_set. **Pivot:** close+distill, clear state, open. **Done:** close+distill, clear. Append failure → reopen session, retry once. No secrets.
 

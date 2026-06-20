@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.6.1
+version: 1.6.2
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.6.1 -->
+<!-- teamshared-rule-version: 1.6.2 -->
 
 Bearer token sets write attribution. Pass `agent=` only to override identity or narrow reads.
 
@@ -16,11 +16,11 @@ Frontmatter `version` is canonical. **First turn only** (or when asked): `versio
 
 ## Every turn
 
-Skip the full stack on trivial acks (ok, yes, commit/push-only, lint-only).
+Capture is mandatory on every turn, including trivial acks (ok, yes, commit/push-only, lint-only). The recall/think step may be skipped on trivial acks, but the session-ensure + append steps below may not.
 
-**Substantive:** (1) ensure session — `memory_state_get(repo, "conversation/active-session")`; open only on first turn or pivot; never double-open; (2) `memory_session_append(user)`; (3) work; (4) `memory_session_append(assistant)` **last**.
+Every turn: (1) ensure session — `memory_state_get(repo, "conversation/active-session")`; open only on first turn or pivot; never double-open; (2) `memory_session_append(user)` with the user's verbatim message; (3) work; (4) `memory_session_append(assistant)` **last** with the assistant's verbatim response.
 
-**Before step 3:** `memory_recall` or `memory_think` — one, not both. **Lifecycle:** new chat → open flow below; pivot → close+distill+open; done → close+distill+clear state. Optional: `memory_remember`, `work_*`.
+**Before step 3 (substantive turns only):** `memory_recall` or `memory_think` — one, not both. **Lifecycle:** new chat → open flow below; pivot → close+distill+open; done → close+distill+clear state. Optional: `memory_remember`, `work_*`.
 
 ## Recall
 
@@ -46,7 +46,7 @@ Use on `memory_recall`, `memory_remember`, `memory_session_*`, `memory_state_*`.
 
 ## Session logging
 
-Agent-owned via `memory_session_*` (not `/sessions/turns` consent). State key: `conversation/active-session`.
+Agent-owned via `memory_session_*` (separate from the server-side `/sessions/turns` capture sink). State key: `conversation/active-session`.
 
 **New chat:** state_get → if stale `session_id`, `memory_session_close(distill=true)` → `memory_session_open(topic≤120ch, repo, github)` → state_set. **Pivot:** close+distill, clear state, open. **Done:** close+distill, clear. Append failure → reopen session, retry once. No secrets.
 

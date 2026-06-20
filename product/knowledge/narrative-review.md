@@ -53,8 +53,8 @@ unvalidated problem (do teams want a *shared* agent brain at all, and will they
 trust it with cross-agent visibility by default?) as settled. A smart skeptic
 would argue: Cursor already gives each developer agent memory; Cloudflare and
 LangChain offer managed memory primitives; the incremental value of a team-wide
-memory server doesn't clear the adoption friction of consent-first capture,
-another MCP to configure, and a wiki humans may never open. The rational move is
+memory server doesn't clear the adoption friction of another MCP to configure
+and a wiki humans may never open. The rational move is
 to prove **cross-agent recall is valuable to 3–5 design partners** *before*
 building Phase 3 enterprise or Phase 2's eleven connectors — not after. The
 staged security work (Stages 0–3 Done) is real engineering progress, but it

@@ -7,7 +7,7 @@ one source-type ("what the team intends"). On a thin corpus **single-source is
 the default, not an anomaly** — almost every claim in the graph rests on one
 document, because the documents are all by the same authors. So the bar for
 "this needs validating" resets: the triage below ranks by *the decision at risk*,
-not by evidence-thinness (everything is thin). Totals: **8 assumptions** (zero
+not by evidence-thinness (everything is thin). Totals: **7 assumptions** (zero
 provenance) and **~30 single-source claims** (one source each).
 
 ## Assumptions (zero provenance)
@@ -43,17 +43,12 @@ Ranked by the decision that breaks if the assumption is wrong.
 
 ### Medium
 
-5. **Consent-first capture friction is what gates adoption.**
-   - Decision at risk: scope of a whole implementation phase. Declared a "hard
-     constraint" / locked decision, yet no user or buyer is quoted demanding it.
-   - Source: `memory-wiki-plan.md` "Consent-first, client-sanitized, push-only".
-
-6. **SSO/SAML/SOC2 gate the deals worth chasing.**
+5. **SSO/SAML/SOC2 gate the deals worth chasing.**
    - Decision at risk: Phase 3 enterprise sequencing. May be built too early (or
      too late) without a design partner who gates on it.
    - Source: `prod-plan.md` "Enterprise security baseline".
 
-7. **Humans will actually browse the memory wiki/console.**
+6. **Humans will actually browse the memory wiki/console.**
    - Decision at risk: the console + curator + wiki build (a full phase) — large
      investment with no audience if humans never open `/app`.
    - Source: `memory-wiki-plan.md` "browse the data as a human-readable,
@@ -61,7 +56,7 @@ Ranked by the decision that breaks if the assumption is wrong.
 
 ### Low
 
-8. **Slack/GitHub/Notion/etc. connectors are the adoption lever.**
+7. **Slack/GitHub/Notion/etc. connectors are the adoption lever.**
    - Decision at risk: connector roadmap ordering — recoverable; connectors can
      be reprioritized once real usage exists. Listed as "low" only because it's
      downstream of #1–#2 being true at all.

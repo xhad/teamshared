@@ -246,7 +246,6 @@ between them and a **New org** action to create more.
   (they sign in with their own OTP and land in this org), and grant/revoke roles.
 - **Organizations** (`/app/orgs`) — list the orgs your account belongs to, switch
   between them, and create a new one.
-- **Consent** (`/app/consent`) — grant/revoke the capture scopes that gate ingestion.
 
 Each new org is isolated by RLS, so opening signup only lets people create their own
 private space — the shared team brain (the default org) is reached only by an admin

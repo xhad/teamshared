@@ -61,7 +61,7 @@ Secondary input (feeds recall quality, not in the WOSR equation directly):
 |---|---|
 | **Distilled memories per org / week** | Supply side — is the brain filling? |
 | **Recall latency p95** | Quality guardrail — slow recall → abandoned |
-| **Consent-approved capture batches / org / week** | Capture funnel — no capture → nothing to recall |
+| **Capture batches / org / week** | Capture funnel — no capture → nothing to recall |
 
 ---
 
@@ -78,7 +78,7 @@ Observable sooner than WOSR (days, not weeks):
 | Cross-agent recall hit | `memory_recall` with no `agent=` filter (shared-brain default) returning records from ≥2 distinct writers |
 | Distilled memories | Distill queue depth → 0; episodic/semantic count delta per org |
 | Recall latency | MCP tool round-trip time; Postgres/pgvector query span in traces |
-| Capture batches | Consent grant active + `POST /sessions/turns` accepted |
+| Capture batches | `capture_enabled=True` + `POST /sessions/turns` accepted |
 
 ---
 
@@ -94,7 +94,7 @@ without new tracking. Label: **you must measure this.**
 | **Active agents per org** | Bearer tokens map to agents, but no weekly-active-agent rollup |
 | **Recall latency p95 per org** | OpenTelemetry spans may exist; no SLO dashboard on recall path |
 | **Distilled memories per org / week** | Mem0/SQL stats exist (`GET /memory`, console home); not time-series per org |
-| **Consent-approved capture batches** | `consent_denied_capture` metric exists; accepted-batch funnel per org is not surfaced |
+| **Capture batches** | `POST /sessions/turns` accepted-batch funnel per org is not surfaced |
 | **Session → recall correlation** | Working memory sessions exist; no join from `session_id` to subsequent recall calls |
 | **Paying orgs** (if optimizing for Definition B) | No billing instrumented — entire revenue branch is uninstrumentable today |
 

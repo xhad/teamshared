@@ -122,7 +122,7 @@ class Metrics:
         )
         self.capture_recorded = _Counter(
             "teamshared_capture_recorded_total",
-            "Conversation turns recorded after consent checks",
+            "Conversation turns recorded",
         )
         self.permission_denied = _Counter(
             "teamshared_permission_denied_total", "Permission checks denied"
@@ -137,10 +137,6 @@ class Metrics:
         )
         self.otp_failed = _Counter(
             "teamshared_otp_failed_total", "Console OTP verification failures"
-        )
-        self.consent_denied_capture = _Counter(
-            "teamshared_consent_denied_capture_total",
-            "Capture attempts blocked by missing or insufficient consent",
         )
         self.ingestion_quarantined = _Counter(
             "teamshared_ingestion_quarantined_total",
@@ -195,7 +191,7 @@ class Metrics:
                 self.queue_depth, self.queue_dead_letter, self.queue_pending,
                 self.capture_recorded, self.permission_denied,
                 self.cross_tenant_violation, self.memory_writes, self.auth_rejected,
-                self.otp_failed, self.consent_denied_capture, self.ingestion_quarantined,
+                self.otp_failed, self.ingestion_quarantined,
                 self.rate_limited, self.job_signature_invalid,
                 self.admin_export_total, self.admin_purge_total,
                 self.context_pack_built, self.context_pack_tokens,
