@@ -81,7 +81,8 @@ async def test_connector_sync_imports_active_memories() -> None:
         report = await services.connectors.sync(ctx, cid, connector=_FakeConnector({}))
         assert report.fetched == 2
         assert report.imported == 2
-        subjects = await services.vector_store.list_subjects(ctx.org_id, limit=10)
-        assert len(subjects) >= 2
+        # Connector-sourced memory lands active (no longer routed to an approval queue).
+        counts = await services.vector_store.stats(ctx.org_id)
+        assert counts["active"] >= 2
     finally:
         await services.tenant_db.close()

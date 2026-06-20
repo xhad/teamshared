@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
 
 from teamshared.memory.eval_bench import (
     NAMED_THING_BENCH_MIN_MEAN_HIT_AT_5,
