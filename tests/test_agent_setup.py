@@ -50,13 +50,15 @@ def test_cursor_setup_includes_mcp_json() -> None:
     assert "tsk_testtoken_secret" in setup.snippet
     assert "plugins/local" not in setup.snippet
     assert "symlink" not in setup.snippet.lower()
-    assert setup.config_path == "./.cursor/rules/teamshared.mdc and ./.cursor/mcp.json"
+    assert setup.config_path == "~/.cursor/rules/teamshared.mdc and ~/.cursor/mcp.json"
     assert any("install.sh" in step for step in setup.steps)
-    assert any(".gitignore" in step for step in setup.steps)
+    # Cursor installs globally under ~/.cursor (outside any repo), so there is
+    # no .gitignore step.
+    assert not any(".gitignore" in step for step in setup.steps)
     assert setup.rule_mdc is not None
     assert "teamshared Memory Protocol" in setup.rule_mdc
     assert "alwaysApply: true" in setup.rule_mdc
-    assert any("./.cursor/rules" in step for step in setup.rule_install_steps)
+    assert any("~/.cursor/rules" in step for step in setup.rule_install_steps)
 
 
 def test_load_teamshared_memory_rule_mdc() -> None:

@@ -13,10 +13,15 @@ _REPO_ASSETS = None
 # Every harness installs under the directory where the script is run (pwd) —
 # never under $HOME. Run from your project root:
 #   cd /path/to/your/repo && curl -fsSL __BASE__/install.sh | bash
+# NOTE: Cursor is the exception — it installs globally under ${HOME}/.cursor
+# (machine-wide rule + MCP config). Run the Cursor install from anywhere.
 _INSTALL_SH = r"""#!/usr/bin/env bash
-# teamshared unified installer (project-local only)
-#   cd /path/to/your/repo
-#   curl -fsSL __BASE__/install.sh | bash
+# teamshared unified installer
+#   Cursor: writes to ~/.cursor (global, machine-wide).
+#   Other harnesses: write under the project root (./.codex, ./.hermes, ...).
+#   Run from anywhere:
+#     cursor:  curl -fsSL __BASE__/install.sh | bash
+#     others:  cd /path/to/your/repo && curl -fsSL __BASE__/install.sh | bash
 set -euo pipefail
 
 export TEAMSHARED_BASE_URL="${TEAMSHARED_BASE_URL:-__BASE__}"
@@ -67,8 +72,8 @@ _ts_read_secret() {
 }
 
 _ts_choose_harness() {
-  _ts_tty $'\nSelect agent harness:\n  1) cursor   — Cursor IDE (memory rule + MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n\n'
-  _ts_tty "Install root: ${INSTALL_ROOT}\n"
+  _ts_tty $'\nSelect agent harness:\n  1) cursor   — Cursor IDE (memory rule + MCP under ~/.cursor)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n\n'
+  _ts_tty "Cursor installs globally under ~/.cursor; other harnesses install under: ${INSTALL_ROOT}\n"
   local choice
   while true; do
     _ts_tty 'Enter choice [1-5]: '
@@ -201,10 +206,12 @@ print(config_path)
 PY
 }
 
-# Cursor: memory rule + MCP under ./.cursor (no plugin bundle, no snippet file).
+# Cursor: memory rule + MCP under ~/.cursor (global, not project-local). The
+# rule and MCP config apply across every Cursor window on this machine; there
+# is no per-repo install for Cursor. Other harnesses stay project-local below.
 _ts_install_cursor() {
   _ts_need_cmd curl
-  local cursor_dir="${INSTALL_ROOT}/.cursor"
+  local cursor_dir="${HOME}/.cursor"
   local rule_path="${cursor_dir}/rules/teamshared.mdc"
   local mcp_config="${cursor_dir}/mcp.json"
 
@@ -215,8 +222,8 @@ _ts_install_cursor() {
   _ts_write_cursor_mcp "${mcp_config}"
   echo "  MCP config → ${mcp_config}"
   echo ""
-  echo "NOTE: ${mcp_config} contains your bearer token."
-  echo "      Add '.cursor/mcp.json' to this repo's .gitignore so it isn't committed."
+  echo "NOTE: ${mcp_config} lives under your home directory and is not committed"
+  echo "      to any repo. It contains your bearer token — keep it private."
 }
 
 _ts_install_codex() {
@@ -560,11 +567,11 @@ PY
 }
 
 _ts_uninstall_cursor() {
-  echo "Removing Cursor integration from ${INSTALL_ROOT}"
-  _ts_rm "${INSTALL_ROOT}/.cursor/plugins/local/teamshared"
-  _ts_rm "${INSTALL_ROOT}/.cursor/rules/teamshared.mdc"
-  _ts_rm "${INSTALL_ROOT}/.cursor/teamshared-mcp.snippet.json"
-  _ts_remove_json_mcp "${INSTALL_ROOT}/.cursor/mcp.json"
+  echo "Removing Cursor integration from ${HOME}/.cursor"
+  _ts_rm "${HOME}/.cursor/plugins/local/teamshared"
+  _ts_rm "${HOME}/.cursor/rules/teamshared.mdc"
+  _ts_rm "${HOME}/.cursor/teamshared-mcp.snippet.json"
+  _ts_remove_json_mcp "${HOME}/.cursor/mcp.json"
 }
 
 _ts_uninstall_codex() {
@@ -641,11 +648,12 @@ def install_index_html(*, base_url: str) -> str:
 </head>
 <body>
   <h1>Install teamshared</h1>
-  <p>One script for every harness ({harnesses}). Run it from your <strong>project
-  root</strong> — files land under <code>./.cursor</code>, <code>./.codex</code>,
-  <code>./.hermes</code>, <code>./.claude</code>, or <code>./.openclaw</code>
-  (never <code>~</code>). Cursor installs the memory rule and merges MCP config;
-  other harnesses fetch MCP snippets from this server.</p>
+  <p>One script for every harness ({harnesses}). <strong>Cursor</strong> installs
+  globally under <code>~/.cursor</code> (run it from anywhere); <strong>other
+  harnesses</strong> install under the project root — run the script from your
+  project root so files land under <code>./.codex</code>, <code>./.hermes</code>,
+  <code>./.claude</code>, or <code>./.openclaw</code>. Cursor installs the memory
+  rule and merges MCP config; other harnesses fetch MCP snippets from this server.</p>
   <pre>cd /path/to/your/repo
 curl -fsSL {base}/install.sh | bash</pre>
   <p>Mint a bearer token in the <a href="/app/keys">console API Keys</a> page,

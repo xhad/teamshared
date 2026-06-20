@@ -48,11 +48,13 @@ def test_unified_install_script() -> None:
     assert "_ts_install_hermes_hook" in body
     assert "teamshared-capture.py" in body
     assert "post_llm_call" in body
-    # Project-local install only (current directory).
+    # Project-local install for non-Cursor harnesses (current directory); Cursor
+    # installs globally under ${HOME}/.cursor.
     assert "INSTALL_ROOT=\"$(pwd)\"" in body
     assert "_ts_choose_cursor_scope" not in body
     assert "global — ~/.cursor" not in body
-    assert "${INSTALL_ROOT}/.cursor" in body
+    assert "${HOME}/.cursor" in body
+    assert "${INSTALL_ROOT}/.cursor" not in body
     assert "_ts_write_cursor_mcp" in body
     assert "cursor/teamshared.mdc" in body
     cursor_section = body.split("_ts_install_cursor")[1].split("_ts_install_codex")[0]
@@ -83,10 +85,11 @@ def test_unified_uninstall_script() -> None:
     # Never prompts for or touches a bearer token (pure removal).
     assert "TEAMSHARED_TOKEN" not in body
     assert "_ts_prompt_token" not in body
-    # Removes project-local files under INSTALL_ROOT only.
+    # Cursor installs globally under ${HOME}/.cursor; other harnesses are
+    # removed from project-local files under INSTALL_ROOT only.
     assert 'INSTALL_ROOT="$(pwd)"' in body
-    assert "${INSTALL_ROOT}/.cursor/plugins/local/teamshared" in body
-    assert "${INSTALL_ROOT}/.cursor/rules/teamshared.mdc" in body
+    assert "${HOME}/.cursor/plugins/local/teamshared" in body
+    assert "${HOME}/.cursor/rules/teamshared.mdc" in body
     assert "${INSTALL_ROOT}/.codex/teamshared-mcp.toml" in body
     assert "${INSTALL_ROOT}/.hermes/agent-hooks/teamshared-capture.py" in body
     assert "${INSTALL_ROOT}/.claude/claude_desktop_config.json" in body
@@ -113,7 +116,7 @@ def test_install_routes() -> None:
         assert index.status_code == 200
         assert "install.sh" in index.text
         assert "uninstall.sh" in index.text
-        assert "./.cursor" in index.text
+        assert "~/.cursor" in index.text
 
         uninstall = client.get("/uninstall.sh")
         assert uninstall.status_code == 200

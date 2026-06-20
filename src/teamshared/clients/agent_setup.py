@@ -96,20 +96,20 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
         return AgentSetup(
             agent_type=agent_type,
             title="Cursor",
-            config_path="./.cursor/rules/teamshared.mdc and ./.cursor/mcp.json",
+            config_path="~/.cursor/rules/teamshared.mdc and ~/.cursor/mcp.json",
             steps=(
-                "From your project root, run: curl -fsSL <server>/install.sh | bash",
-                "Or copy the teamshared rule into ./.cursor/rules/teamshared.mdc.",
-                "Merge the JSON block below into ./.cursor/mcp.json.",
-                "Add .cursor/mcp.json to .gitignore (bearer token).",
+                "From anywhere, run: curl -fsSL <server>/install.sh | bash",
+                "Or copy the teamshared rule into ~/.cursor/rules/teamshared.mdc.",
+                "Merge the JSON block below into ~/.cursor/mcp.json.",
+                "~/.cursor/mcp.json is outside any repo; keep it private (bearer token).",
                 "Command Palette → Developer: Reload Window.",
             ),
             snippet=json.dumps(payload, indent=2),
             snippet_lang="json",
             rule_mdc=rule_mdc,
             rule_install_steps=(
-                "mkdir -p ./.cursor/rules",
-                "Copy the Memory rule block into ./.cursor/rules/teamshared.mdc.",
+                "mkdir -p ~/.cursor/rules",
+                "Copy the Memory rule block into ~/.cursor/rules/teamshared.mdc.",
                 "Developer: Reload Window so Cursor loads the rule.",
             ),
         )

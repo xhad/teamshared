@@ -33,10 +33,10 @@ infra/data/
 .DS_Store
 .idea/
 .vscode/
-# Local Cursor MCP config (contains org bearer token)
+# Cursor installs globally under ~/.cursor, not in the repo. These entries are
+# kept for safety in case a stray project-local .cursor/ appears.
 .cursor/mcp.json
 .cursor/teamshared-mcp.snippet.json
-# Local install artifacts — committed project rules live under .cursor/rules/
 .cursor/plugins/
 .cursor/hooks/state/
 

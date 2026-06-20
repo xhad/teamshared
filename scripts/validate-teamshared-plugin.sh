@@ -19,7 +19,6 @@ echo "Validating teamshared plugin at $PLUGIN"
 check "$PLUGIN/.cursor-plugin/plugin.json"
 check "$ROOT/.cursor-plugin/marketplace.json"
 check "$PLUGIN/rules/teamshared.mdc"
-check "$ROOT/.cursor/rules/teamshared.mdc"
 check "$PLUGIN/skills/teamshared/SKILL.md"
 check "$PLUGIN/skills/continual-learning/SKILL.md"
 check "$PLUGIN/agents/agents-memory-updater.md"
@@ -48,16 +47,8 @@ if [[ "$FAIL" -ne 0 ]]; then
   exit 1
 fi
 
-if ! diff -q "$PLUGIN/rules/teamshared.mdc" "$ROOT/.cursor/rules/teamshared.mdc" >/dev/null; then
-  echo "MISMATCH  .cursor/rules/teamshared.mdc vs plugins/teamshared/rules/teamshared.mdc"
-  FAIL=1
-else
-  echo "ok  .cursor/rules/teamshared.mdc matches plugin rule"
-fi
-
-if [[ "$FAIL" -ne 0 ]]; then
-  echo "Validation failed."
-  exit 1
-fi
+# Canonical rule lives only at plugins/teamshared/rules/teamshared.mdc now;
+# the legacy committed .cursor/rules/teamshared.mdc copy is gone (Cursor
+# installs the rule globally under ~/.cursor/rules/ instead of per-repo).
 
 echo "All checks passed."
