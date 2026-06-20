@@ -6,9 +6,11 @@ AGENTS.md continual learning, and copy-paste snippets for other clients.
 | Component | Purpose |
 |---|---|
 | `rules/teamshared.mdc` | Recall-first protocol, `repo=` + `github=` code scope, console pointer (`alwaysApply`) |
+| `install/` | Harness templates served at `/install/assets/*` by `install.sh` (single source of truth) |
+| `clients/` | Copy-paste protocol + extended MCP examples for manual setup |
 | `skills/teamshared/` | Memory tool chooser + session workflow |
 | `skills/continual-learning/` | Orchestrates AGENTS.md updates from transcripts |
-| `hooks/` | Stop hook — continual-learning cadence + teamshared-backed state |
+| `hooks/` | Continual-learning stop hook only |
 | `agents/agents-memory-updater.md` | Mines transcripts and updates `AGENTS.md` |
 | `clients/` | Snippets for Hermes, Claude Desktop, and plain-text protocol |
 
@@ -54,10 +56,25 @@ ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 }
 ```
 
-3. **[Bun](https://bun.sh)** on PATH for continual-learning hooks.
+3. **[Bun](https://bun.sh)** on PATH for the continual-learning stop hook (optional if you skip continual learning).
 4. **Developer: Reload Window** — confirm **Settings → MCP** shows `teamshared` enabled.
 
 Do not install the upstream Cursor `continual-learning` marketplace plugin — this bundle replaces it with teamshared state storage.
+
+## Context compression (MCP)
+
+Compression is **MCP-first** — no Cursor hooks required for the context pipeline.
+
+| Surface | When to use |
+|---|---|
+| **MCP middleware** | Automatic on every teamshared tool response (`memory_recall`, etc.) |
+| **`context_prepare`** | Before a model turn: session log + compress history + enrich org memory |
+| **`context_normalize`** | After Shell/Grep/Read or other non-teamshared tools return large output |
+| **`context_compress`** / **`context_retrieve`** | Manual message-list compression and CCR retrieval |
+
+See [`docs/context-compression.md`](../../docs/context-compression.md) for the full model, CCR, and configuration. Toggle the prepare pipeline with `TEAMSHARED_LLM_PREPARE_ENABLED` (default on).
+
+There is **no** OpenAI gateway URL to configure — Cursor keeps talking to its normal model provider.
 
 ## What you get
 
@@ -71,9 +88,7 @@ Do not install the upstream Cursor `continual-learning` marketplace plugin — t
   state keys `continual-learning/cadence` and `continual-learning/index` on
   teamshared (token + repo scoped), with local fallback under
   `~/.cursor/hooks/state/continual-learning/<workspace-slug>/`.
-- **Session logging**: the `teamshared.mdc` rule instructs the agent to open a
-  working-memory session on every chat and append user/assistant turns via
-  `memory_session_*` (no client-side transcript hook).
+- **Session logging**: the `teamshared.mdc` rule covers `memory_session_*` on every chat; use `context_prepare` when you also want compression and enrichment in one call.
 
 ## Other clients
 

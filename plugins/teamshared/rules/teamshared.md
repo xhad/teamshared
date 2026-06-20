@@ -1,6 +1,6 @@
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.4.0 -->
+<!-- teamshared-rule-version: 1.5.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -8,12 +8,12 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version: 1.4.0` in the paired `teamshared.mdc`
+This rule is versioned (`version: 1.5.0` in the paired `teamshared.mdc`
 frontmatter). The server ships the canonical rule and its version. Keep the
 installed copy fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
-   versions), call the `version` tool with this rule's version (`1.4.0`) as
+   versions), call the `version` tool with this rule's version (`1.5.0`) as
    `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
@@ -42,8 +42,11 @@ Run these in order on **every** turn (see **Session logging** for setup details)
    — as needed for durable facts, tasks, atomic how-tos, or composed flows.
 
 After significant tool use, optionally append a one-line `tool` turn summarizing
-what ran and the outcome. Server middleware also logs MCP tool calls to a
-separate autosession; your explicit session holds the NL story.
+what ran and the outcome. When a **non-teamshared** tool (Shell, Grep, Read,
+etc.) returns bulky output, call `context_normalize` and use the trimmed
+`output` in your reasoning. teamshared MCP responses are already normalized by
+server middleware — do not re-normalize them. Server middleware also logs MCP
+tool calls to a separate autosession; your explicit session holds the NL story.
 
 ## Core workflows
 
@@ -73,6 +76,31 @@ If recall is empty, say so before answering from priors.
 pack mixing recall + open work + relevant skills/playbooks for a task. Reach for
 it when you want a single grounded starting context instead of hand-picking
 scopes.
+
+### Context compression
+
+Long multi-turn chats replay fat tool output every turn. teamshared reduces that
+token burn through MCP — no client hooks required.
+
+| Mechanism | When |
+|---|---|
+| **MCP middleware** | Automatic on teamshared tool responses (`memory_recall`, etc.) |
+| **`context_normalize`** | After Shell/Grep/Read (or similar) returns large output |
+| **`context_prepare`** | Optional: session append + compress history + enrich org memory |
+| **`context_compress`** | Shrink an arbitrary message list before an LLM call |
+| **`context_retrieve`** | Expand a `ref=ccr_…` from a compressed block |
+
+After **non-teamshared** tools return bulky JSON or logs (roughly ≥800 chars),
+call `context_normalize(tool_name=..., output=...)` and reason over the returned
+`output` instead of the raw payload.
+
+`## TeamShared context` blocks (assembled memory packs) are never compressed.
+When content is compressed, originals are stored in CCR; use
+`context_retrieve(ref=...)` to drill down.
+
+Use `context_prepare` when you want session logging, history compression, and
+org-memory enrichment in one call. The **Session logging** workflow below still
+applies when you use granular `memory_session_*` tools instead.
 
 ### Code work: resolve `repo` and `github`
 
@@ -287,6 +315,49 @@ skills/playbooks).
 | `task` | The task description (required) |
 | `token_budget` | Soft cap on returned context size |
 
+### `context_compress`
+
+Shrink a message list before sending it to an LLM. User messages are preserved;
+long tool/assistant/system blocks compress with SmartCrusher-lite. Returns
+`messages`, `compressed`, and `stats`. Always runs when thresholds apply.
+
+### `context_retrieve`
+
+Fetch the original content for a CCR ref (`ref=ccr_…`) from a compressed block.
+
+| Param | Use |
+|---|---|
+| `ref` | CCR reference string from compressed output (required) |
+
+### `context_prepare`
+
+Pre-LLM pipeline: session append → compress incoming history → enrich org memory.
+
+| Param | Use |
+|---|---|
+| `messages` | OpenAI-style chat messages (or use `prompt`) |
+| `prompt` | Latest user prompt when full history is unavailable |
+| `session_id` | Working-memory session to append the user turn to |
+| `repo` / `github` | Scoped recall enrichment |
+| `append_session` | Append latest user message (default `true`) |
+| `enrich` | Assemble org memory into `additional_context` (default `true`) |
+| `token_budget` | Soft cap for assembled context |
+
+Returns compressed `messages`, optional `additional_context`, `session_id`, and
+`stats`.
+
+### `context_normalize`
+
+Strip, clean, and compress a **non-teamshared** tool output (Shell, Grep, Read).
+
+| Param | Use |
+|---|---|
+| `tool_name` | Harness tool name (required) |
+| `output` | Raw tool output string, usually JSON (required) |
+
+Returns trimmed `output`, `compressed`, `cleaned`, and `stats`. Skip for
+teamshared MCP tools — middleware handles those.
+
 ### `memory_remember`
 
 Write semantic or episodic memory.
@@ -439,6 +510,10 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 | Search all memory (raw records) | `memory_recall` |
 | Synthesized answer + gaps | `memory_think` |
 | One context pack for a task | `memory_assemble_context` |
+| Pre-LLM session + compress + enrich | `context_prepare` |
+| Shrink a message list | `context_compress` |
+| Clean Shell/Grep/Read output | `context_normalize` |
+| Expand compressed original | `context_retrieve` |
 | Store preference/fact/event/note | `memory_remember` |
 | Log every chat + distillation | `memory_session_*` |
 | Client incremental state | `memory_state_get` / `memory_state_set` |
@@ -463,4 +538,5 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 - Don't store secrets, tokens, or credentials in any memory tool.
 - Don't open a second `memory_session_open` when state already has a `session_id` for this chat.
 - Don't store atomic instructions as playbooks (use `memory_skill_set`).
+- Don't re-call `context_normalize` on teamshared MCP outputs (middleware handles them).
 - Don't probe `TEAMSHARED_*` env vars in shell — call `health`.

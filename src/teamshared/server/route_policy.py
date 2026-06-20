@@ -45,6 +45,10 @@ _EXACT: dict[str, RouteClass] = {
     "/tokens/invites": RouteClass.PUBLIC_MINT,
     "/state": RouteClass.MCP_BEARER,
     "/sessions/turns": RouteClass.MCP_BEARER,
+    "/compress": RouteClass.MCP_BEARER,
+    "/compress/retrieve": RouteClass.MCP_BEARER,
+    "/llm/prepare": RouteClass.MCP_BEARER,
+    "/tools/normalize": RouteClass.MCP_BEARER,
 }
 
 # Longest-prefix wins among these (order matters for overlaps).

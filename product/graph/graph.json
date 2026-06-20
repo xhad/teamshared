@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generated": "2026-06-19T20:50:00Z",
-    "sourceCount": 8,
+    "generated": "2026-06-20T12:00:00Z",
+    "sourceCount": 9,
     "sourceTypes": [
       "research",
       "prd",
@@ -14,7 +14,8 @@
       "shared-brain-landscape-2026.md is multi-source vendor/analyst competitive intelligence \u2014 still single-perspective (no buyers interviewed). Stronger than gbrain alone but not user research.",
       "Internal sources lack YAML frontmatter; types inferred. External research files have proper frontmatter.",
       "Corpus still meets the 'thin' rule: sourceCount < 8 OR uniqueTypes < 2. sourceCount now 8 but uniqueTypes is 1 (research/prd/memo/doc all classify as 'doc' under the schema's coarser types). Treated as thin; banner mandatory.",
-      "consent-first capture removed from the product (2026-06-19): feature-consent-capture node, assumption-consent-is-adoption-gate, insight-ingest-philosophy-tension, and related edges dropped from this graph pass. The memory-wiki-plan.md source still describes the retired design; it is retained as a historical artifact."
+      "consent-first capture removed from the product (2026-06-19): feature-consent-capture node, assumption-consent-is-adoption-gate, insight-ingest-philosophy-tension, and related edges dropped from this graph pass. The memory-wiki-plan.md source still describes the retired design; it is retained as a historical artifact.",
+      "headroom-research.md added 2026-06-20: Headroom is classified as adjacent context-compression layer, not a durable-memory competitor. Incremental graph pass — full graphify re-run recommended."
     ]
   },
   "nodes": [
@@ -782,6 +783,76 @@
         {
           "source": "shared-brain-landscape-2026.md",
           "quote": "neo4j-agent-memory in February 2026. With 55 GitHub stars, it is the least-known tool in this comparison."
+        }
+      ]
+    },
+    {
+      "id": "comp-headroom",
+      "type": "Competitor",
+      "label": "Headroom (chopratejas/headroom) \u2014 context compression layer, 41k\u2605, Apache 2.0",
+      "provenance": [
+        {
+          "source": "headroom-research.md",
+          "quote": "The context compression layer for AI agents"
+        },
+        {
+          "source": "headroom-research.md",
+          "quote": "~41k GitHub stars, Apache 2.0"
+        }
+      ]
+    },
+    {
+      "id": "feature-headroom-content-router",
+      "type": "Feature",
+      "label": "Headroom ContentRouter: per-type compression (JSON/code/logs/text/diffs)",
+      "provenance": [
+        {
+          "source": "headroom-research.md",
+          "quote": "ContentRouter \u2014 detects content type, selects the right compressor"
+        }
+      ]
+    },
+    {
+      "id": "feature-headroom-ccr",
+      "type": "Feature",
+      "label": "Headroom CCR: Compress-Cache-Retrieve reversible compression (SQLite)",
+      "provenance": [
+        {
+          "source": "headroom-research.md",
+          "quote": "Unlike traditional lossy compression, CCR guarantees that every piece of original data remains accessible."
+        }
+      ]
+    },
+    {
+      "id": "feature-headroom-proxy",
+      "type": "Feature",
+      "label": "Headroom proxy: zero-code OpenAI/Anthropic-compatible local compression gateway",
+      "provenance": [
+        {
+          "source": "headroom-research.md",
+          "quote": "headroom proxy --port 8787"
+        }
+      ]
+    },
+    {
+      "id": "feature-headroom-mcp-compress",
+      "type": "Feature",
+      "label": "Headroom MCP: headroom_compress / headroom_retrieve / headroom_stats",
+      "provenance": [
+        {
+          "source": "headroom-research.md",
+          "quote": "MCP tools: headroom_compress, headroom_retrieve, headroom_stats."
+        }
+      ]
+    },
+    {
+      "id": "insight-headroom-orthogonal-layer",
+      "type": "Insight",
+      "label": "Headroom is orthogonal to durable memory: shrinks current prompt, does not persist org brain",
+      "provenance": [
+        {
+          "source": "headroom-research.md",
+          "quote": "Headroom: shrinks the *current prompt* (tool outputs, logs, context window) before the LLM call. TeamShared: persists *durable* semantic/episodic/procedural memory across sessions, orgs, and agents."
         }
       ]
     },
@@ -1573,6 +1644,34 @@
         {
           "source": "shared-brain-landscape-2026.md",
           "quote": "The Mem0 research paper published at ECAI 2025 (arXiv:2504.19413) established the first broad head-to-head comparison"
+        }
+      ]
+    },
+    {
+      "id": "c-headroom-context-rot",
+      "type": "competes-with",
+      "from": "comp-headroom",
+      "to": "pain-context-rot",
+      "provenance": [
+        {
+          "source": "headroom-research.md",
+          "quote": "Headroom compresses everything your AI agent reads \u2014 tool outputs, logs, RAG chunks, files, and conversation history \u2014 before it reaches the LLM."
+        }
+      ]
+    },
+    {
+      "id": "s-headroom-jit-retrieval",
+      "type": "supports",
+      "from": "insight-headroom-orthogonal-layer",
+      "to": "insight-jit-retrieval",
+      "provenance": [
+        {
+          "source": "headroom-research.md",
+          "quote": "Headroom and TeamShared operate on **orthogonal layers**"
+        },
+        {
+          "source": "plan.md",
+          "quote": "agents use pre-inference retrieval to surface only the most relevant episodic or semantic memories right when they are needed"
         }
       ]
     }

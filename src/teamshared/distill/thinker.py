@@ -1,15 +1,16 @@
-"""LLM synthesis for ``memory_think`` — turns recall hits into a cited answer."""
+"""LLM synthesis for ``memory_think`` (GBrain ``think`` parity)."""
 
 from __future__ import annotations
 
 import json
 from typing import Any
+from uuid import UUID
 
-import httpx
-
+from teamshared.compress.ccr_store import CcrStore
 from teamshared.config import Settings
 from teamshared.distill.prompts import THINKER_SYSTEM, build_thinker_message
-from teamshared.distill.summarizer import SummarizerError, build_chat_client
+from teamshared.distill.summarizer import SummarizerError
+from teamshared.llm.completion import create_chat_completion
 from teamshared.logging import get_logger
 
 log = get_logger(__name__)
@@ -21,53 +22,30 @@ async def think_compose(
     query: str,
     sources: list[dict[str, str]],
     gaps: list[dict[str, str]],
+    org_id: UUID | str | None = None,
+    ccr_store: CcrStore | None = None,
 ) -> dict[str, Any]:
     """Call the configured LLM and return parsed synthesis JSON."""
     if settings.llm_provider == "openrouter" and not settings.openrouter_api_key:
         raise SummarizerError("OpenRouter API key not configured")
     user_msg = build_thinker_message(query, sources, gaps)
+    messages = [
+        {"role": "system", "content": THINKER_SYSTEM},
+        {"role": "user", "content": user_msg},
+    ]
+    resp = await create_chat_completion(
+        settings,
+        messages=messages,
+        org_id=org_id,
+        ccr_store=ccr_store,
+        temperature=0.2,
+        response_format={"type": "json_object"},
+    )
     if settings.llm_provider == "ollama":
-        raw = await _call_ollama(settings, user_msg)
+        raw = str(resp.get("message", {}).get("content") or "{}")
     else:
-        raw = await _call_openai(settings, user_msg)
+        raw = resp.choices[0].message.content or "{}"
     return _parse_json(raw)
-
-
-async def _call_openai(settings: Settings, user_msg: str) -> str:
-    client = build_chat_client(settings)
-    try:
-        resp = await client.chat.completions.create(
-            model=settings.llm_model,
-            messages=[
-                {"role": "system", "content": THINKER_SYSTEM},
-                {"role": "user", "content": user_msg},
-            ],
-            temperature=0.2,
-            response_format={"type": "json_object"},
-        )
-    except Exception as exc:
-        raise SummarizerError(f"LLM call failed: {exc}") from exc
-    return resp.choices[0].message.content or "{}"
-
-
-async def _call_ollama(settings: Settings, user_msg: str) -> str:
-    async with httpx.AsyncClient(base_url=settings.ollama_base_url, timeout=120) as client:
-        resp = await client.post(
-            "/api/chat",
-            json={
-                "model": settings.llm_model,
-                "stream": False,
-                "format": "json",
-                "options": {"temperature": 0.2},
-                "messages": [
-                    {"role": "system", "content": THINKER_SYSTEM},
-                    {"role": "user", "content": user_msg},
-                ],
-            },
-        )
-        resp.raise_for_status()
-        body = resp.json()
-    return body.get("message", {}).get("content") or "{}"
 
 
 def _parse_json(raw: str) -> dict[str, Any]:
@@ -77,5 +55,5 @@ def _parse_json(raw: str) -> dict[str, Any]:
         log.error("thinker_invalid_json", error=str(exc), raw=raw[:500])
         raise SummarizerError("LLM returned invalid JSON") from exc
     if not isinstance(data, dict):
-        raise SummarizerError("LLM returned non-object JSON")
+        raise SummarizerError("LLM returned a non-object JSON value")
     return data

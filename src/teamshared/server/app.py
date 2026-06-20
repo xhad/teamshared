@@ -45,6 +45,10 @@ from teamshared.server.capture import (
     ToolCallCaptureMiddleware,
     ingest_turns,
 )
+from teamshared.server.mcp_output_middleware import ToolOutputNormalizeMiddleware
+from teamshared.server.compress_api import handle_compress, handle_compress_retrieve
+from teamshared.server.llm_prepare_api import handle_llm_prepare
+from teamshared.server.tool_output_api import handle_tool_normalize
 from teamshared.server.console import register_console_routes
 from teamshared.server.console_csrf import ConsoleCsrfCookieMiddleware
 from teamshared.server.dashboard import handle_memory_dashboard
@@ -110,6 +114,8 @@ def build_mcp(settings: Settings | None = None) -> FastMCP:
         ),
     )
     register_tools(mcp)
+    if settings.mcp_tool_output_normalize_enabled:
+        mcp.add_middleware(ToolOutputNormalizeMiddleware())
     if settings.capture_enabled:
         mcp.add_middleware(
             ToolCallCaptureMiddleware(
@@ -210,6 +216,10 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     - ``GET  /state``   -- bearer-scoped JSON state read (`repo`, `key` query params).
     - ``PUT  /state``   -- bearer-scoped JSON state write (`{repo, key, value}` body).
     - ``POST /sessions/turns`` -- bearer-scoped conversation-turn ingestion into capture session.
+    - ``POST /llm/prepare`` -- bearer-scoped pre-LLM pipeline (REST mirror of ``context_prepare``).
+    - ``POST /compress`` -- bearer-scoped message compression (CCR).
+    - ``GET  /compress/retrieve`` -- fetch CCR original by ref.
+    - ``POST /tools/normalize`` -- bearer-scoped tool output strip/clean/compress (REST mirror of ``context_normalize``).
     - ``POST /tokens/mint`` -- mint a bearer token (invite code or admin secret).
     - ``POST /tokens/mint/{invite}/{agent}`` -- mint via invite (path params).
     - ``POST /tokens/invites`` -- create invite codes (admin secret).
@@ -508,6 +518,10 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/state", state_get_route, methods=["GET"]),
             Route("/state", state_put_route, methods=["PUT"]),
             Route("/sessions/turns", session_turns_route, methods=["POST"]),
+            Route("/compress", handle_compress, methods=["POST"]),
+            Route("/compress/retrieve", handle_compress_retrieve, methods=["GET"]),
+            Route("/llm/prepare", handle_llm_prepare, methods=["POST"]),
+            Route("/tools/normalize", handle_tool_normalize, methods=["POST"]),
             *register_console_routes(settings, services),
             *([Mount("/v1", app=api_app)] if api_app is not None else []),
             Mount("/mcp", app=mcp_app),

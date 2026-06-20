@@ -302,6 +302,56 @@ class Settings(BaseSettings):
 
     distill_interval_seconds: int = 30
 
+    compress_min_chars: int = Field(
+        default=800,
+        description="Skip compression when a message block is shorter than this.",
+    )
+    compress_target_ratio: float = Field(
+        default=0.35,
+        ge=0.05,
+        le=1.0,
+        description="Target size as a fraction of original for plain-text truncation.",
+    )
+    compress_json_max_items: int = Field(
+        default=20,
+        ge=5,
+        le=200,
+        description="Max JSON array items retained after SmartCrusher-lite sampling.",
+    )
+    compress_log_max_lines: int = Field(
+        default=40,
+        ge=10,
+        le=500,
+        description="Max log lines retained after log compression.",
+    )
+    compress_ccr_ttl_seconds: int = Field(
+        default=3600,
+        description="TTL for Compress-Cache-Retrieve originals in Redis.",
+    )
+
+    mcp_tool_output_normalize_enabled: bool = Field(
+        default=True,
+        description="Strip, clean, and compress MCP tool responses before agents see them.",
+    )
+    mcp_tool_output_max_record_chars: int = Field(
+        default=600,
+        ge=100,
+        le=4000,
+        description="Max chars per record/content field in recall-style tool responses.",
+    )
+
+    llm_prepare_enabled: bool = Field(
+        default=True,
+        description=(
+            "Enable context_prepare / POST /llm/prepare and internal paths: "
+            "session-append user turn, inject assembled teamshared context, then compress."
+        ),
+    )
+    llm_prepare_context_token_budget: int = Field(
+        default=1500,
+        description="Token budget for context assembly injected before LLM calls.",
+    )
+
     agent_run_timeout_seconds: int = Field(
         default=300,
         description=(

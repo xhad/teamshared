@@ -1,45 +1,21 @@
-"""HTTP handlers for the unified installer, static assets, and plugin bundle."""
+"""HTTP handlers for the unified installer and plugin-served static assets."""
 
 from __future__ import annotations
 
 import io
 import tarfile
-from pathlib import Path
 
 from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 
+from teamshared.clients.install_assets import plugin_root, resolve_install_asset
 from teamshared.clients.install_scripts import (
-    INSTALL_ASSETS_PATH,
-    PLUGIN_BUNDLE_PATH,
     install_index_html,
     unified_install_script,
     unified_uninstall_script,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_REPO_PLUGIN = _REPO_ROOT / "plugins" / "teamshared"
-_REPO_ASSETS = _REPO_ROOT / "install_assets"
-
 _ASSET_PLACEHOLDER = "__MCP_URL__"
-
-
-def _plugin_source_dir() -> Path | None:
-    docker = Path(PLUGIN_BUNDLE_PATH)
-    if docker.is_dir():
-        return docker
-    if _REPO_PLUGIN.is_dir():
-        return _REPO_PLUGIN
-    return None
-
-
-def _assets_root() -> Path | None:
-    docker = Path(INSTALL_ASSETS_PATH)
-    if docker.is_dir():
-        return docker
-    if _REPO_ASSETS.is_dir():
-        return _REPO_ASSETS
-    return None
 
 
 def _mcp_url(request: Request) -> str:
@@ -47,23 +23,13 @@ def _mcp_url(request: Request) -> str:
 
 
 def _plugin_tarball_bytes() -> bytes | None:
-    root = _plugin_source_dir()
+    root = plugin_root()
     if root is None:
         return None
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         tar.add(root, arcname="teamshared")
     return buf.getvalue()
-
-
-def _resolve_asset(rel: str) -> Path | None:
-    root = _assets_root()
-    if root is None:
-        return None
-    path = (root / rel).resolve()
-    if not str(path).startswith(str(root.resolve())):
-        return None
-    return path if path.is_file() else None
 
 
 async def handle_install_index(request: Request) -> HTMLResponse:
@@ -93,32 +59,20 @@ async def handle_uninstall_sh(request: Request) -> PlainTextResponse:
 
 async def handle_install_asset(request: Request) -> Response:
     rel = request.path_params.get("asset_path", "").lstrip("/")
-    if not rel or ".." in rel.split("/"):
-        return PlainTextResponse("not found", status_code=404)
-
-    if rel == "cursor/teamshared.mdc":
-        plugin = _plugin_source_dir()
-        if plugin is not None:
-            rule = plugin / "rules" / "teamshared.mdc"
-            if rule.is_file():
-                return PlainTextResponse(
-                    rule.read_text(encoding="utf-8"),
-                    media_type="text/plain; charset=utf-8",
-                )
-        return PlainTextResponse("not found", status_code=404)
-
-    path = _resolve_asset(rel)
+    path = resolve_install_asset(rel)
     if path is None:
         return PlainTextResponse("not found", status_code=404)
 
     suffix = path.suffix.lower()
-    if suffix in {".json", ".yaml", ".yml", ".toml", ".sh", ".md", ".mdc"}:
+    if suffix in {".json", ".yaml", ".yml", ".toml", ".sh", ".md", ".mdc", ".py"}:
         text = path.read_text(encoding="utf-8")
         if _ASSET_PLACEHOLDER in text:
             text = text.replace(_ASSET_PLACEHOLDER, _mcp_url(request))
         media = "application/json" if suffix == ".json" else "text/plain; charset=utf-8"
         if suffix == ".sh":
             media = "text/x-shellscript; charset=utf-8"
+        if suffix == ".py":
+            media = "text/x-python; charset=utf-8"
         return PlainTextResponse(text, media_type=media)
 
     return FileResponse(path)

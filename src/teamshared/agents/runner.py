@@ -31,7 +31,8 @@ from uuid import UUID
 from teamshared.agents.runs import AgentRunStore
 from teamshared.clients.agent_setup import load_teamshared_memory_rule_mdc
 from teamshared.config import Settings
-from teamshared.distill.summarizer import build_chat_client
+from teamshared.compress.factory import ccr_store_from_working
+from teamshared.llm.completion import create_chat_completion
 from teamshared.identity.principal import Principal
 from teamshared.ingestion.injection import screen_injection
 from teamshared.ingestion.pipeline import IngestionPipeline
@@ -312,15 +313,26 @@ class AgentRunner:
         model: str,
         provider: str,
     ) -> tuple[str, dict[str, Any]]:
-        client = build_chat_client(self.settings)
         started = time.monotonic()
-        resp = await client.chat.completions.create(
+        resp = await create_chat_completion(
+            self.settings,
+            messages=messages,
             model=model,
-            messages=messages,  # type: ignore[arg-type]
+            org_id=rc.org_id,
+            ccr_store=ccr_store_from_working(
+                self.settings, self.facade.services.working
+            ),
             temperature=0.2,
         )
         latency_ms = int((time.monotonic() - started) * 1000)
-        output = (resp.choices[0].message.content or "").strip()
+        if self.settings.llm_provider == "ollama":
+            output = (
+                str(resp.get("message", {}).get("content") or "").strip()
+                if isinstance(resp, dict)
+                else ""
+            )
+        else:
+            output = (resp.choices[0].message.content or "").strip()
         usage = getattr(resp, "usage", None)
         prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
         completion_tokens = getattr(usage, "completion_tokens", None) if usage else None

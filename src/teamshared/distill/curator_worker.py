@@ -15,6 +15,7 @@ import signal
 from typing import Any
 from uuid import UUID
 
+from teamshared.compress.factory import ccr_store_from_working
 from teamshared.config import Settings, get_settings
 from teamshared.distill.curator import curate
 from teamshared.distill.summarizer import SummarizerError
@@ -113,7 +114,12 @@ class CuratorWorker:
         ]
 
         payload = await curate(
-            self.settings, subject=subject, facts=facts, episodes=episodes
+            self.settings,
+            subject=subject,
+            facts=facts,
+            episodes=episodes,
+            org_id=org_id,
+            ccr_store=ccr_store_from_working(self.settings, self.services.working),
         )
         body_md = (payload.get("body_md") or "").strip()
         if not body_md:

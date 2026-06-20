@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from teamshared.clients.agent_setup import KNOWN_AGENT_TYPES
 
+# Docker path; local dev resolves via teamshared.clients.install_assets.plugin_root().
 PLUGIN_BUNDLE_PATH = "/app/plugins/teamshared"
-INSTALL_ASSETS_PATH = "/app/install_assets"
-_REPO_PLUGIN = None  # set lazily in install_api
-_REPO_ASSETS = None
 
 # Placeholders substituted when the script is served (request base URL).
 # Every harness installs under the directory where the script is run (pwd) —

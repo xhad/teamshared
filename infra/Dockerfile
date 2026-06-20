@@ -14,7 +14,6 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY infra/migrations ./infra/migrations
 COPY plugins/teamshared ./plugins/teamshared
-COPY install_assets ./install_assets
 
 RUN pip install --upgrade pip \
  && pip install '.[neo4j,local-embed,hnsw]'

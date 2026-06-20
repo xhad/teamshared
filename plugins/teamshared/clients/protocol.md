@@ -33,6 +33,8 @@ MCP tools (`memory_remember`, `memory_recall`, …) live on the separate
 | Save / remember for the team or teamshared | `memory_remember(content, kind=…)` |
 | Search past work or team knowledge | `memory_recall(query)` |
 | Log every chat | `memory_session_open` / `_append` / `_close` |
+| Shrink fat tool output | `context_normalize` (non-teamshared tools) or `context_compress` |
+| Pre-LLM session + compress + enrich | `context_prepare` |
 
 ## Recall first
 
@@ -75,6 +77,23 @@ Use `memory_procedure_set` for versioned playbooks (not `memory_remember`).
 
 For code-specific facts, pass `repo=` and/or `github=` on `memory_remember`.
 
+## Context compression
+
+Long chats replay fat tool output every turn. teamshared shrinks that bloat via
+MCP — no client hooks required.
+
+| Mechanism | When |
+|---|---|
+| **MCP middleware** | Automatic on teamshared tool responses |
+| **`context_normalize`** | After Shell/Grep/Read returns large output |
+| **`context_prepare`** | Optional: session append + compress history + enrich |
+| **`context_compress`** / **`context_retrieve`** | Manual message compression; expand CCR refs |
+
+After non-teamshared tools return bulky JSON or logs, call
+`context_normalize(tool_name=..., output=...)` and use the returned `output`.
+Do **not** re-normalize teamshared MCP responses — middleware already trimmed
+them. Use `context_retrieve(ref=...)` to expand compressed originals.
+
 ## Session logging (every chat)
 
 Log conversation turns via MCP on every chat:
@@ -88,7 +107,8 @@ Log conversation turns via MCP on every chat:
 4. **Pivot:** close → clear state → open new session immediately (same turn).
 5. **Append failure:** reopen session, update state, retry once.
 
-Optional: append one-line `tool` turns after significant tool use. Never append
+Optional: append one-line `tool` turns after significant tool use; call
+`context_normalize` after large non-teamshared tool results. Never append
 secrets.
 
 ## Never
@@ -96,3 +116,4 @@ secrets.
 - Don't call `memory_forget` without explicit user instruction.
 - Don't fabricate hits — if `memory_recall` is empty, say so.
 - Don't open a second session when state already has a `session_id` for this chat.
+- Don't re-call `context_normalize` on teamshared MCP outputs.

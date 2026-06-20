@@ -12,6 +12,7 @@ here so this runs without Postgres/Redis. The goal is to assert that:
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -336,6 +337,68 @@ async def test_memory_think_delegates_to_facade(
     assert data["answer_md"] == "Synthesized answer."
     state.facade.think.assert_awaited_once()
     assert state.facade.think.await_args.kwargs["query"] == "what about Alice"
+
+
+async def test_context_compress_tool(mcp_with_mocks: tuple[FastMCP, ServerState]) -> None:
+    mcp, state = mcp_with_mocks
+    state.settings.compress_min_chars = 50
+    state.settings.compress_json_max_items = 5
+    state.working.client.setex = AsyncMock(return_value=True)
+    state.working.client.get = AsyncMock(return_value=None)
+    big = json.dumps([{"n": i} for i in range(40)])
+    data = await _call(
+        mcp,
+        "context_compress",
+        messages=[
+            {"role": "user", "content": "analyze"},
+            {"role": "tool", "content": big},
+        ],
+    )
+    assert data["compressed"] is True
+    assert data["stats"]["chars_saved"] > 0
+    assert "teamshared compressed" in data["messages"][1]["content"]
+
+
+async def test_context_prepare_tool(mcp_with_mocks: tuple[FastMCP, ServerState]) -> None:
+    mcp, state = mcp_with_mocks
+    state.settings.llm_prepare_enabled = True
+    state.settings.compress_min_chars = 50
+    state.working.client.setex = AsyncMock(return_value=True)
+    big = json.dumps([{"n": i} for i in range(40)])
+    data = await _call(
+        mcp,
+        "context_prepare",
+        messages=[
+            {"role": "user", "content": "analyze"},
+            {"role": "tool", "content": big},
+        ],
+        append_session=False,
+        enrich=False,
+    )
+    assert data["stats"]["compressed"] is True
+    assert data["stats"]["chars_saved"] > 0
+
+
+async def test_context_normalize_tool(mcp_with_mocks: tuple[FastMCP, ServerState]) -> None:
+    mcp, state = mcp_with_mocks
+    state.settings.mcp_tool_output_normalize_enabled = True
+    state.working.client.setex = AsyncMock(return_value=True)
+    payload = json.dumps(
+        {
+            "records": [
+                {"id": "m1", "content": "x" * 2000, "embedding": [0.1]},
+            ]
+        }
+    )
+    data = await _call(
+        mcp,
+        "context_normalize",
+        tool_name="memory_recall",
+        output=payload,
+    )
+    assert data["cleaned"] is True
+    assert data["stats"]["chars_saved"] > 0
+    assert "embedding" not in json.dumps(data["output"])
 
 
 async def test_memory_assemble_context_delegates_to_facade(

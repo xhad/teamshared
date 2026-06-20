@@ -97,6 +97,8 @@ teamshared/
     └── teamshared/
         ├── .cursor-plugin/plugin.json
         ├── rules/teamshared.mdc
+        ├── install/               # curl-install templates (/install/assets/*)
+        ├── clients/               # protocol + manual MCP examples
         ├── skills/
         ├── agents/
         ├── hooks/

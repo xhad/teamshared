@@ -1,12 +1,13 @@
-# Paste under `mcp_servers:` in ~/.hermes/config.yaml
-# Mint token: teamshared token mint hermes
+# Example Hermes MCP block (manual setup)
 #
-# Also paste the protocol from clients/protocol.md into Hermes system instructions
-# (or reference it in your agent profile) so the model recalls before answering.
+# For curl install, use the templated snippet the server serves at
+# /install/assets/hermes/mcp.yaml (source: ../install/hermes/mcp.yaml).
+# Paste protocol.md into SOUL — same as /install/assets/hermes/protocol.md
+# (source: protocol.md in this directory).
 
 mcp_servers:
   teamshared:
-    url: https://memory.tailXXXX.ts.net/mcp
+    url: https://teamshared.com/mcp
     headers:
       Authorization: "Bearer <agent-token>"
     timeout: 30

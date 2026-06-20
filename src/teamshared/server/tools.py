@@ -27,6 +27,11 @@ from teamshared.clients.agent_setup import (
     load_teamshared_memory_rule_mdc,
     teamshared_rule_version,
 )
+from teamshared.compress.ccr_store import org_scope_from_id
+from teamshared.compress.context_prepare import run_context_prepare
+from teamshared.compress.engine import compress_messages_with_ccr
+from teamshared.compress.factory import ccr_store_from_working
+from teamshared.compress.tool_output import normalize_tool_output
 from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
 from teamshared.memory.types import (
@@ -136,6 +141,167 @@ def register_tools(mcp: Any) -> None:
         if update_available:
             out["rule_markdown"] = rule_md
         return out
+
+    @mcp.tool()
+    async def context_compress(
+        messages: Annotated[
+            list[dict[str, Any]],
+            Field(
+                description=(
+                    "OpenAI-style chat messages to compress before sending to an LLM. "
+                    "User messages are preserved; long tool/assistant/system blocks shrink."
+                ),
+            ),
+        ],
+    ) -> dict[str, Any]:
+        """Compress a prompt payload before it reaches an LLM.
+
+        Shrinks JSON tool outputs, logs, and long text using SmartCrusher-lite
+        sampling. Originals are stored in CCR (Redis) with ``ref=`` markers for
+        ``context_retrieve``. Always runs; tune thresholds via ``TEAMSHARED_COMPRESS_*``.
+        """
+        principal = await _principal()
+        state = get_state()
+        store = ccr_store_from_working(state.settings, state.working)
+        result = await compress_messages_with_ccr(
+            state.settings,
+            messages,
+            org_scope=org_scope_from_id(principal.org_id),
+            store=store,
+        )
+        return {
+            "messages": result.messages,
+            "compressed": result.compressed,
+            "stats": {
+                "original_chars": result.stats.original_chars,
+                "compressed_chars": result.stats.compressed_chars,
+                "chars_saved": result.stats.chars_saved,
+                "ratio": result.stats.ratio,
+                "messages_touched": result.stats.messages_touched,
+                "refs": result.stats.refs,
+            },
+        }
+
+    @mcp.tool()
+    async def context_retrieve(
+        ref: Annotated[
+            str,
+            Field(description="CCR ref from a compressed message (ref=ccr_...)"),
+        ],
+    ) -> dict[str, Any]:
+        """Retrieve the original content for a compressed block via CCR ref."""
+        principal = await _principal()
+        state = get_state()
+        store = ccr_store_from_working(state.settings, state.working)
+        content = await store.get(org_scope_from_id(principal.org_id), ref)
+        if content is None:
+            return {"ref": ref, "found": False, "content": None}
+        return {"ref": ref, "found": True, "content": content}
+
+    @mcp.tool()
+    async def context_prepare(
+        messages: Annotated[
+            list[dict[str, Any]] | None,
+            Field(
+                description=(
+                    "OpenAI-style chat messages to run through the pre-LLM pipeline. "
+                    "Provide this or `prompt`."
+                ),
+            ),
+        ] = None,
+        prompt: Annotated[
+            str | None,
+            Field(description="Latest user prompt when you do not have full message history."),
+        ] = None,
+        session_id: Annotated[
+            str | None,
+            Field(description="Working-memory session to append the user turn to."),
+        ] = None,
+        repo: Annotated[
+            str | None,
+            Field(description="Workspace slug for scoped recall enrichment."),
+        ] = None,
+        github: Annotated[
+            str | None,
+            Field(description="GitHub `owner/repo` for scoped recall enrichment."),
+        ] = None,
+        append_session: Annotated[
+            bool,
+            Field(description="Append the latest user message to the working session."),
+        ] = True,
+        enrich: Annotated[
+            bool,
+            Field(description="Assemble org memory and append as `additional_context`."),
+        ] = True,
+        token_budget: Annotated[
+            int | None,
+            Field(description="Soft token cap for assembled context."),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Pre-LLM pipeline: session append → compress incoming history → enrich.
+
+        Returns compressed ``messages``, optional ``additional_context`` (org memory),
+        ``session_id``, and ``stats``. Use before sending a turn to your LLM when you
+        want teamshared to shrink tool bloat and inject recall. Server-side MCP
+        middleware already normalizes teamshared tool responses; this covers the
+        rest of the prompt.
+        """
+        principal = await _principal()
+        state = get_state()
+        try:
+            return await run_context_prepare(
+                state.settings,
+                state.facade,
+                principal,
+                state.working,
+                messages=messages,
+                prompt=prompt,
+                session_id=session_id,
+                repo=repo,
+                github=github,
+                append_session=append_session,
+                enrich=enrich,
+                token_budget=token_budget,
+            )
+        except ValueError as exc:
+            return {"error": str(exc)}
+
+    @mcp.tool()
+    async def context_normalize(
+        tool_name: Annotated[
+            str,
+            Field(description="Name of the tool whose output you are trimming."),
+        ],
+        output: Annotated[
+            str,
+            Field(description="Raw tool output string (usually JSON)."),
+        ],
+    ) -> dict[str, Any]:
+        """Strip, clean, and compress a non-teamshared tool output for agent context.
+
+        Trims recall-style payloads, shrinks large JSON/logs, and stores originals
+        in CCR when compressed. Prefer letting MCP middleware handle teamshared
+        tools automatically; call this for Shell, Grep, or other harness tools.
+        """
+        principal = await _principal()
+        state = get_state()
+        store = ccr_store_from_working(state.settings, state.working)
+        normalized = await normalize_tool_output(
+            state.settings,
+            tool_name,
+            output,
+            org_scope=org_scope_from_id(principal.org_id),
+            store=store,
+        )
+        return {
+            "output": normalized.body,
+            "compressed": normalized.compressed,
+            "cleaned": normalized.cleaned,
+            "stats": {
+                "chars_saved": normalized.chars_saved,
+                "ref": normalized.ref,
+            },
+        }
 
     @mcp.tool()
     async def memory_tools_catalog(

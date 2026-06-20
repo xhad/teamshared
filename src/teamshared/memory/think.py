@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from teamshared.config import Settings
 from teamshared.distill.summarizer import SummarizerError
@@ -165,6 +166,8 @@ async def synthesize(
     query: str,
     records: list[MemoryRecord],
     token_budget: int = DEFAULT_TOKEN_BUDGET,
+    org_id: Any = None,
+    ccr_store: Any = None,
 ) -> ThinkResult:
     """Run gap detection then LLM synthesis over packed recall records."""
     kept, _ = pack_records(records, token_budget=token_budget)
@@ -177,7 +180,12 @@ async def synthesize(
 
     try:
         payload = await think_compose(
-            settings, query=query, sources=sources, gaps=gap_dicts
+            settings,
+            query=query,
+            sources=sources,
+            gaps=gap_dicts,
+            org_id=org_id,
+            ccr_store=ccr_store,
         )
         answer_md = str(payload.get("answer_md") or "").strip()
         raw_cites = payload.get("citations") or []

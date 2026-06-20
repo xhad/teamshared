@@ -25,6 +25,8 @@ from teamshared.server.route_policy import (
         ("/mcp", RouteClass.MCP_BEARER),
         ("/mcp/tools/list", RouteClass.MCP_BEARER),
         ("/state", RouteClass.MCP_BEARER),
+        ("/llm/prepare", RouteClass.MCP_BEARER),
+        ("/tools/normalize", RouteClass.MCP_BEARER),
         ("/v1/memory/search", RouteClass.API_V1),
         ("/app/wiki", RouteClass.CONSOLE_SESSION),
         ("/login/verify", RouteClass.CONSOLE_SESSION),

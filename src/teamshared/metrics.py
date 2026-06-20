@@ -182,6 +182,14 @@ class Metrics:
             "teamshared_agent_run_model_latency_seconds",
             "Background agent run model-call latency",
         )
+        self.compress_requests = _Counter(
+            "teamshared_compress_requests_total",
+            "Prompt payloads compressed before LLM calls",
+        )
+        self.compress_chars_saved = _Counter(
+            "teamshared_compress_chars_saved_total",
+            "Characters removed by context compression",
+        )
 
     def render(self) -> str:
         with self._lock:
@@ -198,6 +206,7 @@ class Metrics:
                 self.agent_runs_started, self.agent_runs_completed,
                 self.agent_runs_failed, self.agent_runs_cancelled,
                 self.agent_run_latency,
+                self.compress_requests, self.compress_chars_saved,
             ):
                 lines.extend(metric.render())
             return "\n".join(lines) + "\n"

@@ -2,6 +2,13 @@
 
 ## 0.5.0 — 2026-06-19
 
+- **Install consolidation:** all curl-install templates live under `install/` in
+  this plugin bundle; repo-root `install_assets/` removed. Server resolves assets
+  via `teamshared.clients.install_assets` (aliases: rule → `rules/`, protocol →
+  `clients/protocol.md`).
+- **Rule 1.5.0:** context compression via MCP (`context_prepare`, `context_normalize`,
+  `context_compress`, `context_retrieve`); MCP middleware auto-normalizes teamshared
+  tool responses; removed Cursor compression hooks (`beforeSubmitPrompt`, `postToolUse`).
 - **Rule 1.5.0:** `memory_think` + recall `explain`; skills vs playbooks decision
   tree; tiered every-turn checklist; approval matrix; graph autolink + Postgres
   fallback; slim tool reference (delegate to `memory_tools_catalog`); fix

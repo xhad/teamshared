@@ -132,19 +132,25 @@ curl -fsSL https://teamshared.com/uninstall.sh | bash
 ln -sf "$(pwd)/plugins/teamshared" ~/.cursor/plugins/local/teamshared
 ```
 
-Export `TEAMSHARED_URL` and `TEAMSHARED_TOKEN` before launching Cursor. Requires **Bun** for continual-learning hooks. See [`plugins/teamshared/README.md`](plugins/teamshared/README.md) and [`plugins/teamshared/MARKETPLACE.md`](plugins/teamshared/MARKETPLACE.md).
+Install the plugin for the recall rule and continual-learning hook (Bun required for the stop hook only). Context compression is MCP-first — see [`docs/context-compression.md`](docs/context-compression.md).
 
-Manual snippets also live in [`src/teamshared/clients/`](src/teamshared/clients):
+Manual snippets and install templates live under [`plugins/teamshared/`](plugins/teamshared/):
 
-- [Cursor](src/teamshared/clients/cursor.mcp.json)
-- [Hermes](src/teamshared/clients/hermes.config.yaml)
-- [OpenClaw](src/teamshared/clients/openclaw.md)
+- [Install assets](plugins/teamshared/install/) — served by `install.sh` at `/install/assets/*`
+- [Memory rule](plugins/teamshared/rules/teamshared.mdc) — Cursor / Cloud Agents
+- [Client protocol](plugins/teamshared/clients/protocol.md) — Hermes, Claude, others
 
 ## MCP tools
 
 | Tool                        | Purpose                                                      |
 | --------------------------- | ------------------------------------------------------------ |
 | `health`                    | Liveness + dependency check                                  |
+| `context_compress`          | Shrink tool outputs/logs before sending a prompt to an LLM   |
+| `context_retrieve`          | Fetch original content for a CCR ref from compression        |
+| `context_prepare`           | Session append → compress history → enrich org memory        |
+| `context_normalize`         | Strip/clean/compress a non-teamshared tool output            |
+
+See **[Context compression](docs/context-compression.md)** for how teamshared reduces token burn in multi-turn agent conversations (MCP tools, middleware, CCR, configuration).
 | `version`                   | Server + memory-rule version check                           |
 | `memory_tools_catalog`      | Discover tools by tier/group + `tool_recipe` shapes          |
 | `memory_recall`             | Hybrid search — raw ranked records (`explain=true` for attribution) |

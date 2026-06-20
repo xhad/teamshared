@@ -20,7 +20,7 @@ seed :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server 
 reembed :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared reembed
 token-mint :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared token mint cursor
 invite-create :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --rm server teamshared token invite-create --agent cursor
-# Paste the printed token into ~/.cursor/mcp.json using src/teamshared/clients/cursor.mcp.json as the template
+# Paste the printed token into ~/.cursor/mcp.json (see plugins/teamshared/install/cursor/mcp.json)
 health :; curl -fsS http://localhost:8077/health | jq
 
 smoke-all :; python scripts/smoke_all_tools.py

@@ -1,14 +1,12 @@
 # TeamShared — discovery graph
 
-> **CORPUS HEALTH: THIN.** Eight sources: five internal product-intent docs
-> plus three external research artifacts (YC RFS, GBrain competitor research,
-> shared-brain-landscape-2026). There is still **zero user-research evidence**
-> — no interviews, tickets, or support threads. The new landscape source is
-> multi-source vendor/analyst competitive intelligence, still single-perspective
-> (no buyers interviewed).
+> **CORPUS HEALTH: THIN.** Nine sources: five internal product-intent docs
+> plus four external research artifacts (YC RFS, GBrain competitor research,
+> shared-brain-landscape-2026, **headroom-research**). There is still **zero
+> user-research evidence** — no interviews, tickets, or support threads.
 
-Generated 2026-06-19. Sources: 8. Types: research, prd, memo, doc.
-Nodes: 88 · Edges: 48 · Assumptions surfaced: 12.
+Generated 2026-06-20. Sources: 9. Types: research, prd, memo, doc.
+Nodes: 94 · Edges: 50 · Assumptions surfaced: 12.
 
 ## Segments (6)
 
@@ -76,8 +74,12 @@ Nodes: 88 · Edges: 48 · Assumptions surfaced: 12.
 | **xChuCx/agent-memory: durable writes stage for human review** *new* | 1 |
 | **Graphiti: bi-temporal context graph with valid_from / invalid_at** *new* | 1 |
 | **Neo4j Agent Memory: POLE+O entities + reasoning traces** *new* | 1 |
+| **Headroom ContentRouter: per-type compression (JSON/code/logs/text)** *new* | 1 |
+| **Headroom CCR: reversible Compress-Cache-Retrieve (SQLite)** *new* | 1 |
+| **Headroom proxy: zero-code OpenAI/Anthropic gateway** *new* | 1 |
+| **Headroom MCP: compress/retrieve/stats tool trio** *new* | 1 |
 
-## Competitors (14)
+## Competitors (15)
 
 | Entity | Sources |
 |---|---|
@@ -99,11 +101,12 @@ Nodes: 88 · Edges: 48 · Assumptions surfaced: 12.
 | LangChain / LlamaIndex | 1 |
 | Cloudflare Agent Memory | 1 |
 | Hindsight-style distillation | 1 |
+| **Headroom (chopratejas/headroom)** — context compression, 41k★, CCR *new* | 1 |
 
-> GBrain remains the only competitor with multi-source evidence (gbrain
-> research + YC RFS). The 2026 landscape adds 11 named rivals — Hivemind is
-> the most direct threat because it ships the same skill-codification thesis
-> as TeamShared's skills pillar but with auto-mining from traces.
+> GBrain remains the primary **memory** competitor with multi-source evidence.
+> Headroom is **adjacent** (context compression, not durable brain) — see
+> `knowledge/headroom-architecture-analysis.md`. The 2026 landscape adds 11
+> named memory rivals; Hivemind is the most direct threat on skill auto-mining.
 
 ## Insights (8)
 
@@ -119,6 +122,7 @@ Nodes: 88 · Edges: 48 · Assumptions surfaced: 12.
 | **Bi-temporal validity is the legitimate Graphiti moat for point-in-time queries** *new* | 1 |
 | **Hivemind ships the same skill-codification thesis but auto-mines from traces** *new* | 1 |
 | **Multiple rivals converge on distinguishing facts from events** *new* | 1 |
+| **Headroom is orthogonal to durable memory: shrinks current prompt, not org brain** *new* | 1 |
 
 ## Contradictions (1)
 

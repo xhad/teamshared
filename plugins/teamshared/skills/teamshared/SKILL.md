@@ -1,6 +1,6 @@
 ---
 name: teamshared
-description: Use teamshared MCP memory tools — recall before answering, remember durable facts, and log every chat via session workflows.
+description: Use teamshared MCP memory tools — recall before answering, remember durable facts, compress fat tool output, and log every chat via session workflows.
 ---
 
 # teamshared memory
@@ -23,6 +23,9 @@ Follow the **every turn checklist** in `teamshared.mdc`:
 6. For repeatable playbooks: split atomic steps with `memory_skill_set`, compose
    orchestrators with `memory_playbook_set` + `tool_recipe.skills`, fetch with
    `memory_playbook_get(expand_skills=true)`.
+7. After large **non-teamshared** tool output (Shell, Grep, Read), call
+   `context_normalize` and use the trimmed `output`. teamshared MCP responses
+   are already normalized by server middleware.
 
 ## Tool chooser
 
@@ -33,6 +36,10 @@ Follow the **every turn checklist** in `teamshared.mdc`:
 | Store atomic skill (how-to block) | `memory_skill_set` |
 | Store playbook orchestrator | `memory_playbook_set` |
 | Log every chat + distillation | `memory_session_*` |
+| Pre-LLM session + compress + enrich | `context_prepare` |
+| Clean Shell/Grep/Read output | `context_normalize` |
+| Shrink a message list | `context_compress` |
+| Expand compressed original | `context_retrieve` |
 | Browse timeline | `memory_episodes_list` |
 | Explicit relationships (Neo4j on) | `memory_graph_*` |
 | Active session bookkeeping | `memory_state_get` / `memory_state_set` |

@@ -17,6 +17,7 @@ import signal
 from typing import Any
 from uuid import UUID
 
+from teamshared.compress.factory import ccr_store_from_working
 from teamshared.config import Settings, get_settings
 from teamshared.distill.summarizer import SummarizerError, summarize
 from teamshared.identity.legacy_bridge import PrincipalResolver
@@ -125,7 +126,12 @@ class DistillWorker:
             return
 
         payload = await summarize(
-            self.settings, agent=agent, topic=topic, transcript=transcript
+            self.settings,
+            agent=agent,
+            topic=topic,
+            transcript=transcript,
+            org_id=org_id,
+            ccr_store=ccr_store_from_working(self.settings, self.working),
         )
 
         episode = payload.get("episode") or {}

@@ -17,6 +17,7 @@ from uuid import UUID
 
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.identity.principal import Principal
+from teamshared.compress.factory import ccr_store_from_working
 from teamshared.identity.rbac import Permissions
 from teamshared.ingestion.pii import has_hard_secret, scan_pii
 from teamshared.ingestion.pipeline import IngestionRejected
@@ -266,6 +267,10 @@ class MemoryFacade:
             query=query,
             records=recall.records,
             token_budget=token_budget,
+            org_id=principal.org_id,
+            ccr_store=ccr_store_from_working(
+                self.services.settings, self.services.working
+            ),
         )
         result.counts_by_pillar = {**recall.counts_by_pillar, **result.counts_by_pillar}
         ctx = self._ctx(principal)
