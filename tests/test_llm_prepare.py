@@ -12,10 +12,7 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from teamshared.auth import BearerAuthMiddleware
-from teamshared.compress.types import CompressStats
 from teamshared.identity.principal import Principal
-from teamshared.llm.gateway import GatewayPrepareResult
-from teamshared.memory.context_assembler import ContextPack
 from teamshared.server.llm_prepare_api import handle_llm_prepare
 
 ORG = UUID("00000000-0000-0000-0000-000000000001")
@@ -37,28 +34,20 @@ def _mock_state(*, prepare_enabled: bool = True) -> SimpleNamespace:
     )
 
 
-def _prepared_result() -> GatewayPrepareResult:
-    return GatewayPrepareResult(
-        messages=[{"role": "user", "content": "hello"}],
-        session_id="sess-1",
-        context_pack=ContextPack(
-            task="hello",
-            rendered="- prior fact",
-            tokens_used=10,
-            token_budget=1500,
-        ),
-        compress_stats=CompressStats(
-            original_chars=100,
-            compressed_chars=80,
-            chars_saved=20,
-            ratio=0.8,
-            messages_touched=0,
-            refs=[],
-        ),
-        compressed=False,
-        session_appended=True,
-        enriched=True,
-    )
+def _prepared_result() -> dict:
+    return {
+        "messages": [{"role": "user", "content": "hello"}],
+        "session_id": "sess-1",
+        "additional_context": "## TeamShared context\n\n- prior fact\n",
+        "stats": {
+            "session_appended": True,
+            "enriched": True,
+            "compressed": False,
+            "chars_saved": 20,
+            "original_chars": 100,
+            "compressed_chars": 80,
+        },
+    }
 
 
 def _client(*, prepare_enabled: bool = True) -> TestClient:
@@ -78,12 +67,10 @@ def _client(*, prepare_enabled: bool = True) -> TestClient:
     return TestClient(app)
 
 
-@patch("teamshared.server.llm_prepare_api.prepare_llm_messages", new_callable=AsyncMock)
-@patch("teamshared.server.llm_prepare_api.ccr_store_from_working")
+@patch("teamshared.server.llm_prepare_api.run_context_prepare", new_callable=AsyncMock)
 @patch("teamshared.server.llm_prepare_api.get_state")
 def test_llm_prepare_requires_bearer(
     mock_get_state: MagicMock,
-    _mock_ccr: MagicMock,
     mock_prepare: AsyncMock,
 ) -> None:
     mock_get_state.return_value = _mock_state()
@@ -93,12 +80,10 @@ def test_llm_prepare_requires_bearer(
     assert resp.status_code == 401
 
 
-@patch("teamshared.server.llm_prepare_api.prepare_llm_messages", new_callable=AsyncMock)
-@patch("teamshared.server.llm_prepare_api.ccr_store_from_working")
+@patch("teamshared.server.llm_prepare_api.run_context_prepare", new_callable=AsyncMock)
 @patch("teamshared.server.llm_prepare_api.get_state")
 def test_llm_prepare_accepts_prompt(
     mock_get_state: MagicMock,
-    _mock_ccr: MagicMock,
     mock_prepare: AsyncMock,
 ) -> None:
     mock_get_state.return_value = _mock_state()

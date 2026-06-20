@@ -225,23 +225,25 @@ def _runner(monkeypatch: pytest.MonkeyPatch, *, output: str, playbook: dict | No
 
     captured: dict = {}
 
-    class _FakeClient:
-        def __init__(self) -> None:
-            self.chat = SimpleNamespace(
-                completions=SimpleNamespace(create=self._create)
-            )
-
-        async def _create(self, *, model, messages, temperature):
-            captured["model"] = model
-            captured["messages"] = messages
-            return SimpleNamespace(
-                id="req-123",
-                choices=[SimpleNamespace(message=SimpleNamespace(content=output))],
-                usage=SimpleNamespace(prompt_tokens=100, completion_tokens=20),
-            )
+    async def _fake_create(
+        _settings,
+        *,
+        messages,
+        model=None,
+        org_id=None,
+        ccr_store=None,
+        **kwargs,
+    ):
+        captured["model"] = model
+        captured["messages"] = messages
+        return SimpleNamespace(
+            id="req-123",
+            choices=[SimpleNamespace(message=SimpleNamespace(content=output))],
+            usage=SimpleNamespace(prompt_tokens=100, completion_tokens=20),
+        )
 
     monkeypatch.setattr(
-        "teamshared.agents.runner.build_chat_client", lambda settings: _FakeClient()
+        "teamshared.agents.runner.create_chat_completion", _fake_create
     )
     return runner, runs, work, ingestion, captured
 

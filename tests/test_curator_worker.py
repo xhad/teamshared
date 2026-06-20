@@ -10,6 +10,7 @@ import pytest
 
 from teamshared.distill import curator_worker as cw_mod
 from teamshared.distill.curator_worker import CuratorWorker
+from tests.compress_settings import apply_compress_settings
 
 ORG = uuid.UUID("22222222-2222-2222-2222-222222222222")
 DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -23,6 +24,7 @@ def _rec(content: str, kind: str = "fact") -> SimpleNamespace:
 def _worker(*, facts: list, episodes: list, upsert: AsyncMock) -> CuratorWorker:
     w = object.__new__(CuratorWorker)
     w.settings = SimpleNamespace(default_org_id=DEFAULT_ORG)
+    apply_compress_settings(w.settings)
     w._MAX_FACTS = 200
     w._MAX_EPISODES = 20
     vs = SimpleNamespace(
@@ -33,6 +35,8 @@ def _worker(*, facts: list, episodes: list, upsert: AsyncMock) -> CuratorWorker:
     w.services = MagicMock()
     w.services.vector_store = vs
     w.services.wiki = wiki
+    w.services.working = MagicMock()
+    w.services.working.client = MagicMock()
     return w
 
 

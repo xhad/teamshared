@@ -17,6 +17,7 @@ import pytest
 from teamshared.distill import worker as worker_mod
 from teamshared.distill.worker import DistillWorker
 from teamshared.identity.principal import Principal
+from tests.compress_settings import apply_compress_settings
 
 JOB_ORG = uuid.UUID("22222222-2222-2222-2222-222222222222")
 DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -25,8 +26,10 @@ DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
 def _worker(ingest: AsyncMock, *, org: uuid.UUID) -> DistillWorker:
     w = object.__new__(DistillWorker)
     w.settings = SimpleNamespace(default_org_id=DEFAULT_ORG)
+    apply_compress_settings(w.settings)
 
     w.working = MagicMock()
+    w.working.client = MagicMock()
     w.working.get_turns = AsyncMock(
         return_value=[{"role": "user", "content": "hi"}, {"role": "assistant", "content": "yo"}]
     )

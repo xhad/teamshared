@@ -25,6 +25,7 @@ from teamshared.memory.context_assembler import ContextPack
 from teamshared.memory.types import RecallResult, ThinkResult
 from teamshared.server.state import ServerState, clear_state, set_state
 from teamshared.server.tools import register_tools
+from tests.compress_settings import apply_compress_settings
 
 ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
@@ -184,6 +185,7 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     settings.llm_provider = "openai"
     settings.queue_depth_warn_threshold = 100
     settings.queue_depth_critical_threshold = 500
+    apply_compress_settings(settings)
 
     graph = MagicMock()
     graph.verify = AsyncMock(return_value=None)

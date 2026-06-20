@@ -64,12 +64,13 @@ def test_build_chat_client_openai_uses_sdk_defaults(monkeypatch: pytest.MonkeyPa
 
 
 async def test_summarize_routes_openrouter_through_openai(monkeypatch: pytest.MonkeyPatch) -> None:
-    openai_call = AsyncMock(return_value='{"facts": []}')
-    ollama_call = AsyncMock()
-    monkeypatch.setattr(summarizer_mod, "_call_openai", openai_call)
-    monkeypatch.setattr(summarizer_mod, "_call_ollama", ollama_call)
+    create = AsyncMock(return_value={})
+    text = AsyncMock(return_value='{"facts": []}')
+    monkeypatch.setattr(summarizer_mod, "create_chat_completion", create)
+    monkeypatch.setattr(summarizer_mod, "chat_completion_text", text)
     settings = SimpleNamespace(llm_provider="openrouter", llm_model="openai/gpt-4o-mini")
     out = await summarize(settings, agent="cursor", topic="t", transcript=[])  # type: ignore[arg-type]
     assert out == {"facts": []}
-    openai_call.assert_awaited_once()
-    ollama_call.assert_not_awaited()
+    create.assert_awaited_once()
+    text.assert_called_once()
+    assert text.call_args.kwargs["ollama"] is False
