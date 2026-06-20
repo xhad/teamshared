@@ -7,7 +7,5 @@ dockerfilePath = "infra/Dockerfile"
 [deploy]
 preDeployCommand = ["teamshared migrate"]
 startCommand = "teamshared serve --transport http"
-healthcheckPath = "/health"
-healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
