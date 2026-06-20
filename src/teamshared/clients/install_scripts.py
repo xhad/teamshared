@@ -215,11 +215,10 @@ _ts_install_cursor() {
   _ts_write_cursor_mcp "${mcp_config}"
   echo "  MCP config → ${mcp_config}"
   echo ""
+  echo "Wrote only ${rule_path} and ${mcp_config} (no .cursor/plugins)."
+  echo ""
   echo "NOTE: ${mcp_config} contains your bearer token."
   echo "      Add '.cursor/mcp.json' to this repo's .gitignore so it isn't committed."
-  echo ""
-  echo "Install the TeamShared plugin separately if you want hooks/skills:"
-  echo "  ln -sf \"\$(pwd)/plugins/teamshared\" ~/.cursor/plugins/local/teamshared"
 }
 
 _ts_install_codex() {
