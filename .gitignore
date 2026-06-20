@@ -35,6 +35,7 @@ infra/data/
 .vscode/
 # Local Cursor MCP config (contains org bearer token)
 .cursor/mcp.json
+.cursor/teamshared-mcp.snippet.json
 # Local install artifacts — committed project rules live under .cursor/rules/
 .cursor/plugins/
 .cursor/hooks/state/

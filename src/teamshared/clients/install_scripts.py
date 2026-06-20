@@ -67,7 +67,7 @@ _ts_read_secret() {
 }
 
 _ts_choose_harness() {
-  _ts_tty $'\nSelect agent harness:\n  1) cursor   — Cursor IDE (plugin, rules, MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n\n'
+  _ts_tty $'\nSelect agent harness:\n  1) cursor   — Cursor IDE (memory rule + MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n\n'
   _ts_tty "Install root: ${INSTALL_ROOT}\n"
   local choice
   while true; do
@@ -158,44 +158,68 @@ _ts_finish() {
   echo "MCP URL: ${TEAMSHARED_MCP_URL}"
 }
 
-# Cursor: plugin + rule + MCP under ./.cursor (this repo only).
+_ts_write_cursor_mcp() {
+  local config_path="$1"
+  _ts_need_cmd python3
+  TEAMSHARED_CONFIG="${config_path}" python3 <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+config_path = Path(os.environ["TEAMSHARED_CONFIG"])
+mcp_url = os.environ["TEAMSHARED_MCP_URL"]
+token = os.environ["TEAMSHARED_TOKEN"]
+
+if config_path.is_file():
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"invalid JSON in {config_path}: {exc}") from exc
+else:
+    data = {}
+
+if not isinstance(data, dict):
+    raise SystemExit(f"expected JSON object in {config_path}")
+
+servers = data.setdefault("mcpServers", {})
+if not isinstance(servers, dict):
+    raise SystemExit("mcpServers must be a JSON object")
+
+existing = servers.get("teamshared")
+if isinstance(existing, dict):
+    headers = dict(existing.get("headers") or {})
+    headers["Authorization"] = f"Bearer {token}"
+    entry = {**existing, "url": mcp_url, "headers": headers}
+else:
+    entry = {"url": mcp_url, "headers": {"Authorization": f"Bearer {token}"}}
+
+servers["teamshared"] = entry
+config_path.parent.mkdir(parents=True, exist_ok=True)
+config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+print(config_path)
+PY
+}
+
+# Cursor: memory rule + MCP under ./.cursor (no plugin bundle, no snippet file).
 _ts_install_cursor() {
   _ts_need_cmd curl
   local cursor_dir="${INSTALL_ROOT}/.cursor"
-  local plugin_dir="${cursor_dir}/plugins/local/teamshared"
   local rule_path="${cursor_dir}/rules/teamshared.mdc"
-  local bundle_url="${TEAMSHARED_BASE_URL}/install/plugin/teamshared.tar.gz"
-
-  echo "Installing Cursor plugin → ${plugin_dir}"
-  local tmpdir
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "${tmpdir}"' RETURN
-  curl -fsSL "${bundle_url}" | tar -xzf - -C "${tmpdir}"
-  local root
-  root="$(find "${tmpdir}" -mindepth 1 -maxdepth 1 -type d | head -1)"
-  [[ -n "${root}" ]] || _ts_die "plugin bundle layout unexpected"
-  rm -rf "${plugin_dir}"
-  mkdir -p "$(dirname "${plugin_dir}")"
-  cp -a "${root}" "${plugin_dir}"
+  local mcp_config="${cursor_dir}/mcp.json"
 
   mkdir -p "$(dirname "${rule_path}")"
-  if [[ -f "${plugin_dir}/rules/teamshared.mdc" ]]; then
-    cp "${plugin_dir}/rules/teamshared.mdc" "${rule_path}"
-    echo "  rule → ${rule_path}"
-  fi
-  echo "  plugin → ${plugin_dir}"
+  _ts_fetch "${rule_path}" "${ASSETS}/cursor/teamshared.mdc"
+  echo "  rule → ${rule_path}"
 
-  local mcp_snippet="${cursor_dir}/teamshared-mcp.snippet.json"
-  local mcp_config="${cursor_dir}/mcp.json"
-  _ts_fetch "${mcp_snippet}" "${ASSETS}/cursor/mcp.json"
-  _ts_apply_token "${mcp_snippet}"
-  _ts_merge_json_mcp "${mcp_snippet}" "${mcp_config}"
+  _ts_write_cursor_mcp "${mcp_config}"
   echo "  MCP config → ${mcp_config}"
   echo ""
   echo "NOTE: ${mcp_config} contains your bearer token."
   echo "      Add '.cursor/mcp.json' to this repo's .gitignore so it isn't committed."
   echo ""
-  echo "Optional: install Bun (https://bun.sh) for continual-learning hooks."
+  echo "Install the TeamShared plugin separately if you want hooks/skills:"
+  echo "  ln -sf \"\$(pwd)/plugins/teamshared\" ~/.cursor/plugins/local/teamshared"
 }
 
 _ts_install_codex() {
@@ -429,7 +453,7 @@ _ts_read() {
 }
 
 _ts_choose_harness() {
-  _ts_tty $'\nSelect agent harness to remove teamshared from:\n  1) cursor   — Cursor IDE (plugin, rules, MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n  6) all      — every harness above\n\n'
+  _ts_tty $'\nSelect agent harness to remove teamshared from:\n  1) cursor   — Cursor IDE (memory rule + MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n  6) all      — every harness above\n\n'
   _ts_tty "Uninstall root: ${INSTALL_ROOT}\n"
   local choice
   while true; do
@@ -623,7 +647,8 @@ def install_index_html(*, base_url: str) -> str:
   <p>One script for every harness ({harnesses}). Run it from your <strong>project
   root</strong> — files land under <code>./.cursor</code>, <code>./.codex</code>,
   <code>./.hermes</code>, <code>./.claude</code>, or <code>./.openclaw</code>
-  (never <code>~</code>). Downloads plugin files and MCP config from this server.</p>
+  (never <code>~</code>). Cursor installs the memory rule and merges MCP config;
+  other harnesses fetch MCP snippets from this server.</p>
   <pre>cd /path/to/your/repo
 curl -fsSL {base}/install.sh | bash</pre>
   <p>Mint a bearer token in the <a href="/app/keys">console API Keys</a> page,

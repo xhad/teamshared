@@ -96,12 +96,23 @@ async def handle_install_asset(request: Request) -> Response:
     if not rel or ".." in rel.split("/"):
         return PlainTextResponse("not found", status_code=404)
 
+    if rel == "cursor/teamshared.mdc":
+        plugin = _plugin_source_dir()
+        if plugin is not None:
+            rule = plugin / "rules" / "teamshared.mdc"
+            if rule.is_file():
+                return PlainTextResponse(
+                    rule.read_text(encoding="utf-8"),
+                    media_type="text/plain; charset=utf-8",
+                )
+        return PlainTextResponse("not found", status_code=404)
+
     path = _resolve_asset(rel)
     if path is None:
         return PlainTextResponse("not found", status_code=404)
 
     suffix = path.suffix.lower()
-    if suffix in {".json", ".yaml", ".yml", ".toml", ".sh", ".md"}:
+    if suffix in {".json", ".yaml", ".yml", ".toml", ".sh", ".md", ".mdc"}:
         text = path.read_text(encoding="utf-8")
         if _ASSET_PLACEHOLDER in text:
             text = text.replace(_ASSET_PLACEHOLDER, _mcp_url(request))

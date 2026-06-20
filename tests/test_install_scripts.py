@@ -49,7 +49,12 @@ def test_unified_install_script() -> None:
     assert "_ts_choose_cursor_scope" not in body
     assert "global — ~/.cursor" not in body
     assert "${INSTALL_ROOT}/.cursor" in body
-    assert "plugins/local/teamshared" in body
+    assert "_ts_write_cursor_mcp" in body
+    assert "cursor/teamshared.mdc" in body
+    cursor_section = body.split("_ts_install_cursor")[1].split("_ts_install_codex")[0]
+    assert "teamshared-mcp.snippet.json" not in cursor_section
+    assert "install/plugin/teamshared.tar.gz" not in cursor_section
+    assert "cp -a \"${root}\" \"${plugin_dir}\"" not in cursor_section
     assert "${INSTALL_ROOT}/.codex/config.toml" in body
     assert "${INSTALL_ROOT}/.hermes/agent-hooks" in body
     assert "${INSTALL_ROOT}/.claude" in body
@@ -124,6 +129,11 @@ def test_install_routes() -> None:
         cursor_mcp = client.get("/install/assets/cursor/mcp.json")
         assert cursor_mcp.status_code == 200
         assert "__TEAMSHARED_TOKEN__" in cursor_mcp.text
+
+        cursor_rule = client.get("/install/assets/cursor/teamshared.mdc")
+        assert cursor_rule.status_code == 200
+        assert "teamshared Memory Protocol" in cursor_rule.text
+        assert "version:" in cursor_rule.text
 
         hermes_hook = client.get("/install/assets/hermes/capture.py")
         assert hermes_hook.status_code == 200
