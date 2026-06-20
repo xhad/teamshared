@@ -95,7 +95,7 @@ def test_people_add_accepts_csrf_cookie_without_form_field() -> None:
         cookies={"ts_session": client.cookies["ts_session"], "ts_csrf": csrf},
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/people"
+    assert resp.headers["location"] == "/app/people?flash=added"
 
 
 def _rolling_app(ttl: int = 2_592_000) -> TestClient:

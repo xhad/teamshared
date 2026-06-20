@@ -107,9 +107,8 @@ async def test_autolink_filters_unregistered_predicates() -> None:
 async def test_validate_link_rejects_kind_mismatch() -> None:
     conn = _Conn([
         _Cur(one=(1,)),  # registry exists
+        _Cur(one=(1,)),  # predicate exists
         _Cur(one=("works_at", "desc", ["Person"], ["Organization"], "many_to_many")),
-        _Cur(one=("Alice", "Person", "active")),  # subject entity
-        _Cur(one=("Acme", "Project", "active")),  # object entity wrong kind
     ])
     store = OntologyStore(_DB(conn))  # type: ignore[arg-type]
     store.get_entity_by_slug = AsyncMock(  # type: ignore[method-assign]
@@ -126,7 +125,8 @@ async def test_validate_link_rejects_kind_mismatch() -> None:
 @pytest.mark.asyncio
 async def test_validate_link_warns_when_entity_missing() -> None:
     conn = _Conn([
-        _Cur(one=(1,)),
+        _Cur(one=(1,)),  # registry exists
+        _Cur(one=(1,)),  # predicate exists
         _Cur(one=("works_at", "desc", ["Person"], ["Organization"], "many_to_many")),
     ])
     store = OntologyStore(_DB(conn))  # type: ignore[arg-type]

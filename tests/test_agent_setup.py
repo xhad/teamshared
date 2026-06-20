@@ -64,7 +64,9 @@ def test_load_teamshared_memory_rule_mdc() -> None:
     assert mdc.startswith("---")
     assert "memory_recall" in mdc
     assert "github=" in mdc
-    assert "git rev-parse --show-toplevel" in mdc
+    # repo= is resolved as a git-root path slug (strip leading "/", replace "/" with "-").
+    assert "strip leading" in mdc
+    assert "replace `/` with `-`" in mdc
 
 
 def test_codex_setup_uses_inline_token_toml() -> None:
