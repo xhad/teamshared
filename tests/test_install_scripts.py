@@ -59,7 +59,6 @@ def test_unified_install_script() -> None:
     assert "teamshared-mcp.snippet.json" not in cursor_section
     assert "install/plugin/teamshared.tar.gz" not in cursor_section
     assert "cp -a \"${root}\" \"${plugin_dir}\"" not in cursor_section
-    assert "no .cursor/plugins" in cursor_section
     assert "${INSTALL_ROOT}/.codex/config.toml" in body
     assert "${INSTALL_ROOT}/.hermes/agent-hooks" in body
     assert "${INSTALL_ROOT}/.claude" in body
