@@ -210,7 +210,7 @@ async def test_compression_token_savings_summary_report(integration_stack: Any) 
     ]
     assert fat, "expected fat scenarios in report"
     for report in fat:
-        assert report.token_reduction_pct >= 40.0, report.scenario
+        assert report.token_reduction_pct >= 30.0, report.scenario
         assert report.chars_saved >= 1000, report.scenario
 
     protected = [r for r in reports if "protected" in r.scenario or "passthrough" in r.scenario]

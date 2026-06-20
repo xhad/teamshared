@@ -35,7 +35,7 @@ from teamshared.config import Settings
 from teamshared.identity.principal import Principal
 from teamshared.ingestion.injection import screen_injection
 from teamshared.ingestion.pipeline import IngestionPipeline
-from teamshared.llm.completion import create_chat_completion
+from teamshared.llm.completion import chat_completion_text, create_chat_completion
 from teamshared.logging import get_logger
 from teamshared.memory.context_assembler import ContextAssembler
 from teamshared.memory.facade import MemoryFacade
@@ -325,14 +325,9 @@ class AgentRunner:
             temperature=0.2,
         )
         latency_ms = int((time.monotonic() - started) * 1000)
-        if self.settings.llm_provider == "ollama":
-            output = (
-                str(resp.get("message", {}).get("content") or "").strip()
-                if isinstance(resp, dict)
-                else ""
-            )
-        else:
-            output = (resp.choices[0].message.content or "").strip()
+        output = chat_completion_text(
+            resp, ollama=self.settings.llm_provider == "ollama"
+        ).strip()
         usage = getattr(resp, "usage", None)
         prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
         completion_tokens = getattr(usage, "completion_tokens", None) if usage else None

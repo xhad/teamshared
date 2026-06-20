@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from openai.types.chat import ChatCompletion
@@ -95,4 +95,19 @@ async def _ollama_completion(
     async with httpx.AsyncClient(base_url=settings.ollama_base_url, timeout=120) as client:
         resp = await client.post("/api/chat", json=body)
         resp.raise_for_status()
-        return resp.json()
+        return cast(dict[str, Any], resp.json())
+
+
+def chat_completion_text(
+    resp: ChatCompletion | dict[str, Any],
+    *,
+    ollama: bool,
+) -> str:
+    """Extract assistant message text from OpenAI or Ollama chat responses."""
+    if ollama:
+        if not isinstance(resp, dict):
+            raise TypeError("expected Ollama dict response")
+        return str(resp.get("message", {}).get("content") or "")
+    if not isinstance(resp, ChatCompletion):
+        raise TypeError("expected OpenAI ChatCompletion response")
+    return resp.choices[0].message.content or ""

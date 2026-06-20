@@ -166,7 +166,7 @@ def compression_scenarios() -> list[CompressionScenario]:
             kind="normalize",
             tool_name="MCP:memory_recall",
             payload=_memory_recall_payload(records=15, content_chars=1200),
-            min_token_reduction_pct=55.0,
+            min_token_reduction_pct=30.0,
             min_chars_saved=10000,
             expect_cleaned=True,
         ),

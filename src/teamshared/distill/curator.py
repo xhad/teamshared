@@ -16,7 +16,7 @@ from teamshared.compress.ccr_store import CcrStore
 from teamshared.config import Settings
 from teamshared.distill.prompts import CURATOR_SYSTEM, build_curator_message
 from teamshared.distill.summarizer import SummarizerError
-from teamshared.llm.completion import create_chat_completion
+from teamshared.llm.completion import chat_completion_text, create_chat_completion
 from teamshared.logging import get_logger
 
 log = get_logger(__name__)
@@ -45,10 +45,7 @@ async def curate(
         temperature=0.2,
         response_format={"type": "json_object"},
     )
-    if settings.llm_provider == "ollama":
-        raw = str(resp.get("message", {}).get("content") or "{}")
-    else:
-        raw = resp.choices[0].message.content or "{}"
+    raw = chat_completion_text(resp, ollama=settings.llm_provider == "ollama") or "{}"
     return _parse_json(raw)
 
 
