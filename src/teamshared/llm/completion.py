@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletion
 
 from teamshared.compress.ccr_store import CcrStore, org_scope_from_id

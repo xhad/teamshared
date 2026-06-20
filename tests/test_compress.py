@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from teamshared.compress.engine import compress_messages, compress_text
 from teamshared.compress.smart_crusher import compress_json_array, try_compress_json_text
 from teamshared.config import Settings

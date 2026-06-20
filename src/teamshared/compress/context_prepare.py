@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from teamshared.config import Settings
 from teamshared.compress.factory import ccr_store_from_working
+from teamshared.config import Settings
 from teamshared.identity.principal import Principal
 from teamshared.llm.gateway import prepare_llm_messages
 from teamshared.memory.facade import MemoryFacade

@@ -16,7 +16,7 @@ import pytest
 
 from teamshared.config import Settings, get_settings
 from teamshared.distill import summarizer as summarizer_mod
-from teamshared.distill.summarizer import SummarizerError, summarize
+from teamshared.distill.summarizer import summarize
 from teamshared.llm.client import build_chat_client
 
 

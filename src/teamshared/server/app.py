@@ -45,10 +45,7 @@ from teamshared.server.capture import (
     ToolCallCaptureMiddleware,
     ingest_turns,
 )
-from teamshared.server.mcp_output_middleware import ToolOutputNormalizeMiddleware
 from teamshared.server.compress_api import handle_compress, handle_compress_retrieve
-from teamshared.server.llm_prepare_api import handle_llm_prepare
-from teamshared.server.tool_output_api import handle_tool_normalize
 from teamshared.server.console import register_console_routes
 from teamshared.server.console_csrf import ConsoleCsrfCookieMiddleware
 from teamshared.server.dashboard import handle_memory_dashboard
@@ -61,6 +58,8 @@ from teamshared.server.install_api import (
     handle_plugin_bundle,
     handle_uninstall_sh,
 )
+from teamshared.server.llm_prepare_api import handle_llm_prepare
+from teamshared.server.mcp_output_middleware import ToolOutputNormalizeMiddleware
 from teamshared.server.mcp_path import McpSlashMiddleware
 from teamshared.server.rate_limit import HttpRateLimitMiddleware, RateLimitLimits, RedisRateLimiter
 from teamshared.server.services import ProductionServices, make_services
@@ -70,6 +69,7 @@ from teamshared.server.token_api import (
     handle_token_invite_create,
     handle_token_mint,
 )
+from teamshared.server.tool_output_api import handle_tool_normalize
 from teamshared.server.tools import register_tools
 from teamshared.telemetry import instrument_asgi, setup_tracing
 

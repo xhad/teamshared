@@ -26,8 +26,8 @@ from teamshared.compress.tool_output import normalize_tool_output
 from teamshared.config import get_settings
 from teamshared.identity.accounts import AccountStore
 from teamshared.identity.api_keys import ApiKeyStore
-from teamshared.identity.provisioning import signup_org
 from teamshared.identity.principal import Principal
+from teamshared.identity.provisioning import signup_org
 from teamshared.identity.roles import RoleStore
 from teamshared.memory.working import WorkingMemory
 from teamshared.server import state as state_mod

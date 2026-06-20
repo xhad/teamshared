@@ -30,12 +30,12 @@ from uuid import UUID
 
 from teamshared.agents.runs import AgentRunStore
 from teamshared.clients.agent_setup import load_teamshared_memory_rule_mdc
-from teamshared.config import Settings
 from teamshared.compress.factory import ccr_store_from_working
-from teamshared.llm.completion import create_chat_completion
+from teamshared.config import Settings
 from teamshared.identity.principal import Principal
 from teamshared.ingestion.injection import screen_injection
 from teamshared.ingestion.pipeline import IngestionPipeline
+from teamshared.llm.completion import create_chat_completion
 from teamshared.logging import get_logger
 from teamshared.memory.context_assembler import ContextAssembler
 from teamshared.memory.facade import MemoryFacade

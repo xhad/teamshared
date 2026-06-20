@@ -15,9 +15,9 @@ from datetime import date, datetime
 from typing import Any, cast
 from uuid import UUID
 
+from teamshared.compress.factory import ccr_store_from_working
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.identity.principal import Principal
-from teamshared.compress.factory import ccr_store_from_working
 from teamshared.identity.rbac import Permissions
 from teamshared.ingestion.pii import has_hard_secret, scan_pii
 from teamshared.ingestion.pipeline import IngestionRejected
