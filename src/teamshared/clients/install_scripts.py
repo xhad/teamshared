@@ -19,8 +19,8 @@ _INSTALL_SH = r"""#!/usr/bin/env bash
 #   curl -fsSL __BASE__/install.sh | bash
 set -euo pipefail
 
-TEAMSHARED_BASE_URL="${TEAMSHARED_BASE_URL:-__BASE__}"
-TEAMSHARED_MCP_URL="${TEAMSHARED_MCP_URL:-__MCP_URL__}"
+export TEAMSHARED_BASE_URL="${TEAMSHARED_BASE_URL:-__BASE__}"
+export TEAMSHARED_MCP_URL="${TEAMSHARED_MCP_URL:-__MCP_URL__}"
 ASSETS="${TEAMSHARED_BASE_URL}/install/assets"
 INSTALL_ROOT="$(pwd)"
 

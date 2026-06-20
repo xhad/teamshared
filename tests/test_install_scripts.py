@@ -38,6 +38,10 @@ def test_unified_install_script() -> None:
     assert "token should start with tsk_" in body
     assert "https://teamshared.com/mcp" in body
     assert "https://teamshared.com/mcp/" not in body
+    # TEAMSHARED_MCP_URL / TEAMSHARED_BASE_URL must be exported so the inline
+    # python heredocs (os.environ[...]) can read them — not just shell vars.
+    assert "export TEAMSHARED_BASE_URL=" in body
+    assert "export TEAMSHARED_MCP_URL=" in body
     assert "_ts_install_hermes_soul" not in body
     assert "/install/assets" in body
     # Hermes ships a conversation-capture shell hook wired by the installer.
