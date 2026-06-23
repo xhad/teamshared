@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generated": "2026-06-20T12:00:00Z",
-    "sourceCount": 9,
+    "generated": "2026-06-23T12:00:00Z",
+    "sourceCount": 10,
     "sourceTypes": [
       "research",
       "prd",
@@ -15,7 +15,8 @@
       "Internal sources lack YAML frontmatter; types inferred. External research files have proper frontmatter.",
       "Corpus still meets the 'thin' rule: sourceCount < 8 OR uniqueTypes < 2. sourceCount now 8 but uniqueTypes is 1 (research/prd/memo/doc all classify as 'doc' under the schema's coarser types). Treated as thin; banner mandatory.",
       "consent-first capture removed from the product (2026-06-19): feature-consent-capture node, assumption-consent-is-adoption-gate, insight-ingest-philosophy-tension, and related edges dropped from this graph pass. The memory-wiki-plan.md source still describes the retired design; it is retained as a historical artifact.",
-      "headroom-research.md added 2026-06-20: Headroom is classified as adjacent context-compression layer, not a durable-memory competitor. Incremental graph pass — full graphify re-run recommended."
+      "headroom-research.md added 2026-06-20: Headroom is classified as adjacent context-compression layer, not a durable-memory competitor. Incremental graph pass — full graphify re-run recommended.",
+      "screenpipe-research.md added 2026-06-23: Screenpipe is classified as adjacent ambient desktop capture layer (screen+audio \u2192 local MCP), not a multi-tenant org brain. Incremental graph pass \u2014 full graphify re-run recommended."
     ]
   },
   "nodes": [
@@ -857,6 +858,120 @@
       ]
     },
     {
+      "id": "comp-screenpipe",
+      "type": "Competitor",
+      "label": "Screenpipe (screenpipe/screenpipe) \u2014 ambient desktop capture + MCP, 19k\u2605, YC S26",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "AI that knows what you've seen"
+        },
+        {
+          "source": "screenpipe-research.md",
+          "quote": "19k+ GitHub stars, source-available Screenpipe Commercial License. Y Combinator S26."
+        }
+      ]
+    },
+    {
+      "id": "segment-ambient-desktop-users",
+      "type": "Segment",
+      "label": "Knowledge workers wanting ambient desktop recall (screen + audio)",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "Knowledge workers who want to recall anything they've seen or heard on their computer"
+        }
+      ]
+    },
+    {
+      "id": "need-ambient-desktop-recall",
+      "type": "Need",
+      "label": "Recall anything seen or heard on the desktop without manual logging",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "remember everything - never forget what you saw, heard, or did"
+        }
+      ]
+    },
+    {
+      "id": "pain-forget-desktop-activity",
+      "type": "Pain",
+      "label": "Forgetting what you saw, heard, or did on prior days",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "you forget what you did last tuesday - screenpipe doesn't"
+        }
+      ]
+    },
+    {
+      "id": "feature-screenpipe-event-capture",
+      "type": "Feature",
+      "label": "Screenpipe event-driven capture: accessibility tree + OCR fallback + audio transcription",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "Listens for meaningful events \u2014 app switches, clicks, typing pauses, scrolling \u2014 and captures a screenshot only when something actually changes."
+        }
+      ]
+    },
+    {
+      "id": "feature-screenpipe-pipes",
+      "type": "Feature",
+      "label": "Screenpipe Pipes: trigger-based AI agents on captured data (meeting_ended, standup, CRM)",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "Agents that act on your work, not just remember it."
+        }
+      ]
+    },
+    {
+      "id": "feature-screenpipe-mcp-screen",
+      "type": "Feature",
+      "label": "Screenpipe MCP: query screen/audio history from Cursor and Claude Desktop",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "claude mcp add screenpipe -- npx -y screenpipe-mcp@latest"
+        }
+      ]
+    },
+    {
+      "id": "feature-screenpipe-pii-scrub",
+      "type": "Feature",
+      "label": "Screenpipe on-device PII model: exclude-at-source + scrub cards/SSNs/keys before save",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "scrubbed by a Screenpipe model on your machine that removes cards, SSNs, and keys before anything is saved."
+        }
+      ]
+    },
+    {
+      "id": "feature-screenpipe-team-permissions",
+      "type": "Feature",
+      "label": "Screenpipe Teams: per-pipe YAML data permissions enforced at OS level (fleet MDM)",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "Enforcement at three layers \u2014 skill gating, agent interception, server middleware with per-pipe cryptographic tokens. Not prompt-based. Deterministic."
+        }
+      ]
+    },
+    {
+      "id": "insight-screenpipe-orthogonal-capture",
+      "type": "Insight",
+      "label": "Screenpipe is orthogonal to org brain: ambient device capture, not shared multi-tenant memory",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "Screenpipe: ambient OS-level ingest \u2192 local search/MCP. TeamShared: agent/human writes \u2192 org-scoped pillars \u2192 recall/think/wiki/work."
+        }
+      ]
+    },
+    {
       "id": "insight-four-pillars",
       "type": "Insight",
       "label": "Agent memory splits into four pillars (working/semantic/episodic/procedural)",
@@ -1672,6 +1787,70 @@
         {
           "source": "plan.md",
           "quote": "agents use pre-inference retrieval to surface only the most relevant episodic or semantic memories right when they are needed"
+        }
+      ]
+    },
+    {
+      "id": "c-screenpipe-forget-activity",
+      "type": "competes-with",
+      "from": "comp-screenpipe",
+      "to": "pain-forget-desktop-activity",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "you forget what you did last tuesday - screenpipe doesn't"
+        }
+      ]
+    },
+    {
+      "id": "c-screenpipe-ambient-recall",
+      "type": "competes-with",
+      "from": "comp-screenpipe",
+      "to": "need-ambient-desktop-recall",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "remember everything - never forget what you saw, heard, or did"
+        }
+      ]
+    },
+    {
+      "id": "b-screenpipe-ambient-segment",
+      "type": "belongs-to",
+      "from": "comp-screenpipe",
+      "to": "segment-ambient-desktop-users",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "Knowledge workers who want to recall anything they've seen or heard on their computer"
+        }
+      ]
+    },
+    {
+      "id": "s-screenpipe-jit-retrieval",
+      "type": "supports",
+      "from": "insight-screenpipe-orthogonal-capture",
+      "to": "insight-jit-retrieval",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "Both reduce agent amnesia; Screenpipe from observation, TeamShared from articulation."
+        },
+        {
+          "source": "plan.md",
+          "quote": "agents use pre-inference retrieval to surface only the most relevant episodic or semantic memories right when they are needed"
+        }
+      ]
+    },
+    {
+      "id": "e-screenpipe-mcp-standard",
+      "type": "evidences",
+      "from": "feature-screenpipe-mcp-screen",
+      "to": "insight-mcp-is-de-facto",
+      "provenance": [
+        {
+          "source": "screenpipe-research.md",
+          "quote": "screenpipe runs as an MCP server, allowing AI assistants to query your screen history"
         }
       ]
     }

@@ -245,6 +245,10 @@ def _runner(monkeypatch: pytest.MonkeyPatch, *, output: str, playbook: dict | No
     monkeypatch.setattr(
         "teamshared.agents.runner.create_chat_completion", _fake_create
     )
+    monkeypatch.setattr(
+        "teamshared.agents.runner.chat_completion_text",
+        lambda _resp, *, ollama: output,
+    )
     return runner, runs, work, ingestion, captured
 
 

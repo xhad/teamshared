@@ -1,14 +1,14 @@
 # TeamShared — discovery graph
 
-> **CORPUS HEALTH: THIN.** Nine sources: five internal product-intent docs
-> plus four external research artifacts (YC RFS, GBrain competitor research,
-> shared-brain-landscape-2026, **headroom-research**). There is still **zero
+> **CORPUS HEALTH: THIN.** Ten sources: five internal product-intent docs
+> plus five external research artifacts (YC RFS, GBrain competitor research,
+> shared-brain-landscape-2026, headroom-research, **screenpipe-research**). There is still **zero
 > user-research evidence** — no interviews, tickets, or support threads.
 
-Generated 2026-06-20. Sources: 9. Types: research, prd, memo, doc.
-Nodes: 94 · Edges: 50 · Assumptions surfaced: 12.
+Generated 2026-06-23. Sources: 10. Types: research, prd, memo, doc.
+Nodes: 104 · Edges: 55 · Assumptions surfaced: 12.
 
-## Segments (6)
+## Segments (7)
 
 | Segment | Distinct sources |
 |---|---|
@@ -18,6 +18,7 @@ Nodes: 94 · Edges: 50 · Assumptions surfaced: 12.
 | Founders building "company brain" (YC RFS) | 1 |
 | Power users running OpenClaw/Hermes agents | 1 |
 | Teams shopping for a "shared brain" across coding agents | 1 |
+| **Knowledge workers wanting ambient desktop recall** *new* | 1 |
 
 ## Needs (7)
 
@@ -31,8 +32,9 @@ Nodes: 94 · Edges: 50 · Assumptions surfaced: 12.
 | Turn institutional knowledge into executable AI skills | 2 |
 | **Query what was true at a point in time (bi-temporal fact validity)** *new* | 1 |
 | **Sub-millisecond recall without LLM calls in the query path** *new* | 1 |
+| **Recall anything seen or heard on the desktop without manual logging** *new* | 1 |
 
-## Pains (6)
+## Pains (7)
 
 | Pain | Sources |
 |---|---|
@@ -42,6 +44,7 @@ Nodes: 94 · Edges: 50 · Assumptions surfaced: 12.
 | **Per-agent memory silos: one engineer's agent learns nothing from another's** *new* | 1 |
 | **Flat key-value memory with no distinction between facts and events** *new* | 1 |
 | **LLM calls during graph ingestion compound cost at scale** *new* | 1 |
+| **Forgetting what you saw, heard, or did on prior days** *new* | 1 |
 
 ## Features (22)
 
@@ -78,8 +81,13 @@ Nodes: 94 · Edges: 50 · Assumptions surfaced: 12.
 | **Headroom CCR: reversible Compress-Cache-Retrieve (SQLite)** *new* | 1 |
 | **Headroom proxy: zero-code OpenAI/Anthropic gateway** *new* | 1 |
 | **Headroom MCP: compress/retrieve/stats tool trio** *new* | 1 |
+| **Screenpipe event-driven capture: accessibility + OCR + audio** *new* | 1 |
+| **Screenpipe Pipes: trigger-based agents on captured data** *new* | 1 |
+| **Screenpipe MCP: query screen/audio history from Cursor** *new* | 1 |
+| **Screenpipe on-device PII scrub + exclude-at-source** *new* | 1 |
+| **Screenpipe Teams: per-pipe OS-level data permissions (MDM)** *new* | 1 |
 
-## Competitors (15)
+## Competitors (16)
 
 | Entity | Sources |
 |---|---|
@@ -102,10 +110,13 @@ Nodes: 94 · Edges: 50 · Assumptions surfaced: 12.
 | Cloudflare Agent Memory | 1 |
 | Hindsight-style distillation | 1 |
 | **Headroom (chopratejas/headroom)** — context compression, 41k★, CCR *new* | 1 |
+| **Screenpipe (screenpipe/screenpipe)** — ambient desktop capture + MCP, 19k★, YC S26 *new* | 1 |
 
 > GBrain remains the primary **memory** competitor with multi-source evidence.
 > Headroom is **adjacent** (context compression, not durable brain) — see
-> `knowledge/headroom-architecture-analysis.md`. The 2026 landscape adds 11
+> `knowledge/headroom-architecture-analysis.md`. Screenpipe is **adjacent**
+> (ambient desktop capture, not org brain) — see
+> `knowledge/screenpipe-competitor-analysis.md`. The 2026 landscape adds 11
 > named memory rivals; Hivemind is the most direct threat on skill auto-mining.
 
 ## Insights (8)
@@ -123,6 +134,7 @@ Nodes: 94 · Edges: 50 · Assumptions surfaced: 12.
 | **Hivemind ships the same skill-codification thesis but auto-mines from traces** *new* | 1 |
 | **Multiple rivals converge on distinguishing facts from events** *new* | 1 |
 | **Headroom is orthogonal to durable memory: shrinks current prompt, not org brain** *new* | 1 |
+| **Screenpipe is orthogonal to org brain: ambient device capture, not shared multi-tenant memory** *new* | 1 |
 
 ## Contradictions (1)
 

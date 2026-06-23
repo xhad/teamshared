@@ -49,6 +49,8 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     working = MagicMock()
     working.client = MagicMock()
     working.client.ping = AsyncMock(return_value=True)
+    working.client.get = AsyncMock(return_value=None)
+    working.client.setex = AsyncMock(return_value=True)
     working.last_heartbeat = AsyncMock(return_value="2026-01-01T00:00:00+00:00")
     working.queue_stats = AsyncMock(
         return_value={
@@ -365,7 +367,6 @@ async def test_context_prepare_tool(mcp_with_mocks: tuple[FastMCP, ServerState])
     mcp, state = mcp_with_mocks
     state.settings.llm_prepare_enabled = True
     state.settings.compress_min_chars = 50
-    state.working.client.setex = AsyncMock(return_value=True)
     big = json.dumps([{"n": i} for i in range(40)])
     data = await _call(
         mcp,

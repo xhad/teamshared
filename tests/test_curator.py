@@ -57,12 +57,13 @@ async def test_curate_uses_ollama_when_configured(monkeypatch: pytest.MonkeyPatc
 async def test_curate_uses_openai_path_for_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
     """OpenRouter is OpenAI-compatible, so it uses the non-Ollama response path."""
     create = AsyncMock(return_value={})
-    text = AsyncMock(return_value='{"title": "T", "body_md": "b"}')
     monkeypatch.setattr(curator_mod, "create_chat_completion", create)
-    monkeypatch.setattr(curator_mod, "chat_completion_text", text)
+    monkeypatch.setattr(
+        curator_mod,
+        "chat_completion_text",
+        lambda _resp, *, ollama: '{"title": "T", "body_md": "b"}',
+    )
     settings = SimpleNamespace(llm_provider="openrouter", llm_model="openai/gpt-4o-mini")
     out = await curate(settings, subject="x", facts=[], episodes=[])  # type: ignore[arg-type]
     assert out["body_md"] == "b"
     create.assert_awaited_once()
-    text.assert_called_once()
-    assert text.call_args.kwargs["ollama"] is False

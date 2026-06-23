@@ -26,16 +26,18 @@ product/
 ## Current state
 
 The graph was built from **internal product intent** (`prod-plan.md`,
-`plan.md`, `memory-wiki-plan.md`, plus `README.md`/`AGENTS.md`) and **two
-external signals** (`company-brain-yc-rfs.md`, `gbrain-competitor-research.md`,
+`plan.md`, `memory-wiki-plan.md`, plus `README.md`/`AGENTS.md`) and **external
+signals** (`company-brain-yc-rfs.md`, `gbrain-competitor-research.md`,
 `shared-brain-landscape-2026.md`, `palantir-foundry-ontology-research.md`,
-`headroom-research.md`). Corpus health is still **thin** — there is no captured
-user research yet. The headline finding: the plan is detailed, but the core bets
-have **zero user evidence**. GBrain is the primary named memory competitor
-(`knowledge/gbrain-competitor-analysis.md`); Headroom is the main **adjacent**
-context-compression layer (`knowledge/headroom-architecture-analysis.md` —
-orthogonal to TeamShared, not a brain replacement); Palantir Foundry ontology
-is the architectural reference for a governed entity/action layer
+`headroom-research.md`, `screenpipe-research.md`). Corpus health is still **thin**
+— there is no captured user research yet. The headline finding: the plan is
+detailed, but the core bets have **zero user evidence**. GBrain is the primary
+named memory competitor (`knowledge/gbrain-competitor-analysis.md`); Headroom is
+the main **adjacent** context-compression layer (`knowledge/headroom-architecture-analysis.md`
+— orthogonal to TeamShared, not a brain replacement); Screenpipe is the main
+**adjacent** ambient desktop capture layer (`knowledge/screenpipe-competitor-analysis.md`
+— local screen+audio memory + MCP, not a multi-tenant org brain); Palantir Foundry
+ontology is the architectural reference for a governed entity/action layer
 (`knowledge/palantir-ontology-analysis.md`). See `knowledge/assumption-audit.md`.
 
 ## How to move it forward
