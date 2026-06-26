@@ -3,7 +3,7 @@
 {% block title %}API keys{% endblock %}
 {% block content %}
   <h1>API keys</h1>
-  <p class="sub">Programmatic access keys (tsk_) for agents and services.</p>
+  <p class="sub">Programmatic access keys (tsk_) for agents and services. The label is used for memory attribution.</p>
   {% if flash == 'revoked' %}<div class="flash-ok">Key revoked.</div>{% endif %}
   {% if flash == 'error' %}<div class="unavailable">Could not update keys. Try again.</div>{% endif %}
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
@@ -18,11 +18,8 @@
   <div class="panel" style="margin-top:1rem">
     <form method="post" action="/app/keys/mint" class="inline-form">
       {{ cm.csrf_field() }}
-      <select name="agent_id" required>
-        <option value="">Bind to agent&hellip;</option>
-        {% for a in agents %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
-      </select>
       <input name="name" placeholder="Key name" required />
+      <input name="label" placeholder="Attribution label (e.g. cursor)" />
       <button type="submit">Mint key</button>
     </form>
   </div>

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 — 2026-06-25
+
+- **Rule 1.6.0:** removed the agent-execution surface — cloud/background agent
+  runs (`agent_run_*`), the workflow engine (`workflow_*`), and agent assignees
+  (`assignee_agent`). Work items assign to **people** only; API keys are
+  org-bound and carry a free-text attribution label. Dropped all "Cloud Agents"
+  references.
+
 ## 0.5.0 — 2026-06-19
 
 - **Install consolidation:** all curl-install templates live under `install/` in

@@ -52,4 +52,6 @@ async def test_mint_provisions_agent_and_mints_api_key() -> None:
     call = api_keys.mint.await_args.kwargs
     assert call["org_id"] == DEFAULT_ORG
     assert call["principal_type"] == "agent"
-    assert call["principal_id"] == AGENT_ID
+    # Keys are org-bound (no agents registry); the agent type is the label.
+    assert call["principal_id"] == DEFAULT_ORG
+    assert call["label"] == "cursor"

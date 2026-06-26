@@ -16,7 +16,7 @@ _CATALOG: list[dict[str, Any]] = [
      "summary": "Liveness + dependency probe", "example": {}},
     {"name": "version", "tier": "core", "group": "ops",
      "summary": "Server + memory-rule version check",
-     "example": {"installed_rule_version": "1.5.0"}},
+     "example": {"installed_rule_version": "1.6.0"}},
     {"name": "context_compress", "tier": "core", "group": "ops",
      "summary": "Shrink tool outputs/logs before sending a prompt to an LLM",
      "example": {"messages": [{"role": "user", "content": "summarize"}, {"role": "tool", "content": "[...]"}]}},
@@ -160,19 +160,13 @@ _CATALOG: list[dict[str, Any]] = [
      "summary": "Fetch one task", "example": {"work_id": "<uuid>"}},
     {"name": "work_create", "tier": "core", "group": "work",
      "summary": "Create task (active immediately)",
-     "example": {"title": "Fix CI", "work_status": "todo", "assignee_agent": "cursor"}},
+     "example": {"title": "Fix CI", "work_status": "todo", "assignee_email": "dev@example.com"}},
     {"name": "work_update", "tier": "core", "group": "work",
      "summary": "Update task fields/status", "example": {"work_id": "<uuid>", "work_status": "in_progress"}},
     {"name": "work_close", "tier": "core", "group": "work",
      "summary": "Mark done/cancelled", "example": {"work_id": "<uuid>", "work_status": "done"}},
     {"name": "work_comment_add", "tier": "core", "group": "work",
      "summary": "Add progress comment", "example": {"work_id": "<uuid>", "body": "PR opened"}},
-    # --- agent runs / workflows (extended) ---
-    {"name": "agent_run_create", "tier": "extended", "group": "agent_runs",
-     "summary": "Queue background agent run on a task",
-     "example": {"work_id": "<uuid>", "agent": "cursor", "playbook_name": "ship-pr"}},
-    {"name": "workflow_start", "tier": "human", "group": "workflows",
-     "summary": "Start procedural-loop workflow run", "example": {"workflow_name": "review-loop"}},
 ]
 
 _TOOL_RECIPE_HELP = {
@@ -182,19 +176,6 @@ _TOOL_RECIPE_HELP = {
             "skills": ["lint", "ship-pr"],
             "skill_versions": {"ship-pr": 2},
             "loop": {"max_iterations": 3},
-        },
-    },
-    "workflow_stages": {
-        "description": "Multi-stage workflow graph stored on a procedure",
-        "example": {
-            "stages": [
-                {"id": "triage", "owner": "agent", "agent": "cursor", "skill": "triage",
-                 "advance": "auto", "on_done": "implement"},
-                {"id": "implement", "owner": "agent", "playbook": "ship-pr",
-                 "advance": "auto", "on_done": "done"},
-            ],
-            "loop": {"select": {"work_status": "todo"}, "until": "all_terminal",
-                     "max_iterations": 10},
         },
     },
 }
@@ -207,11 +188,11 @@ def list_tools(
 ) -> dict[str, Any]:
     """Return grouped tool metadata for MCP discovery."""
     groups = {"memory", "skills", "playbooks", "graph", "strategic", "work",
-              "agent_runs", "workflows", "ops", "projects"}
+              "ops", "projects"}
     if scope == "memory":
         groups = {"memory", "skills", "playbooks", "graph", "strategic", "ops"}
     elif scope == "work":
-        groups = {"work", "agent_runs", "workflows", "projects"}
+        groups = {"work", "projects"}
 
     entries = [
         e for e in _CATALOG
@@ -226,7 +207,7 @@ def list_tools(
         "groups": by_group,
         "tiers": {
             "core": "Every session: recall, remember, sessions, skill/playbook read+write, work",
-            "extended": "Graph, strategic, forget, state, agent runs, debugging",
-            "human": "Workflow orchestration and human gates",
+            "extended": "Graph, strategic, forget, state, debugging",
+            "human": "Human-gated console actions",
         },
     }

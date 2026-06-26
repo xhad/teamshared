@@ -11,6 +11,7 @@ stores.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any, cast
 from uuid import UUID
@@ -53,7 +54,6 @@ from teamshared.playbook.compose import (
     skill_names_from_recipe,
 )
 from teamshared.server.services import ProductionServices
-from teamshared.workflow.definition import parse_definition
 
 log = get_logger(__name__)
 
@@ -120,10 +120,9 @@ class MemoryFacade:
         if not agent_override or agent_override == caller_label:
             return caller
 
-        override = await self.resolver.for_agent(agent_override)
-        applied = override.org_id == caller.org_id
-        writer = override if applied else caller
-        attributed = writer.display or writer.attribution
+        # Attribution is a free-text label: keep the caller's org/identity/RBAC
+        # and only override the display label used for authorship.
+        writer = replace(caller, display=agent_override)
 
         await self.services.audit.record(
             agent=caller.attribution,
@@ -136,24 +135,11 @@ class MemoryFacade:
             payload={
                 "operation": operation,
                 "requested_agent": agent_override,
-                "attributed_agent": attributed,
-                "applied": applied,
+                "attributed_agent": agent_override,
+                "applied": True,
             },
         )
-        if not applied:
-            log.warning(
-                "agent_override_rejected",
-                operation=operation,
-                caller=caller_label,
-                requested_agent=agent_override,
-            )
         return writer
-
-    async def _lookup_agent_id(self, org_id: UUID, name: str) -> UUID | None:
-        async with self.services.tenant_db.org(org_id) as conn:
-            cur = await conn.execute("SELECT id FROM agents WHERE name = %s", (name,))
-            row = await cur.fetchone()
-        return row[0] if row else None
 
     async def remember(
         self,
@@ -209,17 +195,11 @@ class MemoryFacade:
             s for s in scopes
             if s in {"semantic", "episodic", "procedural", "skill", "strategic", "work", "all"}
         ]
-        author_id: UUID | None = None
-        if agent_filter:
-            author_id = await self._lookup_agent_id(principal.org_id, agent_filter)
-            if author_id is None:
-                # Asked to narrow to an agent with no writes: empty durable set.
-                durable = []
         result = RecallResult(query=query, records=[], counts_by_pillar={}, errors_by_pillar={})
         if durable:
             result = await self.services.retrieval().search(
                 ctx, query, scopes=durable, k=k, time_range=time_range,
-                author_agent_id=author_id, explain=explain,
+                author_label=agent_filter, explain=explain,
             )
         records = list(result.records)
         counts = dict(result.counts_by_pillar)
@@ -332,14 +312,9 @@ class MemoryFacade:
         limit: int,
         agent_filter: str | None,
     ) -> dict[str, Any]:
-        author_id: UUID | None = None
-        if agent_filter:
-            author_id = await self._lookup_agent_id(principal.org_id, agent_filter)
-            if author_id is None:
-                return {"count": 0, "episodes": []}
         records = await self.services.vector_store.list_episodes(
             org_id=principal.org_id, topic=topic, since=since, until=until,
-            limit=limit, author_agent_id=author_id,
+            limit=limit, author_label=agent_filter,
         )
         return {"count": len(records), "episodes": [r.model_dump(mode="json") for r in records]}
 
@@ -1021,7 +996,6 @@ class MemoryFacade:
                 blocked_reason=None,
                 assignee_type=None,
                 assignee_id=None,
-                assignee_agent=parameters.get("assignee_agent"),
                 assignee_email=parameters.get("assignee_email"),
                 initiative_id=None,
                 due_at=None,
@@ -1246,15 +1220,11 @@ class MemoryFacade:
             assignee_type = principal.type
             assignee_id = principal.id
         elif assignee:
-            agent_id = await self.services.work.resolve_agent_id(principal.org_id, assignee)
-            if agent_id is not None:
-                assignee_type, assignee_id = "agent", agent_id
-            else:
-                user_id = await self.services.work.resolve_user_id_by_email(
-                    principal.org_id, assignee,
-                )
-                if user_id is not None:
-                    assignee_type, assignee_id = "user", user_id
+            user_id = await self.services.work.resolve_user_id_by_email(
+                principal.org_id, assignee,
+            )
+            if user_id is not None:
+                assignee_type, assignee_id = "user", user_id
         init_uuid = UUID(initiative_id) if initiative_id else None
         rows = await self.services.work.list_items(
             principal.org_id,
@@ -1293,7 +1263,6 @@ class MemoryFacade:
         priority: str,
         assignee_type: str | None,
         assignee_id: str | None,
-        assignee_agent: str | None,
         assignee_email: str | None,
         initiative_id: str | None,
         due_at: datetime | None,
@@ -1316,7 +1285,6 @@ class MemoryFacade:
             principal.org_id,
             assignee_type=assignee_type,
             assignee_id=assignee_id,
-            assignee_agent=assignee_agent,
             assignee_email=assignee_email,
         )
         requester_type = writer.type if writer.type in {"user", "agent"} else None
@@ -1366,18 +1334,6 @@ class MemoryFacade:
             request_id=ctx.request_id,
             after={"title": title, "status": "active"},
         )
-        if resolved_assignee_type == "agent" and resolved_assignee_id:
-            try:
-                await self.services.agent_run_service().maybe_autorun_on_assign(
-                    ctx,
-                    work_id=UUID(str(row["id"])),
-                    agent_id=resolved_assignee_id,
-                )
-            except Exception as exc:
-                log.warning(
-                    "work_create_autorun_failed",
-                    work_id=str(row["id"]), error=str(exc),
-                )
         out = _serialize_work(row)
         out["approval_status"] = "active"
         return out
@@ -1395,7 +1351,6 @@ class MemoryFacade:
         blocked_reason: str | None,
         assignee_type: str | None,
         assignee_id: str | None,
-        assignee_agent: str | None,
         assignee_email: str | None,
         initiative_id: str | None,
         due_at: datetime | None,
@@ -1434,12 +1389,11 @@ class MemoryFacade:
             fields["repo"] = repo
         if github is not None:
             fields["github"] = github
-        if any(x is not None for x in (assignee_type, assignee_id, assignee_agent, assignee_email)):
+        if any(x is not None for x in (assignee_type, assignee_id, assignee_email)):
             atype, aid = await self._resolve_assignee(
                 principal.org_id,
                 assignee_type=assignee_type,
                 assignee_id=assignee_id,
-                assignee_agent=assignee_agent,
                 assignee_email=assignee_email,
             )
             fields["assignee_type"] = atype
@@ -1473,16 +1427,6 @@ class MemoryFacade:
             request_id=ctx.request_id,
             after=fields,
         )
-        if fields.get("assignee_type") == "agent" and fields.get("assignee_id"):
-            try:
-                await self.services.agent_run_service().maybe_autorun_on_assign(
-                    ctx, work_id=UUID(work_id), agent_id=fields["assignee_id"],
-                )
-            except Exception as exc:
-                log.warning(
-                    "work_assign_autorun_failed",
-                    work_id=work_id, error=str(exc),
-                )
         return _serialize_work(row)
 
     async def work_close(
@@ -1583,171 +1527,6 @@ class MemoryFacade:
             "count": len(rows),
             "comments": [_serialize_work(r) for r in rows],
         }
-
-    # -- agent runs -------------------------------------------------------
-
-    async def agent_run_create(
-        self,
-        principal: Principal,
-        *,
-        work_id: str,
-        agent: str,
-        playbook_name: str | None = None,
-        playbook_version: int | None = None,
-        skill_name: str | None = None,
-        skill_version: int | None = None,
-        model: str | None = None,
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        agent_id = await self.services.work.resolve_agent_id(principal.org_id, agent)
-        if agent_id is None:
-            raise ValueError(f"No active agent named {agent!r} in this org.")
-        effective_playbook = playbook_name
-        effective_version = playbook_version
-        if skill_name and not playbook_name:
-            skill = await self.skills.get_skill(
-                principal.org_id, skill_name, skill_version
-            )
-            if skill is None:
-                raise ValueError(
-                    f"Skill {skill_name!r} is unavailable (missing or soft-deleted). "
-                    "or quarantined)."
-                )
-            effective_playbook = f"__skill__:{skill_name}"
-            effective_version = skill.get("version")
-        run = await self.services.agent_run_service().assign_and_run(
-            ctx,
-            work_id=UUID(work_id),
-            agent_id=agent_id,
-            playbook_name=effective_playbook,
-            playbook_version=effective_version,
-            model=model,
-        )
-        return cast("dict[str, Any]", _serialize_deep(run))
-
-    async def agent_run_list(
-        self, principal: Principal, *, status: str | None = None, limit: int = 50
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        rows = await self.services.agent_run_service().list_runs(
-            ctx, status=status, limit=limit,  # type: ignore[arg-type]
-        )
-        return {"count": len(rows), "runs": [_serialize_deep(r) for r in rows]}
-
-    async def agent_run_get(
-        self, principal: Principal, *, run_id: str
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        run = await self.services.agent_run_service().get_run(ctx, UUID(run_id))
-        return cast("dict[str, Any]", _serialize_deep(run))
-
-    async def agent_run_cancel(
-        self, principal: Principal, *, run_id: str
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        run = await self.services.agent_run_service().cancel(ctx, UUID(run_id))
-        return cast("dict[str, Any]", _serialize_deep(run))
-
-    async def agent_run_retry(
-        self, principal: Principal, *, run_id: str
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        run = await self.services.agent_run_service().retry(ctx, UUID(run_id))
-        return cast("dict[str, Any]", _serialize_deep(run))
-
-    # -- workflows (procedural loops) -------------------------------------
-
-    async def workflow_define(
-        self,
-        principal: Principal,
-        *,
-        name: str,
-        stages: list[dict[str, Any]],
-        loop: dict[str, Any] | None,
-        description: str | None,
-        steps_md: str | None,
-        tags: list[str] | None,
-        agent_override: str | None,
-    ) -> dict[str, Any]:
-        tool_recipe: dict[str, Any] = {"stages": stages}
-        if loop is not None:
-            tool_recipe["loop"] = loop
-        # Validate the stage graph before persisting (raises on a bad graph).
-        parse_definition(tool_recipe)
-        body = steps_md or _render_workflow_steps_md(name, stages, loop)
-        return await self.procedure_set(
-            principal,
-            name=name,
-            steps_md=body,
-            description=description or f"Workflow definition: {name}",
-            tool_recipe=tool_recipe,
-            tags=sorted({*(tags or []), "workflow"}),
-            agent_override=agent_override,
-        )
-
-    async def workflow_start(
-        self,
-        principal: Principal,
-        *,
-        workflow_name: str,
-        version: int | None,
-        work_ids: list[str] | None,
-        selector: dict[str, Any] | None,
-        max_iterations: int | None,
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        run = await self.services.workflow_orchestrator().start(
-            ctx,
-            workflow_name=workflow_name,
-            version=version,
-            work_ids=[UUID(w) for w in work_ids] if work_ids else None,
-            selector=selector,
-            max_iterations=max_iterations,
-        )
-        return cast("dict[str, Any]", _serialize_deep(run))
-
-    async def workflow_advance(
-        self, principal: Principal, *, step_id: str, decision: str
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        run = await self.services.workflow_orchestrator().advance(
-            ctx, step_id=UUID(step_id), decision=decision,
-        )
-        return cast("dict[str, Any]", _serialize_deep(run))
-
-    async def workflow_cancel(
-        self, principal: Principal, *, run_id: str
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        run = await self.services.workflow_orchestrator().cancel(
-            ctx, run_id=UUID(run_id),
-        )
-        return cast("dict[str, Any]", _serialize_deep(run))
-
-    async def workflow_list(
-        self, principal: Principal, *, status: str | None, limit: int
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        await ctx.authorizer.require(ctx.principal, Permissions.WORKFLOW_READ)
-        rows = await self.services.workflow_runs.list_runs(
-            principal.org_id, status=status, limit=limit,  # type: ignore[arg-type]
-        )
-        return {"count": len(rows), "runs": [_serialize_deep(r) for r in rows]}
-
-    async def workflow_status(
-        self, principal: Principal, *, run_id: str
-    ) -> dict[str, Any]:
-        ctx = self._ctx(principal)
-        await ctx.authorizer.require(ctx.principal, Permissions.WORKFLOW_READ)
-        run = await self.services.workflow_runs.get_run(principal.org_id, UUID(run_id))
-        if run is None:
-            return {}
-        steps = await self.services.workflow_runs.list_steps_for_run(
-            principal.org_id, UUID(run_id),
-        )
-        out = cast("dict[str, Any]", _serialize_deep(run))
-        out["steps"] = [_serialize_deep(s) for s in steps]
-        return out
 
     # -- projects ---------------------------------------------------------
 
@@ -2011,7 +1790,6 @@ class MemoryFacade:
         principal: Principal,
         *,
         work_id: str,
-        follower_agent: str | None,
         follower_email: str | None,
         agent_override: str | None,
     ) -> dict[str, Any]:
@@ -2021,7 +1799,6 @@ class MemoryFacade:
             principal.org_id,
             assignee_type=None,
             assignee_id=None,
-            assignee_agent=follower_agent,
             assignee_email=follower_email,
         )
         if ftype is None or fid is None:
@@ -2036,7 +1813,6 @@ class MemoryFacade:
         principal: Principal,
         *,
         work_id: str,
-        follower_agent: str | None,
         follower_email: str | None,
     ) -> dict[str, Any]:
         ctx = self._ctx(principal)
@@ -2045,7 +1821,6 @@ class MemoryFacade:
             principal.org_id,
             assignee_type=None,
             assignee_id=None,
-            assignee_agent=follower_agent,
             assignee_email=follower_email,
         )
         if ftype is None or fid is None:
@@ -2103,12 +1878,8 @@ class MemoryFacade:
         *,
         assignee_type: str | None,
         assignee_id: str | None,
-        assignee_agent: str | None,
         assignee_email: str | None,
     ) -> tuple[str | None, UUID | None]:
-        if assignee_agent:
-            aid = await self.services.work.resolve_agent_id(org_id, assignee_agent)
-            return ("agent", aid) if aid else (None, None)
         if assignee_email:
             uid = await self.services.work.resolve_user_id_by_email(org_id, assignee_email)
             return ("user", uid) if uid else (None, None)
@@ -2133,41 +1904,6 @@ def _serialize_work(value: dict[str, Any] | None) -> dict[str, Any]:
     for key, val in value.items():
         out[key] = _serialize_value(val)
     return out
-
-
-def _render_workflow_steps_md(
-    name: str, stages: list[dict[str, Any]], loop: dict[str, Any] | None
-) -> str:
-    """Render a readable playbook body from a workflow's stage graph.
-
-    Procedures require a non-empty ``steps_md``; this gives humans (and agents
-    reading the playbook) a plain-language view of the same graph stored in
-    ``tool_recipe``.
-    """
-    lines = [f"# Workflow: {name}", ""]
-    for i, stage in enumerate(stages, start=1):
-        owner = stage.get("owner", "agent")
-        bits = [f"**{stage.get('id')}** ({owner}"]
-        if stage.get("playbook"):
-            bits.append(f", playbook `{stage['playbook']}`")
-        if stage.get("skill"):
-            bits.append(f", skill `{stage['skill']}`")
-        if stage.get("agent"):
-            bits.append(f", agent `{stage['agent']}`")
-        bits.append(")")
-        routing = []
-        for key in ("on_done", "on_approve", "on_reject"):
-            if stage.get(key):
-                routing.append(f"{key} -> {stage[key]}")
-        suffix = f" — {'; '.join(routing)}" if routing else ""
-        lines.append(f"{i}. {''.join(bits)}{suffix}")
-    if loop:
-        lines.append("")
-        lines.append(
-            f"Loop: until {loop.get('until', 'all_terminal')}, "
-            f"max {loop.get('max_iterations', 10)} iterations."
-        )
-    return "\n".join(lines)
 
 
 def _serialize_strategic(value: dict[str, Any] | None) -> dict[str, Any]:

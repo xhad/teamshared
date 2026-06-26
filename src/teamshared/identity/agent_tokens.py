@@ -38,6 +38,7 @@ class AgentTokenMinter:
             principal_type="agent",
             principal_id=principal.id,
             name=f"agent-{agent_type}",
+            label=agent_type,
         )
         log.info(
             "agent_api_key_minted",
@@ -55,5 +56,6 @@ class AgentTokenMinter:
             principal_type="agent",
             principal_id=principal.id,
             name=f"agent-{agent_type}",
+            label=agent_type,
         )
         return agent_type, key

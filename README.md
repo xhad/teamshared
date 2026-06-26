@@ -137,7 +137,7 @@ Install the plugin for the recall rule and continual-learning hook (Bun required
 Manual snippets and install templates live under [`plugins/teamshared/`](plugins/teamshared/):
 
 - [Install assets](plugins/teamshared/install/) — served by `install.sh` at `/install/assets/*`
-- [Memory rule](plugins/teamshared/rules/teamshared.mdc) — Cursor / Cloud Agents
+- [Memory rule](plugins/teamshared/rules/teamshared.mdc) — Cursor
 - [Client protocol](plugins/teamshared/clients/protocol.md) — Hermes, Claude, others
 
 ## MCP tools
@@ -197,17 +197,6 @@ See **[Context compression](docs/context-compression.md)** for how teamshared re
 | `work_follower_add`         | Add a follower/collaborator (human or agent) to a task       |
 | `work_follower_remove`      | Remove a follower from a task                                |
 | `work_followers_list`       | List a task's followers                                      |
-| `agent_run_create`          | Assign an agent to a task and queue an async background run  |
-| `agent_run_list`            | List background agent runs (filter by status)               |
-| `agent_run_get`             | Fetch one run with its trace timeline + model-call metadata |
-| `agent_run_cancel`          | Request cancellation of a queued/running run                |
-| `agent_run_retry`           | Queue a fresh run cloning a previous run                    |
-| `workflow_define`           | Define a procedural-loop workflow (procedure with stages)    |
-| `workflow_start`            | Start a workflow run over a set of work items                |
-| `workflow_advance`          | Resolve a human-gated step (approve/reject) and route        |
-| `workflow_cancel`           | Cancel a workflow run and skip its open steps                |
-| `workflow_list`             | List workflow runs (filter by status)                        |
-| `workflow_status`           | Fetch one workflow run with its per-item step history        |
 | `project_create`            | Create a project (Asana-style task container)                |
 | `project_list`              | List projects (filter by team/initiative, archived)          |
 | `project_get`               | Fetch a project with sections, latest status, and tasks      |

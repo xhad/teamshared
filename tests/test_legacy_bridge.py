@@ -53,24 +53,33 @@ def _resolver() -> tuple[PrincipalResolver, list[int], MagicMock]:
     return resolver, upserts, roles
 
 
-async def test_agent_provisioning_is_idempotent_and_cached() -> None:
-    resolver, upserts, roles = _resolver()
+async def test_agent_principal_is_org_bound_and_cached() -> None:
+    resolver, _, roles = _resolver()
 
     p1 = await resolver.for_agent("cursor")
     p2 = await resolver.for_agent("cursor")
 
-    assert p1.id == p2.id == AGENT_ID
-    assert upserts[0] == 1
+    # Agent identity is no longer a registry row: the principal is bound to the
+    # org (id == org_id) and the agent name lives in `display` for attribution.
+    assert p1.id == p2.id == DEFAULT_ORG
+    assert p1.display == "cursor"
+    assert p1.roles == ("agent",)
+    # The org's agent role binding is ensured once (cached by org).
     roles.bind_role.assert_awaited_once()
 
 
-async def test_distinct_agents_provision_separately() -> None:
-    resolver, upserts, _ = _resolver()
+async def test_distinct_agent_labels_share_org_principal() -> None:
+    resolver, _, roles = _resolver()
 
-    await resolver.for_agent("cursor")
-    await resolver.for_agent("hermes")
+    p_cursor = await resolver.for_agent("cursor")
+    p_hermes = await resolver.for_agent("hermes")
 
-    assert upserts[0] == 2
+    # Same org → same org-bound principal id; only the display label differs.
+    assert p_cursor.id == p_hermes.id == DEFAULT_ORG
+    assert p_cursor.display == "cursor"
+    assert p_hermes.display == "hermes"
+    # Role binding is cached per org, so it is only ensured once.
+    roles.bind_role.assert_awaited_once()
 
 
 async def test_api_key_short_circuits() -> None:

@@ -372,7 +372,7 @@ def test_home_renders_work_stats(state_with_stats) -> None:
 
 def test_read_screen_redirects_when_unauthed() -> None:
     client, _ = _build()
-    resp = client.get("/app/agents")
+    resp = client.get("/app/people")
     assert resp.status_code == 303
     assert resp.headers["location"] == "/login"
 
@@ -470,83 +470,6 @@ def test_memory_detail_not_found_for_bad_id() -> None:
     assert "Memory not found." in resp.text
 
 
-def test_agents_page_lists_agents() -> None:
-    client, services = _build()
-    services.admin.list_agents = AsyncMock(
-        return_value=[
-            {"id": "a1", "name": "cursor", "kind": "agent", "status": "active",
-             "created_at": "2026-05-12T00:00:00"}
-        ]
-    )
-    _login(client)
-    resp = client.get("/app/agents")
-    assert resp.status_code == 200
-    assert "Agents" in resp.text
-    assert "cursor" in resp.text
-
-
-def test_agents_page_lists_background_runs() -> None:
-    client, services = _build()
-    services.admin.list_agents = AsyncMock(return_value=[])
-    run_svc = SimpleNamespace(
-        list_runs=AsyncMock(
-            return_value=[
-                {
-                    "id": "r1", "status": "completed", "agent_name": "cursor",
-                    "work_title": "Ship it", "work_item_id": "w1",
-                    "playbook_name": "ship-pr", "playbook_version": 2,
-                    "model": "gpt-4o-mini", "provider": "openrouter", "error": None,
-                    "created_at": "2026-05-28T10:00:00",
-                    "started_at": "2026-05-28T10:00:01",
-                    "completed_at": "2026-05-28T10:00:05",
-                }
-            ]
-        ),
-    )
-    services.agent_run_service = MagicMock(return_value=run_svc)
-    _login(client)
-    resp = client.get("/app/agents")
-    assert resp.status_code == 200
-    assert "Background runs" in resp.text
-    assert "ship-pr" in resp.text
-    assert "/app/agents/runs/r1" in resp.text
-
-
-def test_agent_run_detail_shows_trace_and_model_calls() -> None:
-    client, services = _build()
-    run_svc = SimpleNamespace(
-        get_run=AsyncMock(
-            return_value={
-                "id": "r1", "status": "completed", "agent_name": "cursor",
-                "work_title": "Ship it", "work_item_id": "w1",
-                "playbook_name": "ship-pr", "playbook_version": 2,
-                "model": "gpt-4o-mini", "provider": "openrouter", "error": None,
-                "created_at": "2026-05-28T10:00:00",
-                "started_at": "2026-05-28T10:00:01",
-                "completed_at": "2026-05-28T10:00:05",
-                "trace": [
-                    {"event_type": "started", "summary": "began work",
-                     "sequence": 0, "payload_json": {}, "created_at": "2026-05-28T10:00:01"}
-                ],
-                "model_calls": [
-                    {"model": "gpt-4o-mini", "provider": "openrouter",
-                     "request_id": "req-xyz", "prompt_tokens": 100,
-                     "completion_tokens": 20, "latency_ms": 42, "error": None,
-                     "created_at": "2026-05-28T10:00:03"}
-                ],
-            }
-        ),
-    )
-    services.agent_run_service = MagicMock(return_value=run_svc)
-    _login(client)
-    resp = client.get(f"/app/agents/runs/{uuid.uuid4()}")
-    assert resp.status_code == 200
-    assert "Trace timeline" in resp.text
-    assert "began work" in resp.text
-    assert "Model calls" in resp.text
-    assert "42" in resp.text  # latency_ms rendered in the model-calls table
-
-
 def test_people_page_lists_members() -> None:
     client, services = _build()
     services.admin.list_members = AsyncMock(
@@ -605,12 +528,11 @@ def test_work_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
     facade = MagicMock()
     facade.work_list = AsyncMock(return_value={"count": 1, "items": [{
         "id": "w1", "title": "Ship work queue", "work_status": "todo",
-        "priority": "normal", "assignee_type": "agent", "assignee_id": "a1",
-        "assignee_label": "cursor", "initiative_title": None,
+        "priority": "normal", "assignee_type": "user", "assignee_id": "u1",
+        "assignee_label": "owner@example.com", "initiative_title": None,
         "updated_at": "2026-06-07T12:00:00+00:00", "due_at": None,
     }]})
     set_state(SimpleNamespace(facade=facade))
-    services.admin.list_agents = AsyncMock(return_value=[{"id": "a1", "name": "cursor"}])
     services.admin.list_members = AsyncMock(return_value=[{
         "user_id": "u1", "email": "owner@example.com", "name": "Owner",
     }])
@@ -620,7 +542,7 @@ def test_work_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
         assert resp.status_code == 200
         assert "Work" in resp.text
         assert "Ship work queue" in resp.text
-        assert "cursor" in resp.text
+        assert "owner@example.com" in resp.text
         assert "/app/work/new" in resp.text
     finally:
         clear_state()
@@ -628,7 +550,6 @@ def test_work_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_work_new_renders_compose_form(monkeypatch: pytest.MonkeyPatch) -> None:
     client, services = _build()
-    services.admin.list_agents = AsyncMock(return_value=[{"id": "a1", "name": "cursor"}])
     services.admin.list_members = AsyncMock(return_value=[{
         "user_id": "u1", "email": "owner@example.com", "name": "Owner",
     }])
@@ -757,9 +678,10 @@ def test_audit_page_lists_events() -> None:
 
 def test_read_screen_degrades_on_backend_error() -> None:
     client, services = _build()
-    services.admin.list_agents = AsyncMock(side_effect=RuntimeError("db down"))
+    services.admin.list_members = AsyncMock(side_effect=RuntimeError("db down"))
+    services.admin.list_role_bindings = AsyncMock(side_effect=RuntimeError("db down"))
     _login(client)
-    resp = client.get("/app/agents")
+    resp = client.get("/app/people")
     assert resp.status_code == 200
     assert "Unavailable" in resp.text
 
@@ -1172,48 +1094,27 @@ def test_skill_save_rejects_invalid_tool_hints() -> None:
 # --------------------------------------------------------------------------- #
 def test_write_action_redirects_when_unauthed() -> None:
     client, _ = _build()
-    resp = client.post("/app/agents/add", data={"name": "ralph"})
+    resp = client.post("/app/keys/mint", data={"name": "ralph"})
     assert resp.status_code == 303
     assert resp.headers["location"] == "/login"
-
-
-def test_agent_add_creates_and_redirects() -> None:
-    client, services = _build()
-    services.admin.create_agent = AsyncMock(return_value=uuid.uuid4())
-    _login(client)
-    resp = _app_post(client, "/app/agents/add", {"name": "ralph"})
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/agents"
-    services.admin.create_agent.assert_awaited_once()
-    assert services.admin.create_agent.await_args.kwargs["name"] == "ralph"
-
-
-def test_agent_disable_redirects() -> None:
-    client, services = _build()
-    services.admin.set_agent_status = AsyncMock(return_value=True)
-    aid = str(uuid.uuid4())
-    _login(client)
-    resp = _app_post(client, f"/app/agents/{aid}/status", {"status": "disabled"})
-    assert resp.status_code == 303
-    services.admin.set_agent_status.assert_awaited_once()
-    assert services.admin.set_agent_status.await_args.args[2] == "disabled"
 
 
 def test_key_mint_shows_token_once() -> None:
     client, services = _build()
     services.api_keys.list_keys = AsyncMock(return_value=[])
-    services.admin.list_agents = AsyncMock(return_value=[])
     services.api_keys.mint = AsyncMock(
         return_value=SimpleNamespace(id=uuid.uuid4(), prefix="tsk_abc", token="tsk_abc_secret")
     )
     _login(client)
     resp = _app_post(
         client, "/app/keys/mint",
-        {"agent_id": str(uuid.uuid4()), "name": "CI"},
+        {"name": "CI", "label": "cursor"},
     )
     assert resp.status_code == 200
     assert "tsk_abc_secret" in resp.text  # shown once on the page, not via redirect
     services.api_keys.mint.assert_awaited_once()
+    # Keys are org-bound; the label drives memory attribution.
+    assert services.api_keys.mint.await_args.kwargs["label"] == "cursor"
     # Minting is self-service: gated on memory:create (members), not org:admin.
     perms_required = {
         call.args[1] for call in services.authorizer().require.await_args_list

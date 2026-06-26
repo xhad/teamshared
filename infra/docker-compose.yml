@@ -208,52 +208,6 @@ services:
       retries: 3
       start_period: 20s
 
-  agent-worker:
-    build:
-      context: ..
-      dockerfile: infra/Dockerfile
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      TEAMSHARED_PG_HOST: postgres
-      TEAMSHARED_PG_PORT: 5432
-      TEAMSHARED_PG_USER: ${TEAMSHARED_PG_USER:-teamshared}
-      TEAMSHARED_PG_PASSWORD: ${TEAMSHARED_PG_PASSWORD:-teamshared}
-      TEAMSHARED_PG_DB: ${TEAMSHARED_PG_DB:-teamshared}
-      # Non-superuser app role so RLS is enforced (see provision-app-role).
-      TEAMSHARED_PG_APP_USER: ${TEAMSHARED_PG_APP_USER:-}
-      TEAMSHARED_PG_APP_PASSWORD: ${TEAMSHARED_PG_APP_PASSWORD:-}
-      TEAMSHARED_REDIS_URL: redis://redis:6379/0
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # OpenRouter creds are read server-side only and never exposed to the UI.
-      TEAMSHARED_OPENROUTER_API_KEY: ${TEAMSHARED_OPENROUTER_API_KEY:-${OPENROUTER_API_KEY:-}}
-      TEAMSHARED_EMBED_PROVIDER: ${TEAMSHARED_EMBED_PROVIDER:-openai}
-      TEAMSHARED_EMBED_MODEL: ${TEAMSHARED_EMBED_MODEL:-text-embedding-3-small}
-      TEAMSHARED_EMBED_DIMS: ${TEAMSHARED_EMBED_DIMS:-1536}
-      TEAMSHARED_EMBED_LOCAL_MODEL: ${TEAMSHARED_EMBED_LOCAL_MODEL:-BAAI/bge-small-en-v1.5}
-      TEAMSHARED_HNSW_CACHE_ENABLED: ${TEAMSHARED_HNSW_CACHE_ENABLED:-true}
-      TEAMSHARED_LLM_PROVIDER: ${TEAMSHARED_LLM_PROVIDER:-openai}
-      TEAMSHARED_LLM_MODEL: ${TEAMSHARED_LLM_MODEL:-gpt-4o-mini}
-      TEAMSHARED_OLLAMA_BASE_URL: ${TEAMSHARED_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      TEAMSHARED_NEO4J_URL: bolt://neo4j:7687
-      TEAMSHARED_NEO4J_USER: ${TEAMSHARED_NEO4J_USER:-neo4j}
-      TEAMSHARED_NEO4J_PASSWORD: ${TEAMSHARED_NEO4J_PASSWORD:-neo4j}
-    volumes:
-      - teamshareddata:/data
-    command: ["teamshared", "agent-worker"]
-    # Probe the Redis heartbeat the worker writes.
-    healthcheck:
-      test: ["CMD", "teamshared", "worker-health", "agent-worker"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-
   # Relationship graph (always on). Use a password >= 8 chars; Neo4j 5 rejects
   # the factory default "neo4j".
   neo4j:

@@ -77,13 +77,12 @@ STARTER_ACTION_TYPES: list[tuple[str, str, str, dict[str, Any], bool]] = [
     ),
     (
         "assign_work",
-        "Assign a work item to a person or agent",
+        "Assign a work item to a person",
         "work_update",
         {
             "required": ["work_id"],
             "properties": {
                 "work_id": {"type": "string"},
-                "assignee_agent": {"type": "string"},
                 "assignee_email": {"type": "string"},
                 "work_status": {"type": "string"},
             },

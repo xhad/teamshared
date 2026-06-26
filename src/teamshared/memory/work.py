@@ -310,30 +310,6 @@ class WorkStore:
             f"{f' → {assignee}' if assignee else ''}"
         )
 
-    async def resolve_agent_id(self, org_id: UUID, name: str) -> UUID | None:
-        async with self.db.org(org_id) as conn:
-            cur = await conn.execute(
-                "SELECT id FROM agents WHERE name = %s AND status = 'active'",
-                (name,),
-            )
-            row = await cur.fetchone()
-        return row[0] if row else None
-
-    async def get_agent(self, org_id: UUID, agent_id: UUID) -> dict[str, Any] | None:
-        """Fetch an agent's identity + runtime (``user`` vs ``cloud``)."""
-        async with self.db.org(org_id) as conn:
-            cur = await conn.execute(
-                "SELECT id, name, kind, status, runtime FROM agents WHERE id = %s",
-                (str(agent_id),),
-            )
-            row = await cur.fetchone()
-        if row is None:
-            return None
-        return {
-            "id": row[0], "name": row[1], "kind": row[2],
-            "status": row[3], "runtime": row[4],
-        }
-
     async def resolve_user_id_by_email(self, org_id: UUID, email: str) -> UUID | None:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
@@ -401,16 +377,13 @@ class WorkStore:
         """Attach human-readable assignee/requester/initiative labels in-place."""
         if not items:
             return
-        agent_ids: set[str] = set()
         user_ids: set[str] = set()
         initiative_ids: set[str] = set()
         for item in items:
             for party_key in ("assignee", "requester"):
                 ptype = item.get(f"{party_key}_type")
                 pid = item.get(f"{party_key}_id")
-                if ptype == "agent" and pid:
-                    agent_ids.add(str(pid))
-                elif ptype == "user" and pid:
+                if ptype == "user" and pid:
                     user_ids.add(str(pid))
             if item.get("initiative_id"):
                 initiative_ids.add(str(item["initiative_id"]))
@@ -418,13 +391,6 @@ class WorkStore:
         user_labels: dict[str, str] = {}
         initiative_titles: dict[str, str] = {}
         async with self.db.org(org_id) as conn:
-            if agent_ids:
-                cur = await conn.execute(
-                    "SELECT id::text, name FROM agents WHERE id = ANY(%s::uuid[])",
-                    (list(agent_ids),),
-                )
-                for r in await cur.fetchall():
-                    agent_names[r[0]] = r[1]
             if user_ids:
                 cur = await conn.execute(
                     "SELECT id::text, coalesce(display_name, email) FROM users WHERE id = ANY(%s::uuid[])",
@@ -529,23 +495,13 @@ class WorkStore:
     ) -> None:
         if not comments:
             return
-        agent_ids: set[str] = set()
         user_ids: set[str] = set()
         for c in comments:
-            if c["author_type"] == "agent":
-                agent_ids.add(str(c["author_id"]))
-            elif c["author_type"] == "user":
+            if c["author_type"] == "user":
                 user_ids.add(str(c["author_id"]))
         agent_names: dict[str, str] = {}
         user_labels: dict[str, str] = {}
         async with self.db.org(org_id) as conn:
-            if agent_ids:
-                cur = await conn.execute(
-                    "SELECT id::text, name FROM agents WHERE id = ANY(%s::uuid[])",
-                    (list(agent_ids),),
-                )
-                for r in await cur.fetchall():
-                    agent_names[r[0]] = r[1]
             if user_ids:
                 cur = await conn.execute(
                     "SELECT id::text, coalesce(display_name, email) FROM users WHERE id = ANY(%s::uuid[])",
@@ -872,18 +828,10 @@ class WorkStore:
     ) -> None:
         if not followers:
             return
-        agent_ids = {str(f["follower_id"]) for f in followers if f["follower_type"] == "agent"}
         user_ids = {str(f["follower_id"]) for f in followers if f["follower_type"] == "user"}
         agent_names: dict[str, str] = {}
         user_labels: dict[str, str] = {}
         async with self.db.org(org_id) as conn:
-            if agent_ids:
-                cur = await conn.execute(
-                    "SELECT id::text, name FROM agents WHERE id = ANY(%s::uuid[])",
-                    (list(agent_ids),),
-                )
-                for r in await cur.fetchall():
-                    agent_names[r[0]] = r[1]
             if user_ids:
                 cur = await conn.execute(
                     "SELECT id::text, coalesce(display_name, email) FROM users "

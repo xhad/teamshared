@@ -352,14 +352,6 @@ class Settings(BaseSettings):
         description="Token budget for context assembly injected before LLM calls.",
     )
 
-    agent_run_timeout_seconds: int = Field(
-        default=300,
-        description=(
-            "Hard wall-clock budget for one background agent run before the "
-            "worker marks it failed. The DB lease TTL is this plus a buffer."
-        ),
-    )
-
     capture_enabled: bool = Field(
         default=True,
         description=(

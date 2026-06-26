@@ -61,12 +61,18 @@ class PrincipalResolver:
         return await self.agent_principal(self.default_org_id, agent)
 
     async def agent_principal(self, org_id: UUID, agent: str) -> Principal:
-        """Synthesize an agent Principal in ``org_id`` (provisioning + role bind)."""
-        agent_id = await self._ensure_agent(agent, org_id)
+        """Synthesize an org-bound agent Principal labeled ``agent``.
+
+        Agent identity is no longer a first-class registry row: the principal
+        is bound to the org (``id == org_id``) and carries the free-text label
+        in ``display`` for memory authorship/audit. RBAC is the org's ``agent``
+        role binding.
+        """
+        await self._ensure_agent_binding(org_id)
         return Principal(
             org_id=org_id,
             type="agent",
-            id=agent_id,
+            id=org_id,
             display=agent,
             roles=("agent",),
         )
@@ -75,28 +81,15 @@ class PrincipalResolver:
         """Principal used when ``auth_disabled`` is set (local dev / tests)."""
         return await self.for_agent(ANONYMOUS_AGENT)
 
-    async def _ensure_agent(self, name: str, org_id: UUID) -> UUID:
-        cache_key = f"{org_id}:{name}"
-        cached = self._agent_cache.get(cache_key)
-        if cached is not None:
-            return cached
-        async with self.tenant_db.org(org_id) as conn:
-            cur = await conn.execute(
-                "INSERT INTO agents (org_id, name, kind) VALUES (%s, %s, 'agent') "
-                "ON CONFLICT (org_id, name) DO UPDATE SET name = EXCLUDED.name "
-                "RETURNING id",
-                (str(org_id), name),
-            )
-            row = await cur.fetchone()
-        if row is None:
-            raise RuntimeError(f"failed to provision agent {name!r} in org {org_id}")
-        agent_id: UUID = row[0]
-        # Idempotent: a returning agent already holds the role.
+    async def _ensure_agent_binding(self, org_id: UUID) -> None:
+        """Idempotently bind the org's agent principal to the ``agent`` role."""
+        cache_key = str(org_id)
+        if cache_key in self._agent_cache:
+            return
         await self.roles.bind_role(
             org_id=org_id,
             principal_type="agent",
-            principal_id=agent_id,
+            principal_id=org_id,
             role_name="agent",
         )
-        self._agent_cache[cache_key] = agent_id
-        return agent_id
+        self._agent_cache[cache_key] = org_id

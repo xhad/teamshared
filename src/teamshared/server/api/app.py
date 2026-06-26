@@ -141,11 +141,13 @@ def build_api_app(
         body = await _json(request)
         ptype = body.get("principal_type", "agent")
         pid = body.get("principal_id")
+        name = body.get("name", "api-key")
         key = await services.api_keys.mint(
             org_id=ctx.org_id,
             principal_type=ptype,
-            principal_id=UUID(pid) if pid else ctx.principal.id,
-            name=body.get("name", "api-key"),
+            principal_id=UUID(pid) if pid else ctx.org_id,
+            name=name,
+            label=body.get("label") or name,
             scopes=body.get("scopes"),
             created_by=ctx.principal.id,
         )
@@ -299,19 +301,6 @@ def build_api_app(
         ctx = _ctx(request, services)
         return JSONResponse({"bindings": await services.admin.list_role_bindings(ctx)})
 
-    async def create_agent(request: Request) -> JSONResponse:
-        ctx = _ctx(request, services)
-        body = await _json(request)
-        aid = await services.admin.create_agent(
-            ctx, name=body["name"], kind=body.get("kind", "agent"),
-            runtime=body.get("runtime", "user"),
-        )
-        return JSONResponse({"id": str(aid)}, status_code=201)
-
-    async def list_agents(request: Request) -> JSONResponse:
-        ctx = _ctx(request, services)
-        return JSONResponse({"agents": await services.admin.list_agents(ctx)})
-
     async def create_retention(request: Request) -> JSONResponse:
         ctx = _ctx(request, services)
         body = await _json(request)
@@ -389,8 +378,6 @@ def build_api_app(
         Route("/v1/members", list_members, methods=["GET"]),
         Route("/v1/members/{user_id}/roles", grant_role, methods=["POST"]),
         Route("/v1/roles", list_roles, methods=["GET"]),
-        Route("/v1/agents", create_agent, methods=["POST"]),
-        Route("/v1/agents", list_agents, methods=["GET"]),
         Route("/v1/retention-policies", create_retention, methods=["POST"]),
         Route("/v1/retention-policies", list_retention, methods=["GET"]),
         Route("/v1/admin/export", export_org, methods=["GET"]),

@@ -22,11 +22,6 @@ class SkillRef:
     version: int | None = None
 
 
-def is_workflow_recipe(tool_recipe: Any) -> bool:
-    """True when ``tool_recipe`` defines workflow stages (not a skill playbook)."""
-    return isinstance(tool_recipe, dict) and bool(tool_recipe.get("stages"))
-
-
 def skill_names_from_recipe(tool_recipe: Any) -> list[str]:
     """Ordered skill names referenced by a playbook's ``tool_recipe``."""
     return [ref.name for ref in parse_skill_refs(tool_recipe)]

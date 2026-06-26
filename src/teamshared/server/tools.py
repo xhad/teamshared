@@ -36,7 +36,6 @@ from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
 from teamshared.memory.types import (
     DEFAULT_RECALL_SCOPES,
-    AgentRunStatus,
     AssigneeType,
     KeyResultTrackStatus,
     MemoryKind,
@@ -48,8 +47,6 @@ from teamshared.memory.types import (
     StrategicStatementKind,
     TimeRange,
     ToolCatalogScope,
-    WorkflowAdvanceDecision,
-    WorkflowRunStatus,
     WorkItemType,
     WorkPriority,
     WorkSort,
@@ -733,7 +730,6 @@ def register_tools(mcp: Any) -> None:
                 description=(
                     "Playbook recipe: "
                     '{"skills": ["lint", "ship-pr"], "loop": {"max_iterations": 3}}. '
-                    "Workflow: {\"stages\": [...], \"loop\": {...}}. "
                     "See memory_tools_catalog for full shapes."
                 ),
             ),
@@ -1141,11 +1137,8 @@ def register_tools(mcp: Any) -> None:
         tags: Annotated[list[str] | None, Field(description="Optional tags")] = None,
         work_status: Annotated[WorkStatus, Field(description="Initial workflow status")] = "todo",
         priority: Annotated[WorkPriority, Field(description="urgent, high, normal, low")] = "normal",
-        assignee_type: Annotated[AssigneeType | None, Field(description="user or agent")] = None,
+        assignee_type: Annotated[AssigneeType | None, Field(description="Assignee type (user)")] = None,
         assignee_id: Annotated[str | None, Field(description="Assignee UUID")] = None,
-        assignee_agent: Annotated[
-            str | None, Field(description="Assign to agent by name (e.g. cursor)")
-        ] = None,
         assignee_email: Annotated[
             str | None, Field(description="Assign to org member by email")
         ] = None,
@@ -1180,7 +1173,6 @@ def register_tools(mcp: Any) -> None:
             priority=priority,
             assignee_type=assignee_type,
             assignee_id=assignee_id,
-            assignee_agent=assignee_agent,
             assignee_email=assignee_email,
             initiative_id=initiative_id,
             due_at=due_at,
@@ -1203,9 +1195,8 @@ def register_tools(mcp: Any) -> None:
         work_status: Annotated[WorkStatus | None, Field(description="Workflow status")] = None,
         priority: Annotated[WorkPriority | None, Field(description="urgent, high, normal, low")] = None,
         blocked_reason: Annotated[str | None, Field(description="Why blocked (when status=blocked)")] = None,
-        assignee_type: Annotated[AssigneeType | None, Field(description="user or agent")] = None,
+        assignee_type: Annotated[AssigneeType | None, Field(description="Assignee type (user)")] = None,
         assignee_id: Annotated[str | None, Field(description="Assignee UUID")] = None,
-        assignee_agent: Annotated[str | None, Field(description="Assign to agent by name")] = None,
         assignee_email: Annotated[str | None, Field(description="Assign to user by email")] = None,
         initiative_id: Annotated[str | None, Field(description="Strategic initiative UUID")] = None,
         due_at: Annotated[datetime | None, Field(description="Due datetime")] = None,
@@ -1230,7 +1221,6 @@ def register_tools(mcp: Any) -> None:
             blocked_reason=blocked_reason,
             assignee_type=assignee_type,
             assignee_id=assignee_id,
-            assignee_agent=assignee_agent,
             assignee_email=assignee_email,
             initiative_id=initiative_id,
             due_at=due_at,
@@ -1277,220 +1267,6 @@ def register_tools(mcp: Any) -> None:
         return await state.facade.work_comment_list(
             principal, work_id=work_id, limit=limit,
         )
-
-    @mcp.tool()
-    async def agent_run_create(
-        work_id: Annotated[str, Field(description="Work item UUID to run on")],
-        agent: Annotated[
-            str, Field(description="Name of the worker agent to assign (e.g. cursor)")
-        ],
-        playbook_name: Annotated[
-            str | None,
-            Field(description="Procedure/playbook name to execute (latest version unless pinned)"),
-        ] = None,
-        playbook_version: Annotated[
-            int | None, Field(description="Pin a specific playbook version")
-        ] = None,
-        skill_name: Annotated[
-            str | None,
-            Field(description="Run using a single skill instead of a playbook"),
-        ] = None,
-        skill_version: Annotated[int | None, Field(description="Pin skill version")] = None,
-        model: Annotated[
-            str | None,
-            Field(description="Override model for this run (defaults to server LLM model)"),
-        ] = None,
-    ) -> dict[str, Any]:
-        """Assign an agent to a work item and queue an async background run.
-
-        Creates an ``agent_runs`` row (status ``queued``), reflects the agent as
-        the work item's assignee, and enqueues the run for the background worker.
-        The worker assembles context (task + playbook + teamshared.mdc + recalled
-        memory), calls the configured model, and writes the result + a trace back
-        to the task. Requires ``agentrun:write``.
-        """
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.agent_run_create(
-            principal,
-            work_id=work_id,
-            agent=agent,
-            playbook_name=playbook_name,
-            playbook_version=playbook_version,
-            skill_name=skill_name,
-            skill_version=skill_version,
-            model=model,
-        )
-
-    @mcp.tool()
-    async def agent_run_list(
-        status: Annotated[AgentRunStatus | None, Field(description="Filter by run status")] = None,
-        limit: Annotated[int, Field(ge=1, le=200)] = 50,
-    ) -> dict[str, Any]:
-        """List background agent runs in the caller's org (newest first)."""
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.agent_run_list(principal, status=status, limit=limit)
-
-    @mcp.tool()
-    async def agent_run_get(
-        run_id: Annotated[str, Field(description="Agent run UUID")],
-    ) -> dict[str, Any]:
-        """Fetch one agent run with its trace timeline and model-call metadata."""
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.agent_run_get(principal, run_id=run_id)
-
-    @mcp.tool()
-    async def agent_run_cancel(
-        run_id: Annotated[str, Field(description="Agent run UUID")],
-    ) -> dict[str, Any]:
-        """Request cancellation of a queued or running agent run."""
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.agent_run_cancel(principal, run_id=run_id)
-
-    @mcp.tool()
-    async def agent_run_retry(
-        run_id: Annotated[str, Field(description="Agent run UUID to retry")],
-    ) -> dict[str, Any]:
-        """Queue a fresh run cloning a previous run's work, agent, and playbook."""
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.agent_run_retry(principal, run_id=run_id)
-
-    @mcp.tool()
-    async def workflow_define(
-        name: Annotated[
-            str, Field(description="Workflow name (stable id; stored as a procedure)")
-        ],
-        stages: Annotated[
-            list[dict[str, Any]],
-            Field(
-                description=(
-                    "Ordered stage graph. Each stage: {id, owner: agent|human, "
-                    "agent?, playbook?, playbook_version?, skill?, skill_version?, "
-                    "advance: auto|manual, on_done?, on_approve?, on_reject?}. "
-                    "Routing targets are a stage id or terminal ('done'|'cancelled')."
-                )
-            ),
-        ],
-        loop: Annotated[
-            dict[str, Any] | None,
-            Field(
-                description=(
-                    "Optional loop spec: {select: {work_status?, project_id?, "
-                    "initiative_id?, limit?}, until: 'all_terminal', max_iterations}"
-                )
-            ),
-        ] = None,
-        description: Annotated[
-            str | None, Field(description="One-line summary")
-        ] = None,
-        steps_md: Annotated[
-            str | None,
-            Field(description="Optional markdown body (auto-rendered from stages if omitted)"),
-        ] = None,
-        tags: Annotated[list[str] | None, Field(description="Tags for discovery")] = None,
-        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
-    ) -> dict[str, Any]:
-        """Define a procedural-loop workflow (a versioned procedure with stages).
-
-        The validated stage graph is stored in the procedure's ``tool_recipe``.
-        Start it over a set of work items with ``workflow_start``. Requires
-        ``workflow:write`` (via ``memory:create``).
-        """
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.workflow_define(
-            principal,
-            name=name,
-            stages=stages,
-            loop=loop,
-            description=description,
-            steps_md=steps_md,
-            tags=tags,
-            agent_override=agent,
-        )
-
-    @mcp.tool()
-    async def workflow_start(
-        workflow_name: Annotated[str, Field(description="Workflow (procedure) name")],
-        version: Annotated[
-            int | None, Field(description="Pin a specific workflow version (default latest)")
-        ] = None,
-        work_ids: Annotated[
-            list[str] | None,
-            Field(description="Explicit work-item UUIDs to run (overrides the selector)"),
-        ] = None,
-        selector: Annotated[
-            dict[str, Any] | None,
-            Field(
-                description=(
-                    "Resolve the item set when work_ids is omitted: "
-                    "{work_status?, project_id?, initiative_id?, limit?}"
-                )
-            ),
-        ] = None,
-        max_iterations: Annotated[
-            int | None, Field(ge=1, le=1000, description="Override the loop iteration cap")
-        ] = None,
-    ) -> dict[str, Any]:
-        """Start a workflow run over a set of work items (the procedural loop).
-
-        Each item enters the first stage; agent stages dispatch a background run,
-        human stages wait for ``workflow_advance``. Requires ``workflow:write``.
-        """
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.workflow_start(
-            principal,
-            workflow_name=workflow_name,
-            version=version,
-            work_ids=work_ids,
-            selector=selector,
-            max_iterations=max_iterations,
-        )
-
-    @mcp.tool()
-    async def workflow_advance(
-        step_id: Annotated[str, Field(description="Workflow step run UUID awaiting a human")],
-        decision: Annotated[WorkflowAdvanceDecision, Field(description="approve or reject")],
-    ) -> dict[str, Any]:
-        """Resolve a human-gated workflow step, routing the item forward or back."""
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.workflow_advance(
-            principal, step_id=step_id, decision=decision,
-        )
-
-    @mcp.tool()
-    async def workflow_cancel(
-        run_id: Annotated[str, Field(description="Workflow run UUID")],
-    ) -> dict[str, Any]:
-        """Cancel a workflow run and skip its open steps."""
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.workflow_cancel(principal, run_id=run_id)
-
-    @mcp.tool()
-    async def workflow_list(
-        status: Annotated[WorkflowRunStatus | None, Field(description="Filter by run status")] = None,
-        limit: Annotated[int, Field(ge=1, le=200)] = 50,
-    ) -> dict[str, Any]:
-        """List workflow runs in the caller's org (newest first)."""
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.workflow_list(principal, status=status, limit=limit)
-
-    @mcp.tool()
-    async def workflow_status(
-        run_id: Annotated[str, Field(description="Workflow run UUID")],
-    ) -> dict[str, Any]:
-        """Fetch one workflow run with its per-item step history."""
-        state = get_state()
-        principal = await _principal()
-        return await state.facade.workflow_status(principal, run_id=run_id)
 
     @mcp.tool()
     async def project_create(
@@ -1721,29 +1497,27 @@ def register_tools(mcp: Any) -> None:
     @mcp.tool()
     async def work_follower_add(
         work_id: Annotated[str, Field(description="Work item UUID")],
-        follower_agent: Annotated[str | None, Field(description="Agent name to add")] = None,
         follower_email: Annotated[str | None, Field(description="Member email to add")] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Add a follower/collaborator (human or agent) to a task."""
+        """Add a follower/collaborator to a task by member email."""
         state = get_state()
         principal = await _principal()
         return await state.facade.work_follower_add(
-            principal, work_id=work_id, follower_agent=follower_agent,
+            principal, work_id=work_id,
             follower_email=follower_email, agent_override=agent,
         )
 
     @mcp.tool()
     async def work_follower_remove(
         work_id: Annotated[str, Field(description="Work item UUID")],
-        follower_agent: Annotated[str | None, Field(description="Agent name to remove")] = None,
         follower_email: Annotated[str | None, Field(description="Member email to remove")] = None,
     ) -> dict[str, Any]:
-        """Remove a follower from a task."""
+        """Remove a follower from a task by member email."""
         state = get_state()
         principal = await _principal()
         return await state.facade.work_follower_remove(
-            principal, work_id=work_id, follower_agent=follower_agent,
+            principal, work_id=work_id,
             follower_email=follower_email,
         )
 

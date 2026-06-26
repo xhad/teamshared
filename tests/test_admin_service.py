@@ -80,26 +80,6 @@ def _admin(conn: _Conn, roles: object | None = None) -> AdminService:
     return AdminService(_DB(conn), roles, audit)  # type: ignore[arg-type]
 
 
-def test_set_agent_status_requires_admin_updates_and_audits() -> None:
-    conn = _Conn([_Cur(rowcount=1)])
-    admin = _admin(conn)
-    ctx = _Ctx()
-    ok = asyncio.run(admin.set_agent_status(ctx, AGENT, "disabled"))  # type: ignore[arg-type]
-    assert ok is True
-    ctx.authorizer.require.assert_awaited_once()
-    sql, params = conn.calls[0]
-    assert "UPDATE agents SET status" in sql
-    assert params == ("disabled", str(AGENT))
-    admin.audit.record.assert_awaited_once()
-
-
-def test_set_agent_status_rejects_bad_status() -> None:
-    conn = _Conn([])
-    admin = _admin(conn)
-    with pytest.raises(ValueError, match="invalid agent status"):
-        asyncio.run(admin.set_agent_status(_Ctx(), AGENT, "bogus"))  # type: ignore[arg-type]
-
-
 def test_grant_role_to_user_syncs_membership_and_replaces_binding() -> None:
     # User path: replace the RBAC binding (set_user_role) AND update the
     # memberships row so the People list reflects the new role.

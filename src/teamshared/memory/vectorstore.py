@@ -111,6 +111,7 @@ class VectorStore:
         owner_id: UUID | None = None,
         creator_type: str | None = None,
         creator_id: UUID | None = None,
+        author_label: str | None = None,
         status: str = "active",
         summary: str | None = None,
     ) -> UUID:
@@ -122,8 +123,8 @@ class VectorStore:
                 INSERT INTO memory_items
                     (org_id, pillar, kind, scope, scope_ref_id, visibility, content, summary,
                      subject, tags, source, source_ref, confidence, importance, owner_type,
-                     owner_id, creator_type, creator_id, status, content_hash)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s)
+                     owner_id, creator_type, creator_id, author_label, status, content_hash)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING id
                 """,
                 (
@@ -133,7 +134,7 @@ class VectorStore:
                     json.dumps(source_ref) if source_ref is not None else None,
                     confidence, importance, owner_type,
                     str(owner_id) if owner_id else None, creator_type,
-                    str(creator_id) if creator_id else None, status, chash,
+                    str(creator_id) if creator_id else None, author_label, status, chash,
                 ),
             )
             row = await cur.fetchone()
@@ -180,7 +181,7 @@ class VectorStore:
         k: int = 8,
         pillar: str | None = None,
         time_range: tuple[datetime | None, datetime | None] | None = None,
-        author_agent_id: UUID | None = None,
+        author_label: str | None = None,
     ) -> list[MemoryRecord]:
         [q_emb] = await self.embedder.embed([query])
         candidates = await self._cache_candidates(org_id, q_emb, k)
@@ -192,7 +193,7 @@ class VectorStore:
                 k=k,
                 pillar=pillar,
                 time_range=time_range,
-                author_agent_id=author_agent_id,
+                author_label=author_label,
             )
         scope_sql, scope_params = scope_filter.where("mi")
         # Only score vectors produced by the active embedder: distances across
@@ -204,9 +205,9 @@ class VectorStore:
         if pillar:
             where.append("mi.pillar = %s")
             params.append(pillar)
-        if author_agent_id is not None:
-            where.append("(mi.owner_type = 'agent' AND mi.owner_id = %s)")
-            params.append(str(author_agent_id))
+        if author_label is not None:
+            where.append("mi.author_label = %s")
+            params.append(author_label)
         if time_range:
             since, until = time_range
             if since:
@@ -220,12 +221,11 @@ class VectorStore:
             SELECT DISTINCT ON (mi.id)
                 mi.id, mi.pillar, mi.kind, mi.content, mi.subject, mi.tags,
                 mi.scope, mi.scope_ref_id, mi.visibility, mi.source, mi.confidence,
-                mi.importance, mi.version, mi.status, mi.created_at, a.name AS agent,
+                mi.importance, mi.version, mi.status, mi.created_at, mi.author_label AS agent,
                 (me.embedding <=> %s::vector) AS distance
             FROM memory_items mi
             JOIN memory_chunks mc ON mc.memory_id = mi.id
             JOIN memory_embeddings me ON me.chunk_id = mc.id
-            LEFT JOIN agents a ON a.id = mi.owner_id AND mi.owner_type = 'agent'
             WHERE {where_sql}
             ORDER BY mi.id, distance ASC
         """
@@ -265,7 +265,7 @@ class VectorStore:
         k: int,
         pillar: str | None,
         time_range: tuple[datetime | None, datetime | None] | None,
-        author_agent_id: UUID | None,
+        author_label: str | None,
     ) -> list[MemoryRecord]:
         """Re-filter ANN candidate ids through RLS + scope SQL and hydrate rows.
 
@@ -281,9 +281,9 @@ class VectorStore:
         if pillar:
             where.append("mi.pillar = %s")
             params.append(pillar)
-        if author_agent_id is not None:
-            where.append("(mi.owner_type = 'agent' AND mi.owner_id = %s)")
-            params.append(str(author_agent_id))
+        if author_label is not None:
+            where.append("mi.author_label = %s")
+            params.append(author_label)
         if time_range:
             since, until = time_range
             if since:
@@ -296,10 +296,9 @@ class VectorStore:
         sql = f"""
             SELECT mi.id, mi.pillar, mi.kind, mi.content, mi.subject, mi.tags,
                    mi.scope, mi.scope_ref_id, mi.visibility, mi.source, mi.confidence,
-                   mi.importance, mi.version, mi.status, mi.created_at, a.name AS agent,
+                   mi.importance, mi.version, mi.status, mi.created_at, mi.author_label AS agent,
                    NULL AS score
             FROM memory_items mi
-            LEFT JOIN agents a ON a.id = mi.owner_id AND mi.owner_type = 'agent'
             WHERE {where_sql}
         """
         async with self.db.org(org_id) as conn:
@@ -321,24 +320,23 @@ class VectorStore:
         query: str,
         scope_filter: ScopeFilter,
         k: int = 8,
-        author_agent_id: UUID | None = None,
+        author_label: str | None = None,
     ) -> list[MemoryRecord]:
         scope_sql, scope_params = scope_filter.where("mi")
         author_sql = ""
         author_params: list[Any] = []
-        if author_agent_id is not None:
-            author_sql = " AND (mi.owner_type = 'agent' AND mi.owner_id = %s)"
-            author_params = [str(author_agent_id)]
+        if author_label is not None:
+            author_sql = " AND mi.author_label = %s"
+            author_params = [author_label]
         sql = f"""
             SELECT mi.id, mi.pillar, mi.kind, mi.content, mi.subject, mi.tags,
                    mi.scope, mi.scope_ref_id, mi.visibility, mi.source, mi.confidence,
-                   mi.importance, mi.version, mi.status, mi.created_at, a.name AS agent,
+                   mi.importance, mi.version, mi.status, mi.created_at, mi.author_label AS agent,
                    ts_rank(
                      to_tsvector('english', coalesce(mi.content,'') || ' ' || coalesce(mi.summary,'')),
                      plainto_tsquery('english', %s)
                    ) AS rank
             FROM memory_items mi
-            LEFT JOIN agents a ON a.id = mi.owner_id AND mi.owner_type = 'agent'
             WHERE mi.status = 'active' AND {scope_sql}{author_sql}
               AND to_tsvector('english', coalesce(mi.content,'') || ' ' || coalesce(mi.summary,''))
                   @@ plainto_tsquery('english', %s)
@@ -452,7 +450,7 @@ class VectorStore:
         since: datetime | None = None,
         until: datetime | None = None,
         limit: int = 20,
-        author_agent_id: UUID | None = None,
+        author_label: str | None = None,
     ) -> list[MemoryRecord]:
         """Browse the episodic timeline (pillar='episodic'), newest first."""
         where = ["mi.status = 'active'", "mi.pillar = 'episodic'"]
@@ -467,17 +465,16 @@ class VectorStore:
         if until:
             where.append("mi.created_at <= %s")
             params.append(until)
-        if author_agent_id is not None:
-            where.append("(mi.owner_type = 'agent' AND mi.owner_id = %s)")
-            params.append(str(author_agent_id))
+        if author_label is not None:
+            where.append("mi.author_label = %s")
+            params.append(author_label)
         where_sql = " AND ".join(where)
         sql = f"""
             SELECT mi.id, mi.pillar, mi.kind, mi.content, mi.subject, mi.tags,
                    mi.scope, mi.scope_ref_id, mi.visibility, mi.source, mi.confidence,
-                   mi.importance, mi.version, mi.status, mi.created_at, a.name AS agent,
+                   mi.importance, mi.version, mi.status, mi.created_at, mi.author_label AS agent,
                    NULL AS score
             FROM memory_items mi
-            LEFT JOIN agents a ON a.id = mi.owner_id AND mi.owner_type = 'agent'
             WHERE {where_sql}
             ORDER BY mi.created_at DESC
             LIMIT %s
@@ -526,9 +523,9 @@ class VectorStore:
             )
             by_pillar = {str(r[0] or "semantic"): int(r[1]) for r in await cur.fetchall()}
             cur = await conn.execute(
-                "SELECT a.name, COUNT(*) FROM memory_items mi "
-                "JOIN agents a ON a.id = mi.owner_id AND mi.owner_type = 'agent' "
-                "WHERE mi.status='active' GROUP BY 1 ORDER BY 2 DESC"
+                "SELECT mi.author_label, COUNT(*) FROM memory_items mi "
+                "WHERE mi.status='active' AND mi.author_label IS NOT NULL "
+                "GROUP BY 1 ORDER BY 2 DESC"
             )
             by_agent = {str(r[0]): int(r[1]) for r in await cur.fetchall()}
             cur = await conn.execute(
@@ -565,10 +562,9 @@ class VectorStore:
         sql = f"""
             SELECT mi.id, mi.pillar, mi.kind, mi.content, mi.subject, mi.tags,
                    mi.scope, mi.scope_ref_id, mi.visibility, mi.source, mi.confidence,
-                   mi.importance, mi.version, mi.status, mi.created_at, a.name AS agent,
+                   mi.importance, mi.version, mi.status, mi.created_at, mi.author_label AS agent,
                    NULL AS score
             FROM memory_items mi
-            LEFT JOIN agents a ON a.id = mi.owner_id AND mi.owner_type = 'agent'
             WHERE {where_sql}
             ORDER BY mi.created_at DESC
             LIMIT %s
@@ -609,10 +605,9 @@ class VectorStore:
         sql = """
             SELECT mi.id, mi.pillar, mi.kind, mi.content, mi.subject, mi.tags,
                    mi.scope, mi.scope_ref_id, mi.visibility, mi.source, mi.confidence,
-                   mi.importance, mi.version, mi.status, mi.created_at, a.name AS agent,
+                   mi.importance, mi.version, mi.status, mi.created_at, mi.author_label AS agent,
                    NULL AS score
             FROM memory_items mi
-            LEFT JOIN agents a ON a.id = mi.owner_id AND mi.owner_type = 'agent'
             WHERE mi.status = 'active' AND mi.pillar = 'semantic' AND mi.subject = %s
             ORDER BY mi.created_at DESC
             LIMIT %s

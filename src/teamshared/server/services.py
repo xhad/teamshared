@@ -11,8 +11,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from teamshared.admin.service import AdminService
-from teamshared.agents.runs import AgentRunStore
-from teamshared.agents.service import AgentRunService
 from teamshared.config import Settings
 from teamshared.connectors.service import ConnectorService
 from teamshared.connectors.vault import TokenVault
@@ -36,11 +34,8 @@ from teamshared.memory.vectorstore import VectorStore
 from teamshared.memory.wiki import WikiStore
 from teamshared.memory.work import WorkStore
 from teamshared.memory.working import WorkingMemory
-from teamshared.queue.streams import StreamQueue
 from teamshared.tenancy.context import TenantDb
 from teamshared.tenancy.repository import TenancyRepository
-from teamshared.workflow.orchestrator import WorkflowOrchestrator
-from teamshared.workflow.runs import WorkflowRunStore
 
 log = get_logger(__name__)
 
@@ -56,8 +51,6 @@ class ProductionServices:
     skills: OrgSkillStore
     strategic: OrgStrategicStore
     work: WorkStore
-    agent_runs: AgentRunStore
-    workflow_runs: WorkflowRunStore
     projects: ProjectStore
     wiki: WikiStore
     ontology: OntologyStore
@@ -91,21 +84,6 @@ class ProductionServices:
             ontology=self.ontology,
         )
 
-    def agent_run_service(self) -> AgentRunService:
-        """Lifecycle facade for agent runs (enqueue needs a live Redis client)."""
-        return AgentRunService(
-            self.agent_runs, self.work, StreamQueue(self.working.client)
-        )
-
-    def workflow_orchestrator(self) -> WorkflowOrchestrator:
-        """Procedural-loop engine; agent stages enqueue via the run service."""
-        return WorkflowOrchestrator(
-            runs=self.workflow_runs,
-            work=self.work,
-            procedural=self.procedural,
-            agent_runs=self.agent_run_service(),
-        )
-
 
 def make_services(settings: Settings) -> ProductionServices:
     """Assemble services without doing I/O.
@@ -136,8 +114,6 @@ def make_services(settings: Settings) -> ProductionServices:
         skills=OrgSkillStore(tenant_db),
         strategic=OrgStrategicStore(tenant_db),
         work=WorkStore(tenant_db),
-        agent_runs=AgentRunStore(tenant_db),
-        workflow_runs=WorkflowRunStore(tenant_db),
         projects=ProjectStore(tenant_db),
         wiki=WikiStore(tenant_db),
         ontology=ontology,

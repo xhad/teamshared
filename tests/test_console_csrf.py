@@ -57,17 +57,20 @@ def test_post_without_csrf_rejected() -> None:
     client, _ = _build()
     _login(client)
     client.cookies.pop("ts_csrf", None)
-    resp = client.post("/app/agents/add", data={"name": "evil-bot"})
+    resp = client.post("/app/people/add", data={"email": "evil@example.com"})
     assert resp.status_code == 403
     assert "CSRF" in resp.text or "blocked" in resp.text.lower()
 
 
 def test_post_with_csrf_from_page_succeeds() -> None:
-    client, _ = _build()
+    client, services = _build()
+    services.admin.add_member = AsyncMock(return_value=None)
     _login(client)
-    resp = _app_post(client, "/app/agents/add", {"name": "csrf-test-agent"})
+    resp = _app_post(
+        client, "/app/people/add", {"email": "csrf-test@example.com", "role": "member"}
+    )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/agents"
+    assert resp.headers["location"].startswith("/app/people")
 
 
 def test_people_form_renders_csrf_hidden_field() -> None:
@@ -160,7 +163,7 @@ def test_org_switch_refreshes_csrf_cookie() -> None:
     )
     _login(client)
     before = client.cookies.get("ts_csrf")
-    page = client.get("/app/agents")
+    page = client.get("/app/people")
     assert page.status_code == 200
     match = re.search(
         r'<meta name="csrf-token" content="([^"]+)"'

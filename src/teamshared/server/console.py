@@ -41,7 +41,6 @@ from teamshared.memory.wiki import slugify
 from teamshared.metrics import METRICS
 from teamshared.playbook.compose import (
     build_skill_recipe,
-    is_workflow_recipe,
     skill_names_from_recipe,
 )
 from teamshared.server import mailer
@@ -97,8 +96,6 @@ NAV: list[tuple[str, str, str]] = [
     ("/app/projects", "Projects", "projects"),
     ("/app/strategy", "Strategy", "strategy"),
     ("/app/memory", "Memory", "memory"),
-    ("/app/agents", "Agents", "agents"),
-    ("/app/workflows", "Workflows", "workflows"),
     ("/app/people", "People", "people"),
     ("/app/orgs", "Organizations", "orgs"),
     ("/app/keys", "API Keys", "keys"),
@@ -124,13 +121,11 @@ NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
             ("/app/work", "Tasks", "work"),
             ("/app/projects", "Projects", "projects"),
             ("/app/strategy", "Strategy", "strategy"),
-            ("/app/workflows", "Workflows", "workflows"),
         ],
     ),
     (
         "Govern",
         [
-            ("/app/agents", "Agents", "agents"),
             ("/app/people", "People", "people"),
             ("/app/orgs", "Organizations", "orgs"),
             ("/app/keys", "API Keys", "keys"),
@@ -819,8 +814,6 @@ def register_console_routes(
             )
             for p in procs:
                 tool_recipe = p.get("tool_recipe") or {}
-                if is_workflow_recipe(tool_recipe):
-                    continue
                 skill_names = skill_names_from_recipe(tool_recipe)
                 skills = await _playbook_skill_meta(principal, tool_recipe)
                 intro = (p.get("steps_md") or "").strip()
@@ -1029,16 +1022,9 @@ def register_console_routes(
 
     # --- work (org task queue) ------------------------------------------
 
-    async def _work_assignee_options(principal: Principal) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-        agents: list[dict[str, str]] = []
+    async def _work_assignee_options(principal: Principal) -> list[dict[str, str]]:
         members: list[dict[str, str]] = []
         try:
-            for a in await services.admin.list_agents(_ctx(principal)):
-                agents.append({
-                    "id": str(a.get("id")),
-                    "name": a.get("name") or "",
-                    "runtime": a.get("runtime") or "user",
-                })
             for m in await services.admin.list_members(_ctx(principal)):
                 members.append({
                     "id": str(m.get("user_id")),
@@ -1047,7 +1033,7 @@ def register_console_routes(
                 })
         except Exception as exc:
             log.warning("work_assignee_options_failed", error=str(exc))
-        return agents, members
+        return members
 
     async def _work_link_options(
         principal: Principal, *, exclude_id: str | None
@@ -1119,47 +1105,6 @@ def register_console_routes(
         except Exception as exc:
             log.warning("work_project_sync_failed", error=str(exc))
 
-    def _fmt_run(run: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "id": str(run.get("id")),
-            "status": run.get("status"),
-            "agent_name": run.get("agent_name"),
-            "work_title": run.get("work_title"),
-            "work_item_id": str(run.get("work_item_id")) if run.get("work_item_id") else "",
-            "playbook_name": run.get("playbook_name"),
-            "playbook_version": run.get("playbook_version"),
-            "model": run.get("model"),
-            "provider": run.get("provider"),
-            "error": run.get("error"),
-            "created": _dt(run.get("created_at")),
-            "started": _dt(run.get("started_at")),
-            "completed": _dt(run.get("completed_at")),
-        }
-
-    async def _runs_view(principal: Principal) -> list[dict[str, Any]]:
-        svc = services.agent_run_service()
-        rows = await svc.list_runs(_ctx(principal), limit=100)
-        return [_fmt_run(r) for r in rows]
-
-    async def _runs_view_for_work(
-        principal: Principal, work_id: UUID
-    ) -> list[dict[str, Any]]:
-        svc = services.agent_run_service()
-        rows = await svc.list_runs_for_work(_ctx(principal), work_id, limit=20)
-        return [_fmt_run(r) for r in rows]
-
-    async def _playbook_options(principal: Principal) -> list[dict[str, Any]]:
-        try:
-            rows = await services.procedural.list_procedures(principal.org_id, limit=100)
-            return [
-                {"name": r.get("name"), "version": r.get("version")}
-                for r in rows
-                if not is_workflow_recipe(r.get("tool_recipe"))
-            ]
-        except Exception as exc:
-            log.warning("playbook_options_failed", error=str(exc))
-            return []
-
     async def work_page(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
@@ -1226,11 +1171,11 @@ def register_console_routes(
         if principal is None:
             return _redirect_login()
         ctx = await _shell(request, principal, "work")
-        agents, members = await _work_assignee_options(principal)
+        members = await _work_assignee_options(principal)
         projects, parent_options = await _work_link_options(principal, exclude_id=None)
         ctx.update({
             "item": None, "is_new": True, "note": "",
-            "agents": agents, "members": members,
+            "members": members,
             "projects": projects, "parent_options": parent_options,
         })
         return _TEMPLATES.TemplateResponse(request, "work_edit.html", ctx)
@@ -1243,9 +1188,6 @@ def register_console_routes(
         work_id = str(request.path_params["work_id"])
         item: dict[str, Any] | None = None
         comments: list[dict[str, Any]] = []
-        runs: list[dict[str, Any]] = []
-        agents: list[dict[str, str]] = []
-        playbooks: list[dict[str, Any]] = []
         note = ""
         try:
             item = await get_state().facade.work_get(principal, work_id=work_id)
@@ -1256,9 +1198,6 @@ def register_console_routes(
                     principal, work_id=work_id, limit=100,
                 )
                 comments = thread.get("comments") or []
-                runs = await _runs_view_for_work(principal, UUID(work_id))
-                agents, _members = await _work_assignee_options(principal)
-                playbooks = await _playbook_options(principal)
                 item["projects"] = await _work_item_projects(principal, work_id)
                 subs = await get_state().facade.work_subtasks_list(
                     principal, work_id=work_id,
@@ -1277,7 +1216,6 @@ def register_console_routes(
             note = f"Unavailable: {exc}"
         ctx.update({
             "item": item, "comments": comments, "note": note,
-            "runs": runs, "agents": agents, "playbooks": playbooks,
             "flash": request.query_params.get("flash") or "",
         })
         return _TEMPLATES.TemplateResponse(request, "work_detail.html", ctx)
@@ -1290,7 +1228,7 @@ def register_console_routes(
         work_id = str(request.path_params["work_id"])
         item: dict[str, Any] | None = None
         note = ""
-        agents, members = await _work_assignee_options(principal)
+        members = await _work_assignee_options(principal)
         projects, parent_options = await _work_link_options(principal, exclude_id=work_id)
         try:
             item = await get_state().facade.work_get(principal, work_id=work_id)
@@ -1303,7 +1241,7 @@ def register_console_routes(
             note = f"Unavailable: {exc}"
         ctx.update({
             "item": item, "is_new": False, "note": note,
-            "agents": agents, "members": members,
+            "members": members,
             "projects": projects, "parent_options": parent_options,
             "flash": request.query_params.get("flash") or "",
         })
@@ -1350,12 +1288,8 @@ def register_console_routes(
         project_id = str(form.get("project_id") or "").strip() or None
         parent_id = str(form.get("parent_id") or "").strip()
         assignee_type: str | None = None
-        assignee_agent: str | None = None
         assignee_email: str | None = None
-        if assignee_kind == "agent" and assignee_ref:
-            assignee_type = "agent"
-            assignee_agent = assignee_ref
-        elif assignee_kind == "user" and assignee_ref:
+        if assignee_kind == "user" and assignee_ref:
             assignee_type = "user"
             assignee_email = assignee_ref
         try:
@@ -1371,7 +1305,6 @@ def register_console_routes(
                     blocked_reason=blocked_reason,
                     assignee_type=assignee_type,
                     assignee_id=None,
-                    assignee_agent=assignee_agent,
                     assignee_email=assignee_email,
                     initiative_id=initiative_id,
                     due_at=None,
@@ -1393,7 +1326,6 @@ def register_console_routes(
                 priority=priority,
                 assignee_type=assignee_type,
                 assignee_id=None,
-                assignee_agent=assignee_agent,
                 assignee_email=assignee_email,
                 initiative_id=initiative_id,
                 due_at=None,
@@ -1601,295 +1533,6 @@ def register_console_routes(
         ctx.update({"item": item, "note": note})
         return _TEMPLATES.TemplateResponse(request, "memory_detail.html", ctx)
 
-    async def _list_agents_view(principal: Principal) -> tuple[list[dict[str, Any]], str]:
-        try:
-            data = await services.admin.list_agents(_ctx(principal))
-            agents = [
-                {"id": d["id"], "name": d["name"], "kind": d["kind"],
-                 "status": d["status"], "runtime": d.get("runtime") or "user",
-                 "created": _dt(d.get("created_at"), 10)}
-                for d in data
-            ]
-            return agents, ""
-        except Exception as exc:
-            log.warning("agents_page_failed", error=str(exc))
-            return [], f"Unavailable: {exc}"
-
-    async def agents_page(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        ctx = await _shell(request, principal, "agents")
-        agents, note = await _list_agents_view(principal)
-        runs: list[dict[str, Any]] = []
-        try:
-            runs = await _runs_view(principal)
-        except Exception as exc:
-            log.warning("agent_runs_view_failed", error=str(exc))
-        ctx.update({"agents": agents, "runs": runs, "note": note})
-        return _TEMPLATES.TemplateResponse(request, "agents.html", ctx)
-
-    async def agent_run_detail(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        ctx = await _shell(request, principal, "agents")
-        run: dict[str, Any] | None = None
-        trace: list[dict[str, Any]] = []
-        model_calls: list[dict[str, Any]] = []
-        note = ""
-        try:
-            run_id = UUID(str(request.path_params["run_id"]))
-            svc = services.agent_run_service()
-            raw = await svc.get_run(_ctx(principal), run_id)
-            run = _fmt_run(raw)
-            trace = [
-                {
-                    "event_type": t.get("event_type"),
-                    "summary": t.get("summary"),
-                    "sequence": t.get("sequence"),
-                    "payload": t.get("payload_json") or {},
-                    "created": _dt(t.get("created_at")),
-                }
-                for t in (raw.get("trace") or [])
-            ]
-            model_calls = [
-                {
-                    "model": m.get("model"),
-                    "provider": m.get("provider"),
-                    "request_id": m.get("request_id"),
-                    "prompt_tokens": m.get("prompt_tokens"),
-                    "completion_tokens": m.get("completion_tokens"),
-                    "latency_ms": m.get("latency_ms"),
-                    "error": m.get("error"),
-                    "created": _dt(m.get("created_at")),
-                }
-                for m in (raw.get("model_calls") or [])
-            ]
-        except ValueError:
-            note = "Run not found."
-        except Exception as exc:
-            log.warning("agent_run_detail_failed", error=str(exc))
-            note = f"Unavailable: {exc}"
-        ctx.update(
-            {"run": run, "trace": trace, "model_calls": model_calls, "note": note}
-        )
-        return _TEMPLATES.TemplateResponse(request, "agent_run_detail.html", ctx)
-
-    async def agent_run_cancel(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        _form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        run_id = str(request.path_params["run_id"])
-        try:
-            await services.agent_run_service().cancel(_ctx(principal), UUID(run_id))
-        except Exception as exc:
-            log.warning("agent_run_cancel_failed", error=str(exc))
-        return RedirectResponse(f"/app/agents/runs/{run_id}", status_code=303)
-
-    async def agent_run_retry(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        _form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        run_id = str(request.path_params["run_id"])
-        new_id = run_id
-        try:
-            run = await services.agent_run_service().retry(_ctx(principal), UUID(run_id))
-            new_id = str(run.get("id") or run_id)
-        except Exception as exc:
-            log.warning("agent_run_retry_failed", error=str(exc))
-        return RedirectResponse(f"/app/agents/runs/{new_id}", status_code=303)
-
-    def _fmt_workflow_run(run: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "id": str(run.get("id")),
-            "workflow_name": run.get("workflow_name"),
-            "workflow_version": run.get("workflow_version"),
-            "status": run.get("status"),
-            "iteration": run.get("iteration"),
-            "max_iterations": run.get("max_iterations"),
-            "created": _dt(run.get("created_at")),
-            "completed": _dt(run.get("completed_at")),
-            "error": run.get("error"),
-        }
-
-    async def workflows_page(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        ctx = await _shell(request, principal, "workflows")
-        runs: list[dict[str, Any]] = []
-        playbooks: list[dict[str, Any]] = []
-        note = ""
-        flash = request.query_params.get("flash") or ""
-        try:
-            data = await get_state().facade.workflow_list(
-                principal, status=None, limit=100,
-            )
-            runs = [_fmt_workflow_run(r) for r in data.get("runs") or []]
-            playbooks = await _playbook_options(principal)
-        except Exception as exc:
-            log.warning("workflows_page_failed", error=str(exc))
-            note = f"Unavailable: {exc}"
-        ctx.update(
-            {"runs": runs, "playbooks": playbooks, "note": note, "flash": flash}
-        )
-        return _TEMPLATES.TemplateResponse(request, "workflows.html", ctx)
-
-    async def workflow_detail(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        ctx = await _shell(request, principal, "workflows")
-        run: dict[str, Any] | None = None
-        steps: list[dict[str, Any]] = []
-        note = ""
-        try:
-            run_id = str(request.path_params["run_id"])
-            data = await get_state().facade.workflow_status(principal, run_id=run_id)
-            if not data:
-                note = "Workflow run not found."
-            else:
-                run = _fmt_workflow_run(data)
-                steps = [
-                    {
-                        "id": str(s.get("id")),
-                        "stage_id": s.get("stage_id"),
-                        "owner": s.get("owner"),
-                        "status": s.get("status"),
-                        "seq": s.get("seq"),
-                        "work_item_id": str(s.get("work_item_id"))
-                        if s.get("work_item_id") else "",
-                        "note": s.get("note"),
-                        "created": _dt(s.get("created_at")),
-                        "completed": _dt(s.get("completed_at")),
-                    }
-                    for s in data.get("steps") or []
-                ]
-        except Exception as exc:
-            log.warning("workflow_detail_failed", error=str(exc))
-            note = f"Unavailable: {exc}"
-        ctx.update({"run": run, "steps": steps, "note": note})
-        return _TEMPLATES.TemplateResponse(request, "workflow_detail.html", ctx)
-
-    async def workflow_start_post(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        workflow_name = str(form.get("workflow_name") or "").strip()
-        work_ids_raw = str(form.get("work_ids") or "").strip()
-        work_ids = [w.strip() for w in work_ids_raw.split(",") if w.strip()] or None
-        if not workflow_name:
-            return RedirectResponse("/app/workflows?flash=error", status_code=303)
-        try:
-            await get_state().facade.workflow_start(
-                principal,
-                workflow_name=workflow_name,
-                version=None,
-                work_ids=work_ids,
-                selector=None,
-                max_iterations=None,
-            )
-        except Exception as exc:
-            log.warning("workflow_start_failed", error=str(exc))
-            return RedirectResponse("/app/workflows?flash=error", status_code=303)
-        return RedirectResponse("/app/workflows?flash=started", status_code=303)
-
-    async def workflow_advance_post(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        run_id = str(request.path_params["run_id"])
-        step_id = str(form.get("step_id") or "").strip()
-        decision = str(form.get("decision") or "").strip()
-        try:
-            await get_state().facade.workflow_advance(
-                principal, step_id=step_id, decision=decision,
-            )
-        except Exception as exc:
-            log.warning("workflow_advance_failed", error=str(exc))
-        return RedirectResponse(f"/app/workflows/{run_id}", status_code=303)
-
-    async def work_assign_agent(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        work_id = str(request.path_params["work_id"])
-        agent_id = str(form.get("agent_id") or "").strip()
-        playbook = str(form.get("playbook") or "").strip()
-        playbook_name: str | None = None
-        playbook_version: int | None = None
-        if playbook:
-            name, _, ver = playbook.partition("@")
-            playbook_name = name or None
-            playbook_version = int(ver) if ver.isdigit() else None
-        model = str(form.get("model") or "").strip() or None
-        if not agent_id:
-            return RedirectResponse(f"/app/work/{work_id}?flash=error", status_code=303)
-        try:
-            result = await services.agent_run_service().assign(
-                _ctx(principal),
-                work_id=UUID(work_id),
-                agent_id=UUID(agent_id),
-                playbook_name=playbook_name,
-                playbook_version=playbook_version,
-                model=model,
-            )
-        except Exception as exc:
-            log.warning("work_assign_agent_failed", error=str(exc))
-            return RedirectResponse(f"/app/work/{work_id}?flash=error", status_code=303)
-        flash = "run_queued" if result.get("runtime") == "cloud" else "assigned"
-        return RedirectResponse(f"/app/work/{work_id}?flash={flash}", status_code=303)
-
-    async def agent_add(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        name = str(form.get("name") or "").strip()
-        runtime = str(form.get("runtime") or "user").strip() or "user"
-        if name:
-            try:
-                await services.admin.create_agent(
-                    _ctx(principal), name=name, runtime=runtime,
-                )
-            except Exception as exc:
-                log.warning("agent_add_failed", error=str(exc))
-        return RedirectResponse("/app/agents", status_code=303)
-
-    async def agent_status(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        status = str(form.get("status") or "").strip()
-        try:
-            await services.admin.set_agent_status(
-                _ctx(principal), UUID(str(request.path_params["agent_id"])), status
-            )
-        except Exception as exc:
-            log.warning("agent_status_failed", error=str(exc))
-        return RedirectResponse("/app/agents", status_code=303)
-
     async def people_page(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
@@ -1911,7 +1554,7 @@ def register_console_routes(
                 "bindings": bindings,
                 "note": note,
                 "flash": request.query_params.get("flash") or "",
-                "roles": ["org_admin", "member", "viewer", "agent"],
+                "roles": ["org_admin", "member", "viewer"],
                 "member_roles": ["org_owner", "org_admin", "member", "viewer"],
             }
         )
@@ -2064,17 +1707,14 @@ def register_console_routes(
             return _redirect_login()
         ctx = await _shell(request, principal, "keys")
         keys: list[dict[str, Any]] = []
-        agents: list[dict[str, Any]] = []
         try:
             keys = _key_rows(await services.api_keys.list_keys(principal.org_id))
-            agents, _ = await _list_agents_view(principal)
         except Exception as exc:
             log.warning("keys_page_failed", error=str(exc))
             note = note or f"Unavailable: {exc}"
         ctx.update(
             {
                 "keys": keys,
-                "agents": agents,
                 "new_token": new_token,
                 "note": note,
                 "flash": request.query_params.get("flash") or "",
@@ -2089,18 +1729,19 @@ def register_console_routes(
         form, deny = await _verified_form(request)
         if deny:
             return deny
-        agent_id = str(form.get("agent_id") or "").strip()
         name = str(form.get("name") or "").strip() or "api-key"
+        label = str(form.get("label") or "").strip() or name
         new_token = ""
         note = ""
         try:
             ctx = _ctx(principal)
-            # Self-service: any read/write member (not view-only) can mint a key
-            # bound to an agent. The minted key never exceeds the agent's role.
+            # Self-service: any read/write member (not view-only) can mint an
+            # org-bound key. The free-text label drives memory attribution.
             await ctx.authorizer.require(principal, Permissions.MEMORY_CREATE)
             minted = await services.api_keys.mint(
                 org_id=principal.org_id, principal_type="agent",
-                principal_id=UUID(agent_id), name=name, created_by=principal.id,
+                principal_id=principal.org_id, name=name, label=label,
+                created_by=principal.id,
             )
             new_token = minted.token
         except Exception as exc:
@@ -2298,7 +1939,6 @@ def register_console_routes(
         Route("/app/work/{work_id}", work_detail, methods=["GET"]),
         Route("/app/work/{work_id}/edit", work_edit, methods=["GET"]),
         Route("/app/work/{work_id}/comment", work_comment, methods=["POST"]),
-        Route("/app/work/{work_id}/assign-agent", work_assign_agent, methods=["POST"]),
         Route("/app/projects", projects_page, methods=["GET"]),
         Route("/app/projects/create", project_create_post, methods=["POST"]),
         Route("/app/projects/{project_id}", project_board, methods=["GET"]),
@@ -2309,16 +1949,6 @@ def register_console_routes(
         Route("/app/memory", memory_explorer, methods=["GET"]),
         Route("/app/memory/think", memory_think, methods=["POST"]),
         Route("/app/memory/{memory_id}", memory_detail, methods=["GET"]),
-        Route("/app/agents", agents_page, methods=["GET"]),
-        Route("/app/agents/add", agent_add, methods=["POST"]),
-        Route("/app/agents/runs/{run_id}", agent_run_detail, methods=["GET"]),
-        Route("/app/agents/runs/{run_id}/cancel", agent_run_cancel, methods=["POST"]),
-        Route("/app/agents/runs/{run_id}/retry", agent_run_retry, methods=["POST"]),
-        Route("/app/agents/{agent_id}/status", agent_status, methods=["POST"]),
-        Route("/app/workflows", workflows_page, methods=["GET"]),
-        Route("/app/workflows/start", workflow_start_post, methods=["POST"]),
-        Route("/app/workflows/{run_id}", workflow_detail, methods=["GET"]),
-        Route("/app/workflows/{run_id}/advance", workflow_advance_post, methods=["POST"]),
         Route("/app/people", people_page, methods=["GET"]),
         Route("/app/people/add", people_add, methods=["POST"]),
         Route("/app/people/grant", people_grant, methods=["POST"]),

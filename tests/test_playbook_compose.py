@@ -46,13 +46,6 @@ def test_skill_names_from_recipe() -> None:
     assert skill_names_from_recipe(None) == []
 
 
-def test_is_workflow_recipe() -> None:
-    from teamshared.playbook.compose import is_workflow_recipe
-
-    assert is_workflow_recipe({"stages": [{"id": "triage"}]})
-    assert not is_workflow_recipe({"skills": ["lint"]})
-
-
 async def test_expand_playbook_skills_inlines_bodies() -> None:
     from unittest.mock import AsyncMock, MagicMock
     from uuid import UUID

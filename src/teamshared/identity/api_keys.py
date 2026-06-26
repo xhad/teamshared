@@ -43,6 +43,7 @@ class ApiKeyStore:
         principal_type: PrincipalType,
         principal_id: UUID,
         name: str,
+        label: str | None = None,
         scopes: list[str] | None = None,
         created_by: UUID | None = None,
         expires_at: datetime | None = None,
@@ -54,12 +55,13 @@ class ApiKeyStore:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
                 "INSERT INTO api_keys "
-                "(org_id, name, prefix, key_hash, principal_type, principal_id, scopes, "
+                "(org_id, name, prefix, key_hash, principal_type, principal_id, label, scopes, "
                 " created_by, expires_at) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
                 (
                     str(org_id), name, prefix, key_hash, principal_type, str(principal_id),
-                    scopes or [], str(created_by) if created_by else None, expires_at,
+                    label or name, scopes or [],
+                    str(created_by) if created_by else None, expires_at,
                 ),
             )
             row = await cur.fetchone()
@@ -81,13 +83,13 @@ class ApiKeyStore:
         async with self.db.admin() as conn:
             cur = await conn.execute(
                 "SELECT id, org_id, key_hash, principal_type, principal_id, scopes, "
-                "expires_at, revoked_at FROM auth_lookup_api_key(%s)",
+                "expires_at, revoked_at, label FROM auth_lookup_api_key(%s)",
                 (prefix,),
             )
             row = await cur.fetchone()
         if row is None:
             return None
-        key_id, org_id, key_hash, ptype, pid, scopes, expires_at, revoked_at = row
+        key_id, org_id, key_hash, ptype, pid, scopes, expires_at, revoked_at, label = row
         if revoked_at is not None:
             return None
         if expires_at is not None and expires_at < datetime.now(UTC):
@@ -103,6 +105,7 @@ class ApiKeyStore:
             id=pid,
             scopes=tuple(scopes or ()),
             api_key_id=key_id,
+            display=label,
         )
 
     async def revoke(self, org_id: UUID, key_id: UUID) -> bool:
@@ -117,7 +120,7 @@ class ApiKeyStore:
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
                 "SELECT id, name, prefix, principal_type, principal_id, scopes, "
-                "created_at, last_used_at, expires_at, revoked_at FROM api_keys "
+                "created_at, last_used_at, expires_at, revoked_at, label FROM api_keys "
                 "ORDER BY created_at DESC"
             )
             rows = await cur.fetchall()
@@ -129,6 +132,7 @@ class ApiKeyStore:
                 "last_used_at": r[7].isoformat() if r[7] else None,
                 "expires_at": r[8].isoformat() if r[8] else None,
                 "revoked": r[9] is not None,
+                "label": r[10],
             }
             for r in rows
         ]

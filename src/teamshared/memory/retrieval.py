@@ -76,7 +76,7 @@ class SecureRetrieval:
         scopes: Iterable[MemoryScope] = DEFAULT_SCOPE,
         k: int = 8,
         time_range: TimeRange | None = None,
-        author_agent_id: UUID | None = None,
+        author_label: str | None = None,
         explain: bool = False,
     ) -> RecallResult:
         # (3) pre-check -- fail closed before any retrieval.
@@ -108,11 +108,11 @@ class SecureRetrieval:
                 with span("memory.vector_search", org_id=str(ctx.org_id), request_id=ctx.request_id):
                     vec = await self.vector_store.search(
                         org_id=ctx.org_id, query=query, scope_filter=scope_filter,
-                        k=k, pillar=pillar, time_range=tr, author_agent_id=author_agent_id,
+                        k=k, pillar=pillar, time_range=tr, author_label=author_label,
                     )
                     kw = await self.vector_store.keyword_search(
                         org_id=ctx.org_id, query=query, scope_filter=scope_filter, k=k,
-                        author_agent_id=author_agent_id,
+                        author_label=author_label,
                     )
                 merged = merge_vector_keyword(vec, kw)
                 if explain:

@@ -24,7 +24,7 @@ assets are served or after download by ``install.sh``.
 
 ## Related paths
 
-- ``../rules/`` — ``teamshared.mdc`` / ``teamshared.md`` (Cursor rule + Cloud Agents)
+- ``../rules/`` — ``teamshared.mdc`` / ``teamshared.md`` (Cursor rule)
 - ``../clients/`` — human-readable protocol and extended examples
 - ``../hooks/`` — Cursor marketplace continual-learning hook only
 

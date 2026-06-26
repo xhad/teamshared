@@ -25,4 +25,3 @@ def test_catalog_groups_memory_tools() -> None:
 def test_catalog_includes_tool_recipe_shapes() -> None:
     out = list_tools()
     assert "skills_compose" in out["tool_recipe_shapes"]
-    assert "workflow_stages" in out["tool_recipe_shapes"]

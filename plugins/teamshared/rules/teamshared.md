@@ -1,6 +1,6 @@
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.5.0 -->
+<!-- teamshared-rule-version: 1.6.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -8,16 +8,16 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version: 1.5.0` in the paired `teamshared.mdc`
+This rule is versioned (`version: 1.6.0` in the paired `teamshared.mdc`
 frontmatter). The server ships the canonical rule and its version. Keep the
 installed copy fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
-   versions), call the `version` tool with this rule's version (`1.5.0`) as
+   versions), call the `version` tool with this rule's version (`1.6.0`) as
    `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
-   `~/.cursor/rules/teamshared.mdc`; repo / Cloud Agents:
+   `~/.cursor/rules/teamshared.mdc`; repo:
    `.cursor/rules/teamshared.mdc`), then tell the user the memory rule was
    updated to the new version.
 3. If `update_available: false`, do nothing — you're current.
@@ -142,7 +142,6 @@ code/repo-specific memories, pass `repo=<workspace-slug>` and/or
 |---|---|
 | Atomic how-to (one task, one page) | `memory_skill_set` |
 | Composed flow that wires skills together | `memory_playbook_set` + `tool_recipe.skills` |
-| Agent loop with stages / auto-advance | `workflow_define` + `workflow_start` |
 
 `memory_skill_set(name, body_md, tags=..., version=...)` stores a new versioned
 skill. `memory_skill_get` / `memory_skills_list` read them. `memory_skill_resolve`
@@ -154,14 +153,13 @@ composed playbook (alias: `memory_procedure_set`). `memory_playbook_get`
 read them. Rituals are skills; composed flows are playbooks. Never store an
 atomic instruction as a playbook.
 
-### Work queue (tasks for humans and agents)
+### Work queue (tasks for humans)
 
 Use `work_*` for durable, assignable tasks — not `memory_remember`.
 
 1. **Start of task:** `work_list(mine=true)` or `work_list(work_status="todo")`
    to pick up existing work; otherwise `work_create(title=..., work_status="todo")`.
-2. **Assign:** `assignee_agent="cursor"` or `assignee_email="teammate@..."` on
-   create/update. Humans and agents are first-class assignees.
+2. **Assign:** `assignee_email="teammate@..."` on create/update.
 3. **Progress:** `work_update(work_id=..., work_status="in_progress")` — no
    re-approval. Use `work_status="blocked"` with `blocked_reason=` when stuck.
 4. **Progress notes:** `work_comment_add(work_id=..., body=...)` for handoffs and
@@ -169,7 +167,7 @@ Use `work_*` for durable, assignable tasks — not `memory_remember`.
 5. **Finish:** `work_close(work_id=..., work_status="done")` when complete.
    Closing writes an episodic event for the timeline.
 
-Work items are created active immediately for both humans and agents — task
+Work items are created active immediately — task
 creation does not go through the approval queue. Optional `initiative_id=`
 links a task to a strategic initiative.
 
@@ -435,8 +433,7 @@ Versioned composed flows. Aliases: `memory_procedure_get` / `memory_procedure_se
 | `memory_playbook_get` | Fetch by `name`, optional `version`, optional `expand_skills=true` to inline |
 | `memory_playbooks_list` | Discover playbooks; optional `tag`, `limit`; `include_body=true` for full text |
 
-`tool_recipe.shapes.skills_compose` loops through skill building blocks;
-`workflow_stages` defines a multi-stage workflow graph (see `workflow_*`).
+`tool_recipe.shapes.skills_compose` loops through skill building blocks.
 
 ### `memory_entity_view`
 
@@ -468,20 +465,19 @@ in the console (`/app/approvals`).
 
 ### `work_list` / `work_get` / `work_create` / `work_update` / `work_close` / `work_comment_*`
 
-Org-scoped task queue. Assign to **users** (`assignee_email` / `assignee_type=user`)
-or **agents** (`assignee_agent` / `assignee_type=agent`).
+Org-scoped task queue. Assign to **users** (`assignee_email` / `assignee_type=user`).
 
 | Tool | When |
 |---|---|
 | `work_list` | Table backlog; `mine=true`; filter `work_status`; `exclude_closed` (default true); `sort` |
 | `work_get` | One item by `work_id` |
-| `work_create` | New task; agent writes → active immediately |
+| `work_create` | New task; writes → active immediately |
 | `work_update` | Status, assignee, priority, `blocked_reason` — immediate |
 | `work_close` | `work_status=done` or `cancelled`; writes episodic timeline event |
 | `work_comment_add` | Progress note on a task |
 | `work_comment_list` | Thread on a task (oldest first) |
 
-Workflow statuses: `backlog`, `todo`, `in_progress`, `blocked`, `done`, `cancelled`.
+Statuses: `backlog`, `todo`, `in_progress`, `blocked`, `done`, `cancelled`.
 Do **not** store tasks via `memory_remember`. Use comments for progress, not facts.
 
 ### `memory_graph_relate` / `memory_graph_related`
@@ -522,7 +518,6 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 | Resolve skills a playbook uses | `memory_skill_resolve` |
 | Composed flow | `memory_playbook_set` / `memory_playbook_get` |
 | List playbooks | `memory_playbooks_list` |
-| Agent loop with stages | `workflow_*` |
 | Entity hub (wiki + memories + graph + work) | `memory_entity_view` |
 | Vision / OKRs / mission | `memory_strategic_*` or `scope=["strategic"]` |
 | Tasks / assignees / blockers | `work_*` or `scope=["work"]` |

@@ -9,8 +9,6 @@
     {% if flash == 'saved' %}<div class="flash-ok">Task updated.</div>{% endif %}
     {% if flash == 'created' %}<div class="flash-ok">Task created.</div>{% endif %}
     {% if flash == 'commented' %}<div class="flash-ok">Comment added.</div>{% endif %}
-    {% if flash == 'run_queued' %}<div class="flash-ok">Background agent run queued.</div>{% endif %}
-    {% if flash == 'assigned' %}<div class="flash-ok">Assigned to user agent; it will pick this up over MCP.</div>{% endif %}
     {% if flash == 'invalid' %}<div class="unavailable">Comment body is required.</div>{% endif %}
     {% if flash == 'error' %}<div class="unavailable">Could not save. Please try again.</div>{% endif %}
     {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
@@ -150,84 +148,9 @@
           <div class="work-prop-value work-cell-muted">{{ (item.updated_at or '')[:16] | replace('T', ' ') }}</div>
         </div>
 
-        {% if runs %}
-        <div class="work-prop-row">
-          <div class="work-prop-label">Latest run</div>
-          <div class="work-prop-value">
-            <a href="/app/agents/runs/{{ runs[0].id }}">
-              <span class="status-pill {{ runs[0].status }}">{{ runs[0].status }}</span>
-            </a>
-            {% if runs[0].agent_name %}<span class="muted">by {{ runs[0].agent_name }}</span>{% endif %}
-          </div>
-        </div>
-        {% endif %}
-
         <div class="work-detail-actions">
           <a href="/app/work/{{ item.id }}/edit"><button type="button">Edit task</button></a>
         </div>
-
-        <h3 style="margin-top:1rem">Assign an agent</h3>
-        <p class="muted">
-          Cloud agents run automatically when assigned. User agents pick the task
-          up from their queue over MCP — the playbook and model options below
-          only apply to cloud runs.
-        </p>
-        <form method="post" action="/app/work/{{ item.id }}/assign-agent" class="stack-form">
-          {{ cm.csrf_field() }}
-          <div class="field">
-            <label for="assign-agent">Agent</label>
-            <select id="assign-agent" name="agent_id" required>
-              <option value="">Select an agent…</option>
-              {% for a in agents %}
-              <option value="{{ a.id }}">{{ a.name }}{% if a.runtime %} ({{ a.runtime }}){% endif %}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="field">
-            <label for="assign-playbook">Playbook (cloud agents only, optional)</label>
-            <select id="assign-playbook" name="playbook">
-              <option value="">None</option>
-              {% for p in playbooks %}
-              <option value="{{ p.name }}@{{ p.version }}">{{ p.name }} v{{ p.version }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="field">
-            <label for="assign-model">Model override (cloud agents only, optional)</label>
-            <input id="assign-model" name="model" placeholder="e.g. openai/gpt-4o-mini" />
-          </div>
-          <button type="submit">Assign</button>
-        </form>
-
-        <h3 style="margin-top:1rem">Start a workflow</h3>
-        <form method="post" action="/app/workflows/start" class="stack-form">
-          {{ cm.csrf_field() }}
-          <input type="hidden" name="work_ids" value="{{ item.id }}" />
-          <div class="field">
-            <label for="workflow-name">Workflow</label>
-            <select id="workflow-name" name="workflow_name" required>
-              <option value="">Select a workflow…</option>
-              {% for p in playbooks %}
-              <option value="{{ p.name }}">{{ p.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <button type="submit">Run workflow on this task</button>
-        </form>
-
-        {% if runs %}
-        <h3 style="margin-top:1rem">Run history</h3>
-        <ul class="work-runs">
-          {% for r in runs %}
-          <li>
-            <a href="/app/agents/runs/{{ r.id }}">
-              <span class="status-pill {{ r.status }}">{{ r.status }}</span>
-            </a>
-            <span class="muted">{{ r.created }}{% if r.agent_name %} &middot; {{ r.agent_name }}{% endif %}</span>
-          </li>
-          {% endfor %}
-        </ul>
-        {% endif %}
       </aside>
     </div>
     {% endif %}

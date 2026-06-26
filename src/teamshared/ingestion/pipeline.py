@@ -29,7 +29,7 @@ from teamshared.memory.types import MemoryItemScope, MemoryKind, MemorySource, V
 from teamshared.memory.vectorstore import VectorStore
 from teamshared.memory.work import WorkPriority, WorkStatus, WorkStore
 from teamshared.metrics import METRICS
-from teamshared.playbook.compose import is_workflow_recipe, skill_names_from_recipe
+from teamshared.playbook.compose import skill_names_from_recipe
 
 log = get_logger(__name__)
 
@@ -180,6 +180,7 @@ class IngestionPipeline:
             owner_id=ctx.principal.id,
             creator_type=ctx.principal.type,
             creator_id=ctx.principal.id,
+            author_label=ctx.principal.attribution,
             status=status,
         )
 
@@ -224,7 +225,7 @@ class IngestionPipeline:
         await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
 
         has_skills = bool(skill_names_from_recipe(tool_recipe))
-        if not is_workflow_recipe(tool_recipe) and not has_skills and not steps_md.strip():
+        if not has_skills and not steps_md.strip():
             raise IngestionRejected(
                 "playbook requires at least one skill in tool_recipe.skills or intro steps_md"
             )

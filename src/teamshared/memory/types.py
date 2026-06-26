@@ -28,11 +28,8 @@ WorkSort = Literal["updated_at", "priority", "work_status", "created_at"]
 WorkSortDir = Literal["asc", "desc"]
 SessionRole = Literal["user", "assistant", "tool", "system"]
 AssigneeType = Literal["user", "agent"]
-AgentRunStatus = Literal["queued", "running", "completed", "failed", "paused", "cancelled"]
-WorkflowRunStatus = Literal["running", "paused", "completed", "failed", "cancelled"]
 ProjectView = Literal["list", "board", "timeline", "calendar"]
 ProjectStatusState = Literal["on_track", "at_risk", "off_track"]
-WorkflowAdvanceDecision = Literal["approve", "reject"]
 ToolCatalogScope = Literal["memory", "work", "all"]
 
 # Default pillars searched when memory_recall scope is omitted.

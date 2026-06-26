@@ -81,20 +81,20 @@ async def test_audit_when_override_applied() -> None:
     assert kwargs["request_id"] == "req-1"
 
 
-async def test_audit_when_override_rejected_cross_org() -> None:
-    other_org_agent = Principal(
-        org_id=OTHER_ORG,
-        type="agent",
-        id=HERMES_ID,
-        display="hermes",
-        roles=("agent",),
-    )
-    facade = _facade(override=other_org_agent)
+async def test_override_is_free_text_label_keeping_caller_identity() -> None:
+    # Attribution is a free-text label: the override only changes the display
+    # name, never the caller's org / identity / RBAC. There is no agents
+    # registry and therefore no cross-org rejection path.
+    facade = _facade(override=_caller())
     caller = _caller()
 
     writer = await facade._write_principal(caller, "hermes", operation="procedure_set")
 
-    assert writer is caller
+    assert writer is not caller
+    assert writer.display == "hermes"
+    assert writer.org_id == caller.org_id
+    assert writer.id == caller.id
+    assert writer.roles == caller.roles
     kwargs = facade.services.audit.record.await_args.kwargs
-    assert kwargs["payload"]["applied"] is False
-    assert kwargs["payload"]["attributed_agent"] == "cursor"
+    assert kwargs["payload"]["applied"] is True
+    assert kwargs["payload"]["attributed_agent"] == "hermes"

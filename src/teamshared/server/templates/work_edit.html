@@ -57,14 +57,6 @@
                   </option>
                   {% endfor %}
                 </optgroup>
-                <optgroup label="Agents">
-                  {% for a in agents %}
-                  <option value="{{ a.name }}" data-kind="agent"
-                    {% if item and item.assignee_type == 'agent' and item.assignee_id|string == a.id %}selected{% endif %}>
-                    {{ a.name }}
-                  </option>
-                  {% endfor %}
-                </optgroup>
               </select>
             </div>
 
