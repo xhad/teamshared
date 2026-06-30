@@ -16,7 +16,7 @@ _CATALOG: list[dict[str, Any]] = [
      "summary": "Liveness + dependency probe", "example": {}},
     {"name": "version", "tier": "core", "group": "ops",
      "summary": "Server + memory-rule version check",
-     "example": {"installed_rule_version": "1.6.0"}},
+     "example": {"installed_rule_version": "1.7.0"}},
     {"name": "context_compress", "tier": "core", "group": "ops",
      "summary": "Shrink tool outputs/logs before sending a prompt to an LLM",
      "example": {"messages": [{"role": "user", "content": "summarize"}, {"role": "tool", "content": "[...]"}]}},

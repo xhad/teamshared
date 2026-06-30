@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.6.0
+version: 1.7.0
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.6.0 -->
+<!-- teamshared-rule-version: 1.7.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.6.0`).
+This rule is versioned (`version` in the frontmatter above, currently `1.7.0`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
    versions), call the `version` tool with this rule's frontmatter `version`
-   (`1.6.0`) as `installed_rule_version`. Do not call `version` every turn.
+   (`1.7.0`) as `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
    `~/.cursor/rules/teamshared.mdc`; repo:
@@ -38,43 +38,85 @@ Run these in order on **every** turn (see **Session logging** for setup details)
    session if `conversation/active-session` already has one for this chat).
 2. **`memory_session_append(session_id, "user", ...)`** — the substantive user
    request (not boilerplate system context).
-3. **`memory_recall(...)` or `memory_think(...)`** — one, not both, for
-   non-trivial tasks (architecture, debugging, past work, "how do we…"). Skip
-   for pure one-liner acknowledgments.
+3. **`memory_recall(...)`** with durable scope (see **Retrieval playbook**) for
+   non-trivial tasks (architecture, debugging, past work, "how do we…"). Add
+   `memory_think` only when you need synthesis and recall already surfaced hits.
+   Skip both for pure one-liner acknowledgments.
 4. **Do the work** — tools, edits, answers.
 5. **`memory_session_append(session_id, "assistant", ...)`** — a faithful summary
    of your reply. This should be your **last MCP call** before ending the turn.
 6. **`memory_remember` / `work_*` / `memory_skill_set` / `memory_playbook_set`**
    — as needed for durable facts, tasks, atomic how-tos, or composed flows.
 
-After significant tool use, optionally append a one-line `tool` turn summarizing
-what ran and the outcome. When a **non-teamshared** tool (Shell, Grep, Read,
-etc.) returns bulky output, call `context_normalize` and use the trimmed
-`output` in your reasoning. teamshared MCP responses are already normalized by
-server middleware — do not re-normalize them. Server middleware also logs MCP
-tool calls to a separate autosession; your explicit session holds the NL story.
+After significant tool use from **non-teamshared** tools (Shell, Grep, Read),
+optionally append a one-line `tool` turn summarizing what ran and the outcome.
+**Do not** append `[tool]` turns for teamshared MCP calls — autosession already
+captures them; tool-turn appends pollute the next recall when you opt into
+`scope=["working"]`. When a **non-teamshared** tool returns bulky output, call
+`context_normalize` and use the trimmed `output` in your reasoning. teamshared
+MCP responses are already normalized by server middleware — do not re-normalize
+them. Server middleware also logs MCP tool calls to a separate autosession;
+your explicit session holds the NL story.
 
 ## Core workflows
 
 ### Recall first
 
-Before any non-trivial request, call `memory_recall` (raw ranked records) or
-`memory_think` (synthesized answer + citations + gaps) with the user's query
-(step 3 above) — pick one, not both. Ground answers in hits; cite them.
+Before any non-trivial request, call `memory_recall` with durable scope (see
+**Retrieval playbook**). Ground answers in hits; cite them. Use `memory_think`
+for synthesis only after durable recall surfaced hits, or for open strategic
+questions.
 
-- Omit `scope` to search all pillars (default).
+- Default scope (omit `scope` or pass durable pillars only): semantic, episodic,
+  procedural, skill, strategic, work — **not** working.
+- `scope=["working"]` only when you need this chat's open session turns.
 - `scope=["procedural"]` / `scope=["skill"]` for "how do we usually…" (playbooks
   vs atomic skills).
 - `scope=["strategic"]` for vision, mission, OKRs, and initiatives.
 - `scope=["work"]` for open tasks, blockers, and assignee-owned work.
 - `scope=["episodic"]` for "what did we do on X?".
 - `scope=["semantic"]` for stable facts and preferences.
-- `scope=["working"]` only when you need the caller's open session turns.
 - `memory_recall(..., explain=true)` for attribution on each hit.
 - For code/repo-specific work, pass `repo=<workspace-slug>` and/or
   `github=<owner>/<repo>` to softly boost scoped memories (nothing is hidden).
 
 If recall is empty, say so before answering from priors.
+
+### Retrieval playbook
+
+**Step 1 — durable recall** (always pass `repo=` and `github=`):
+
+```text
+memory_recall(
+  query=<short keyword anchor>,
+  scope=["semantic","episodic","procedural","skill","strategic","work"],
+  repo=<workspace-slug>,
+  github=<owner/repo>,
+  explain=true
+)
+```
+
+**Step 2 — anchor, then broaden** when the topic has a named entity:
+
+1. Short keyword: `query="mex"` or `query="Hivemind"` (1–3 tokens).
+2. If thin, broaden: `query="mex teamshared competitor"`.
+3. Do **not** start with only a long conversational question as the query.
+
+**Step 3 — pick the tool:**
+
+| Need | Tool |
+|---|---|
+| Raw hits to cite | `memory_recall` |
+| Prose answer + gaps | `memory_think` after step 1–2 found durable hits |
+| One budgeted pack | `memory_assemble_context(task=...)` |
+
+**Quality check:** with `explain=true`, prefer hits where
+`metadata.matched_keyword` is true. If top hits are `[tool]` working turns,
+retry excluding working: use durable scope only.
+
+**Avoid:** `memory_think` as the first and only call on entity/competitor/code
+questions — it inherits default durable recall but still depends on query
+wording; keyword-anchored `memory_recall` first is more reliable.
 
 ### Assemble context
 
@@ -138,7 +180,10 @@ Call `memory_remember(content, kind=...)` for things still true next week:
 
 Optional: `subject`, `tags`. `[[Entity]]` wikilinks autolink on write. For
 code/repo-specific memories, pass `repo=<workspace-slug>` and/or
-`github=<owner>/<repo>`; omit both for cross-cutting preferences. Do **not** use
+`github=<owner>/<repo>`; omit both for cross-cutting preferences. After
+finishing research docs or competitor analysis, store a **dense summary**
+(`subject=<entity>`, tags like `competitor` / `product`) — one keyword-rich
+paragraph beats hoping recall finds a long markdown file. Do **not** use
 `memory_remember` for skills or playbooks — use `memory_skill_set` /
 `memory_playbook_set`.
 
@@ -227,8 +272,9 @@ separate searches.
 
 - **Shared brain (default):** `memory_recall` and `memory_episodes_list` return
   every agent's durable memories unless you pass `agent=` to narrow.
-- **Caller-scoped working memory:** recall always includes the caller's own
-  session turns; durable pillars are not filtered by caller unless `agent=` is set.
+- **Working memory (opt-in):** pass `scope=["working"]` to include this chat's
+  session turns in recall; default scope excludes working so tool-turn noise
+  does not crowd out durable facts.
 - **Writes:** `memory_remember`, `memory_session_*`, `memory_skill_set`,
   `memory_playbook_set`, and `memory_graph_relate` attribute to the bearer token
   unless `agent=` overrides. Guarded writes land **active** immediately; hard
@@ -285,29 +331,29 @@ to write to the local rule file. See **Staying current** above.
 
 ### `memory_recall`
 
-Hybrid search across semantic, episodic, procedural, skill, strategic, work, and
-working pillars.
+Hybrid search across semantic, episodic, procedural, skill, strategic, and work
+pillars. Default scope excludes working (opt in with `scope=["working"]`).
 
 | Param | Use |
 |---|---|
-| `query` | Natural-language search (required) |
-| `scope` | Subset of pillars; omit = all (includes work) |
+| `query` | Short keyword anchor for entities; NL for broad topics (required) |
+| `scope` | Durable pillars by default; add `working` only for session turns |
 | `k` | Max records (1–50, default 8) |
 | `time_range` | Optional bounds for episodic/working hits |
 | `agent` | Optional filter to one agent's durable writes |
 | `repo` | Optional workspace slug; soft-boosts `repo:<slug>` tags (nothing hidden) |
 | `github` | Optional `owner/repo`; soft-boosts `github:<owner>/<repo>` tags |
-| `explain` | `true` to include attribution per hit |
+| `explain` | `true` to include attribution per hit; prefer `matched_keyword: true` |
 
 Returns `records` with pillar, agent, timestamps, and content for citation.
 For code work, pass `repo=<workspace-slug>` and/or `github=<owner>/<repo>`.
 
 ### `memory_think`
 
-Synthesized answer with citations and gap analysis (use `memory_recall` for raw
-records). Same params as `memory_recall`. Returns a grounded answer plus the
-records it drew from and what's missing. Pick one of `memory_think` /
-`memory_recall` per turn — not both.
+Synthesized answer with citations and gap analysis. Runs durable recall (no
+working by default), then composes prose + gaps. Use **after** keyword-anchored
+`memory_recall` for entity/competitor/code questions; use directly for open
+strategic or process questions.
 
 ### `memory_assemble_context`
 
@@ -509,8 +555,8 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 |---|---|
 | Is the server healthy? | `health` |
 | Server/rule version + update check | `version` |
-| Search all memory (raw records) | `memory_recall` |
-| Synthesized answer + gaps | `memory_think` |
+| Search durable memory (raw records) | `memory_recall` with durable scope + keyword anchor |
+| Synthesized answer + gaps | `memory_think` after recall, or for strategic questions |
 | One context pack for a task | `memory_assemble_context` |
 | Pre-LLM session + compress + enrich | `context_prepare` |
 | Shrink a message list | `context_compress` |
@@ -541,3 +587,4 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 - Don't store atomic instructions as playbooks (use `memory_skill_set`).
 - Don't re-call `context_normalize` on teamshared MCP outputs (middleware handles them).
 - Don't probe `TEAMSHARED_*` env vars in shell — call `health`.
+- Don't append `[tool]` turns for teamshared MCP calls (pollutes working recall).

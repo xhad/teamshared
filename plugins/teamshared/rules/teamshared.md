@@ -1,6 +1,6 @@
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.6.0 -->
+<!-- teamshared-rule-version: 1.7.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -8,12 +8,12 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version: 1.6.0` in the paired `teamshared.mdc`
+This rule is versioned (`version: 1.7.0` in the paired `teamshared.mdc`
 frontmatter). The server ships the canonical rule and its version. Keep the
 installed copy fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
-   versions), call the `version` tool with this rule's version (`1.6.0`) as
+   versions), call the `version` tool with this rule's version (`1.7.0`) as
    `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
@@ -32,9 +32,10 @@ Run these in order on **every** turn (see **Session logging** for setup details)
    session if `conversation/active-session` already has one for this chat).
 2. **`memory_session_append(session_id, "user", ...)`** — the substantive user
    request (not boilerplate system context).
-3. **`memory_recall(...)` or `memory_think(...)`** — one, not both, for
-   non-trivial tasks (architecture, debugging, past work, "how do we…"). Skip
-   for pure one-liner acknowledgments.
+3. **`memory_recall(...)`** with durable scope (see **Retrieval playbook**) for
+   non-trivial tasks (architecture, debugging, past work, "how do we…"). Add
+   `memory_think` only when you need synthesis and recall already surfaced hits.
+   Skip both for pure one-liner acknowledgments.
 4. **Do the work** — tools, edits, answers.
 5. **`memory_session_append(session_id, "assistant", ...)`** — a faithful summary
    of your reply. This should be your **last MCP call** before ending the turn.
@@ -52,23 +53,13 @@ tool calls to a separate autosession; your explicit session holds the NL story.
 
 ### Recall first
 
-Before any non-trivial request, call `memory_recall` (raw ranked records) or
-`memory_think` (synthesized answer + citations + gaps) with the user's query
-(step 3 above) — pick one, not both. Ground answers in hits; cite them.
+Before any non-trivial request, call `memory_recall` with durable scope (see
+**Retrieval playbook**). Use `memory_think` for synthesis only after durable
+recall surfaced hits. Default scope excludes working; pass `scope=["working"]`
+only for this chat's session turns. Pass `repo=` and `github=` on every call.
+Use short keyword anchors (`query="mex"`) for entity/competitor questions.
 
-- Omit `scope` to search all pillars (default).
-- `scope=["procedural"]` / `scope=["skill"]` for "how do we usually…" (playbooks
-  vs atomic skills).
-- `scope=["strategic"]` for vision, mission, OKRs, and initiatives.
-- `scope=["work"]` for open tasks, blockers, and assignee-owned work.
-- `scope=["episodic"]` for "what did we do on X?".
-- `scope=["semantic"]` for stable facts and preferences.
-- `scope=["working"]` only when you need the caller's open session turns.
-- `memory_recall(..., explain=true)` for attribution on each hit.
-- For code/repo-specific work, pass `repo=<workspace-slug>` and/or
-  `github=<owner>/<repo>` to softly boost scoped memories (nothing is hidden).
-
-If recall is empty, say so before answering from priors.
+See `teamshared.mdc` for the full retrieval playbook and tool reference.
 
 ### Assemble context
 

@@ -392,7 +392,14 @@ def register_tools(mcp: Any) -> None:
         query: Annotated[str, Field(description="Natural-language query")],
         scope: Annotated[
             list[MemoryScope] | None,
-            Field(description="Which pillars to search; default: all"),
+            Field(
+                description=(
+                    "Pillars to search. Default (null): durable pillars only "
+                    "(semantic, episodic, procedural, skill, strategic, work) — "
+                    "working is omitted. Add scope=['working'] when you need this "
+                    "chat's open session turns."
+                ),
+            ),
         ] = None,
         k: Annotated[int, Field(ge=1, le=50, description="Max records to return")] = 8,
         time_range: Annotated[
@@ -442,11 +449,13 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, Any]:
         """Hybrid recall across memory pillars within the caller's org.
 
-        Default scope searches semantic, episodic, procedural, skill, strategic,
-        work, and working pillars (shared brain on durable pillars). Pass
-        ``agent="cursor"`` to narrow semantic/episodic to one agent's writes.
-        Pass ``repo`` / ``github`` to softly boost scoped memories.
-        Use ``explain=true`` to see vector/keyword/RRF attribution per record.
+        Default scope searches durable pillars only (semantic, episodic,
+        procedural, skill, strategic, work). Pass ``scope=["working"]`` to
+        include this chat's open session turns. Shared brain on durable
+        pillars: pass ``agent="cursor"`` only to narrow semantic/episodic.
+        For entity/competitor questions use a **short keyword anchor** in
+        ``query`` (e.g. ``"mex"``) plus ``repo`` / ``github``. Use
+        ``explain=true``; prefer hits with ``matched_keyword: true``.
         """
         state = get_state()
         principal = await _principal()
@@ -490,9 +499,12 @@ def register_tools(mcp: Any) -> None:
     ) -> dict[str, Any]:
         """Synthesized answer with citations and gap analysis (GBrain ``think`` parity).
 
-        Runs hybrid recall, then composes a cited prose answer plus explicit
-        gaps (stale, missing, contradicts, low confidence). Prefer this over
-        ``memory_recall`` when you need an answer, not a list of records.
+        Runs durable recall (default scope excludes working), then composes a
+        cited prose answer plus explicit gaps. For named-entity or competitor
+        questions, call ``memory_recall`` with a short keyword anchor first —
+        synthesis quality depends on retrieval. Prefer ``memory_think`` when
+        you need prose + gaps after recall surfaced hits, or for open strategic
+        questions.
         """
         state = get_state()
         principal = await _principal()

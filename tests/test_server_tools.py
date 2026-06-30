@@ -427,6 +427,16 @@ async def test_memory_recall_is_unscoped_by_default(
     )
 
 
+async def test_memory_recall_default_scope_excludes_working(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "memory_recall", query="anything")
+    scopes = state.facade.recall.await_args.kwargs["scopes"]
+    assert "working" not in scopes
+    assert "semantic" in scopes
+
+
 async def test_memory_recall_passes_explicit_agent_filter(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:

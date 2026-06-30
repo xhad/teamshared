@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0 — 2026-06-29
+
+- **Rule 1.7.0:** retrieval playbook — durable default scope (exclude working),
+  keyword-anchor-then-broaden queries, recall-before-think for entity/competitor
+  questions, no `[tool]` appends for teamshared MCP calls, dense summary guidance
+  on `memory_remember`.
+- **Server:** `DEFAULT_RECALL_SCOPES` and `memory_think` default recall omit
+  working; MCP tool descriptions and server instructions updated to match.
+
 ## 0.6.0 — 2026-06-25
 
 - **Rule 1.6.0:** removed the agent-execution surface — cloud/background agent

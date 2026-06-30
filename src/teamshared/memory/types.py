@@ -33,8 +33,10 @@ ProjectStatusState = Literal["on_track", "at_risk", "off_track"]
 ToolCatalogScope = Literal["memory", "work", "all"]
 
 # Default pillars searched when memory_recall scope is omitted.
+# Working memory is opt-in (``scope=["working"]``) so open-session tool turns
+# do not crowd out durable hits in default recall / think.
 DEFAULT_RECALL_SCOPES: tuple[MemoryScope, ...] = (
-    "semantic", "episodic", "procedural", "skill", "strategic", "work", "working",
+    "semantic", "episodic", "procedural", "skill", "strategic", "work",
 )
 
 # First-party memory metadata (migration 004). ``MemoryItemScope`` is the
