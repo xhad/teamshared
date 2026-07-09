@@ -17,6 +17,7 @@ The unified ``install.sh`` / ``uninstall.sh`` scripts fetch from that URL.
 | `/install/assets/hermes/capture.py` | `hermes/capture.py` | Hermes ``post_llm_call`` capture hook |
 | `/install/assets/hermes/hooks.yaml` | `hermes/hooks.yaml` | Reference hooks block |
 | `/install/assets/claude/mcp.json` | `claude/mcp.json` | Claude Desktop MCP snippet |
+| `/install/assets/pi/mcp.json` | `pi/mcp.json` | Pi coding agent MCP snippet |
 | `/install/assets/cursor/mcp.json` | `cursor/mcp.json` | Optional manual MCP snippet |
 
 Placeholders ``__MCP_URL__`` and ``__TEAMSHARED_TOKEN__`` are substituted when

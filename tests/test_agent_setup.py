@@ -35,6 +35,7 @@ def test_normalize_agent_type() -> None:
     assert normalize_agent_type("hermes-bot") == "hermes"
     assert normalize_agent_type("codex") == "codex"
     assert normalize_agent_type("codex-work") == "codex"
+    assert normalize_agent_type("pi") == "pi"
     assert normalize_agent_type("unknown") is None
 
 
@@ -97,3 +98,17 @@ def test_hermes_setup_uses_mcp_url_without_trailing_slash() -> None:
     assert "url: https://teamshared.com/mcp\n" in setup.snippet
     assert "https://teamshared.com/mcp/" not in setup.snippet
     assert "teamshared-protocol" in setup.snippet or "protocol" in setup.snippet.lower()
+
+
+def test_pi_setup_uses_project_mcp_json() -> None:
+    setup = agent_setup(
+        "pi",
+        mcp_url="https://teamshared.com/mcp",
+        token="tsk_testtoken_secret",
+    )
+    assert setup is not None
+    assert setup.config_path == "./.mcp.json"
+    assert "mcpServers" in setup.snippet
+    assert "tsk_testtoken_secret" in setup.snippet
+    assert any("pi-mcp-adapter" in step for step in setup.steps)
+    assert any("/mcp" in step for step in setup.steps)

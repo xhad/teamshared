@@ -67,10 +67,14 @@ def test_unified_install_script() -> None:
     assert "claude_desktop_config.json" in body
     assert "${INSTALL_ROOT}/.openclaw" in body
     assert "teamshared-mcp.yaml" in body
+    assert "${INSTALL_ROOT}/.mcp.json" in body
+    assert "_ts_install_pi" in body
+    assert "pi-mcp-adapter" in body
     assert "${HOME}/.config/teamshared" not in body
     # Restart guidance is per-harness, not hardcoded to Cursor.
     assert "Restart Hermes" in body
     assert "Quit and reopen Claude Desktop" in body
+    assert "Restart pi" in body
     assert "Done. Restart your agent (Cursor: Developer → Reload Window)." not in body
 
 
@@ -80,8 +84,9 @@ def test_unified_uninstall_script() -> None:
     assert "teamshared uninstall:" in body
     assert "_ts_choose_harness" in body
     # Offers an "all" option that covers every harness.
-    assert "6) all" in body
-    assert "Enter choice [1-6]" in body
+    assert "6) all" not in body
+    assert "7) all" in body
+    assert "Enter choice [1-7]" in body
     # Never prompts for or touches a bearer token (pure removal).
     assert "TEAMSHARED_TOKEN" not in body
     assert "_ts_prompt_token" not in body
@@ -94,6 +99,8 @@ def test_unified_uninstall_script() -> None:
     assert "${INSTALL_ROOT}/.hermes/agent-hooks/teamshared-capture.py" in body
     assert "${INSTALL_ROOT}/.claude/claude_desktop_config.json" in body
     assert "${INSTALL_ROOT}/.openclaw/teamshared-mcp.yaml" in body
+    assert "${INSTALL_ROOT}/.pi/teamshared-mcp.snippet.json" in body
+    assert "${INSTALL_ROOT}/.mcp.json" in body
     assert "${HOME}/.codex" not in body
     # Surgically edits shared config rather than deleting it wholesale.
     assert "_ts_remove_json_mcp" in body
@@ -121,12 +128,17 @@ def test_install_routes() -> None:
         uninstall = client.get("/uninstall.sh")
         assert uninstall.status_code == 200
         assert uninstall.headers["content-type"].startswith("text/x-shellscript")
-        assert "Enter choice [1-6]" in uninstall.text
+        assert "Enter choice [1-7]" in uninstall.text
 
         script = client.get("/install.sh")
         assert script.status_code == 200
         assert script.headers["content-type"].startswith("text/x-shellscript")
-        assert "Enter choice [1-5]" in script.text
+        assert "Enter choice [1-6]" in script.text
+
+        pi_mcp = client.get("/install/assets/pi/mcp.json")
+        assert pi_mcp.status_code == 200
+        assert "https://teamshared.com/mcp" in pi_mcp.text
+        assert "__TEAMSHARED_TOKEN__" in pi_mcp.text
 
         codex = client.get("/install/assets/codex/mcp.toml")
         assert codex.status_code == 200

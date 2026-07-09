@@ -70,11 +70,11 @@ _ts_read_secret() {
 }
 
 _ts_choose_harness() {
-  _ts_tty $'\nSelect agent harness:\n  1) cursor   — Cursor IDE (memory rule + MCP under ~/.cursor)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n\n'
+  _ts_tty $'\nSelect agent harness:\n  1) cursor   — Cursor IDE (memory rule + MCP under ~/.cursor)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n  6) pi       — Pi coding agent (.mcp.json)\n\n'
   _ts_tty "Cursor installs globally under ~/.cursor; other harnesses install under: ${INSTALL_ROOT}\n"
   local choice
   while true; do
-    _ts_tty 'Enter choice [1-5]: '
+    _ts_tty 'Enter choice [1-6]: '
     _ts_read choice
     case "$choice" in
       1|cursor) HARNESS=cursor; break ;;
@@ -82,8 +82,9 @@ _ts_choose_harness() {
       3|hermes) HARNESS=hermes; break ;;
       4|claude) HARNESS=claude; break ;;
       5|openclaw) HARNESS=openclaw; break ;;
+      6|pi) HARNESS=pi; break ;;
       *)
-        _ts_tty 'Invalid choice. Enter 1, 2, 3, 4, or 5.\n'
+        _ts_tty 'Invalid choice. Enter 1, 2, 3, 4, 5, or 6.\n'
         ;;
     esac
   done
@@ -156,6 +157,7 @@ _ts_finish() {
     hermes)   echo "Done. Restart Hermes to load the teamshared MCP server." ;;
     claude)   echo "Done. Quit and reopen Claude Desktop to load the teamshared MCP server." ;;
     openclaw) echo "Done. Restart the OpenClaw daemon (openclaw daemon restart) if it was not restarted above." ;;
+    pi)       echo "Done. Restart pi and run /mcp to confirm teamshared is connected." ;;
     *)        echo "Done. Restart your agent to load the teamshared MCP server." ;;
   esac
   echo "MCP URL: ${TEAMSHARED_MCP_URL}"
@@ -392,6 +394,26 @@ EOF
   echo "  OpenClaw has no standard per-repo config path — merge manually or via your project's OpenClaw setup."
 }
 
+_ts_install_pi() {
+  _ts_need_cmd curl
+  _ts_need_cmd python3
+  local pi_dir="${INSTALL_ROOT}/.pi"
+  local snippet="${pi_dir}/teamshared-mcp.snippet.json"
+  local config="${INSTALL_ROOT}/.mcp.json"
+  mkdir -p "${pi_dir}"
+  _ts_fetch "${snippet}" "${ASSETS}/pi/mcp.json"
+  _ts_apply_token "${snippet}"
+
+  _ts_merge_json_mcp "${snippet}" "${config}"
+  echo "  MCP config → ${config}"
+  echo "  snippet → ${snippet}"
+  _ts_fetch "${pi_dir}/teamshared-protocol.md" "${ASSETS}/hermes/protocol.md" 2>/dev/null || true
+  echo "  protocol → ${pi_dir}/teamshared-protocol.md"
+  echo "  Install the MCP adapter if needed: pi install npm:pi-mcp-adapter"
+  echo "  Run pi from ${INSTALL_ROOT} so it loads ./.mcp.json"
+  echo "  Add '.mcp.json' to .gitignore if it contains your bearer token."
+}
+
 _ts_need_cmd curl
 _ts_choose_harness
 _ts_prompt_token
@@ -402,6 +424,7 @@ case "${HARNESS}" in
   hermes) _ts_install_hermes ;;
   claude) _ts_install_claude ;;
   openclaw) _ts_install_openclaw ;;
+  pi) _ts_install_pi ;;
   *) _ts_die "unknown harness: ${HARNESS}" ;;
 esac
 
@@ -455,11 +478,11 @@ _ts_read() {
 }
 
 _ts_choose_harness() {
-  _ts_tty $'\nSelect agent harness to remove teamshared from:\n  1) cursor   — Cursor IDE (memory rule + MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n  6) all      — every harness above\n\n'
+  _ts_tty $'\nSelect agent harness to remove teamshared from:\n  1) cursor   — Cursor IDE (memory rule + MCP)\n  2) codex    — OpenAI Codex CLI\n  3) hermes   — Hermes\n  4) claude   — Claude Desktop\n  5) openclaw — OpenClaw\n  6) pi       — Pi coding agent\n  7) all      — every harness above\n\n'
   _ts_tty "Uninstall root: ${INSTALL_ROOT}\n"
   local choice
   while true; do
-    _ts_tty 'Enter choice [1-6]: '
+    _ts_tty 'Enter choice [1-7]: '
     _ts_read choice
     case "$choice" in
       1|cursor) HARNESS=cursor; break ;;
@@ -467,9 +490,10 @@ _ts_choose_harness() {
       3|hermes) HARNESS=hermes; break ;;
       4|claude) HARNESS=claude; break ;;
       5|openclaw) HARNESS=openclaw; break ;;
-      6|all) HARNESS=all; break ;;
+      6|pi) HARNESS=pi; break ;;
+      7|all) HARNESS=all; break ;;
       *)
-        _ts_tty 'Invalid choice. Enter 1, 2, 3, 4, 5, or 6.\n'
+        _ts_tty 'Invalid choice. Enter 1, 2, 3, 4, 5, 6, or 7.\n'
         ;;
     esac
   done
@@ -600,6 +624,14 @@ _ts_uninstall_openclaw() {
   rmdir "${INSTALL_ROOT}/.openclaw" 2>/dev/null || true
 }
 
+_ts_uninstall_pi() {
+  echo "Removing Pi integration from ${INSTALL_ROOT}"
+  _ts_rm "${INSTALL_ROOT}/.pi/teamshared-mcp.snippet.json"
+  _ts_rm "${INSTALL_ROOT}/.pi/teamshared-protocol.md"
+  _ts_remove_json_mcp "${INSTALL_ROOT}/.mcp.json"
+  rmdir "${INSTALL_ROOT}/.pi" 2>/dev/null || true
+}
+
 _ts_need_cmd python3
 _ts_choose_harness
 
@@ -609,12 +641,14 @@ case "${HARNESS}" in
   hermes) _ts_uninstall_hermes ;;
   claude) _ts_uninstall_claude ;;
   openclaw) _ts_uninstall_openclaw ;;
+  pi) _ts_uninstall_pi ;;
   all)
     _ts_uninstall_cursor
     _ts_uninstall_codex
     _ts_uninstall_hermes
     _ts_uninstall_claude
     _ts_uninstall_openclaw
+    _ts_uninstall_pi
     ;;
   *) _ts_die "unknown harness: ${HARNESS}" ;;
 esac
@@ -650,7 +684,8 @@ def install_index_html(*, base_url: str) -> str:
   globally under <code>~/.cursor</code> (run it from anywhere); <strong>other
   harnesses</strong> install under the project root — run the script from your
   project root so files land under <code>./.codex</code>, <code>./.hermes</code>,
-  <code>./.claude</code>, or <code>./.openclaw</code>. Cursor installs the memory
+  <code>./.claude</code>, <code>./.openclaw</code>, or <code>./.mcp.json</code>
+  (Pi). Cursor installs the memory
   rule and merges MCP config; other harnesses fetch MCP snippets from this server.</p>
   <pre>cd /path/to/your/repo
 curl -fsSL {base}/install.sh | bash</pre>

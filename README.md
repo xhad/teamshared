@@ -100,7 +100,7 @@ Postgres. Benchmark with `python scripts/bench_recall.py`.
 No local clone required — run from your **project root**. One script prompts for
 your harness (Cursor, Codex, Hermes, Claude, OpenClaw), downloads plugin files
 and MCP config, and writes them under `./.cursor`, `./.codex`, `./.hermes`,
-`./.claude`, or `./.openclaw` in the current directory (never `~`):
+`./.claude`, `./.openclaw`, or `./.mcp.json` (Pi) in the current directory (never `~`):
 
 ```bash
 cd /path/to/your/repo

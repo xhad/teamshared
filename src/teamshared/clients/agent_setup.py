@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
-KNOWN_AGENT_TYPES = frozenset({"cursor", "codex", "hermes", "claude", "openclaw"})
+KNOWN_AGENT_TYPES = frozenset({"cursor", "codex", "hermes", "claude", "openclaw", "pi"})
 
 # Fallback when the rule markdown carries no parseable ``version:`` marker.
 RULE_VERSION_FALLBACK = "0.0.0"
@@ -206,6 +206,30 @@ def agent_setup(agent_type: str, *, mcp_url: str, token: str) -> AgentSetup | No
             ),
             snippet=snippet,
             snippet_lang="bash",
+        )
+
+    if agent_type == "pi":
+        payload = {
+            "mcpServers": {
+                "teamshared": {
+                    "url": mcp_url,
+                    "headers": {"Authorization": f"Bearer {token}"},
+                }
+            }
+        }
+        return AgentSetup(
+            agent_type=agent_type,
+            title="Pi",
+            config_path="./.mcp.json",
+            steps=(
+                "From project root: curl -fsSL <server>/install.sh | bash",
+                "Install the MCP adapter if needed: pi install npm:pi-mcp-adapter",
+                "Or merge the JSON block below into ./.mcp.json in your project root.",
+                "Run pi from the project root and use /mcp to verify teamshared is connected.",
+                "Add .mcp.json to .gitignore if it holds your bearer token.",
+            ),
+            snippet=json.dumps(payload, indent=2),
+            snippet_lang="json",
         )
 
     return None

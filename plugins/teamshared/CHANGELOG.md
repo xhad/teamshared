@@ -8,6 +8,7 @@
   on `memory_remember`.
 - **Server:** `DEFAULT_RECALL_SCOPES` and `memory_think` default recall omit
   working; MCP tool descriptions and server instructions updated to match.
+- **Installer:** Pi coding agent harness (`pi`) — project-local `./.mcp.json`.
 
 ## 0.6.0 — 2026-06-25
 

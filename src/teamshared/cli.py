@@ -715,7 +715,7 @@ def provision_default_org(
 
 @token_app.command("mint")
 def token_mint(
-    agent: str = typer.Argument(..., help="Agent type: cursor, codex, hermes, claude, or openclaw."),
+    agent: str = typer.Argument(..., help="Agent type: cursor, codex, hermes, claude, openclaw, or pi."),
 ) -> None:
     """Mint a new ``tsk_`` API key for ``agent`` in the default org.
 
@@ -724,7 +724,7 @@ def token_mint(
     """
     agent_type = normalize_agent_type(agent)
     if agent_type is None:
-        raise typer.BadParameter("agent must be one of: cursor, codex, hermes, claude, openclaw")
+        raise typer.BadParameter("agent must be one of: cursor, codex, hermes, claude, openclaw, pi")
 
     async def _run() -> None:
         settings = get_settings()
@@ -759,7 +759,7 @@ def token_invite_create(
         None,
         "--agent",
         "-a",
-        help="Agent type for this invite: cursor, codex, hermes, claude, or openclaw.",
+        help="Agent type for this invite: cursor, codex, hermes, claude, openclaw, or pi.",
     ),
     uses: int = typer.Option(1, "--uses", "-n", help="Number of redemptions allowed."),
 ) -> None:
@@ -770,7 +770,7 @@ def token_invite_create(
     if agent is not None:
         agent_type = normalize_agent_type(agent)
         if agent_type is None:
-            raise typer.BadParameter("agent must be one of: cursor, codex, hermes, claude, openclaw")
+            raise typer.BadParameter("agent must be one of: cursor, codex, hermes, claude, openclaw, pi")
     settings = get_settings()
     invites = InviteStore(settings.invites_file)
     record = invites.create(agent=agent_type, uses=uses)
