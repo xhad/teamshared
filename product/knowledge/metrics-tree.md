@@ -82,24 +82,24 @@ Observable sooner than WOSR (days, not weeks):
 
 ---
 
-## Instrumentation gaps
+## Instrumentation status
 
-Each item is a metric in the tree TeamShared likely **cannot measure today**
-without new tracking. Label: **you must measure this.**
+Recall events now write privacy-safe audit metadata and Prometheus counters; the
+console home shows the trailing-seven-day activation snapshot.
 
-| Metric | Gap |
+| Metric | Status |
 |---|---|
-| **Cross-agent recall hit** | `memory_recall` returns records with `agent` attribution, but there is no event tying "caller agent" vs "writer agent" into a product analytics stream |
-| **Non-empty recall rate per org** | MCP tool success is logged; org-scoped recall hit/miss rates are not aggregated |
-| **Active agents per org** | Bearer tokens map to agents, but no weekly-active-agent rollup |
-| **Recall latency p95 per org** | OpenTelemetry spans may exist; no SLO dashboard on recall path |
-| **Distilled memories per org / week** | Mem0/SQL stats exist (`GET /memory`, console home); not time-series per org |
+| **Cross-agent recall hit** | Implemented in `SecureRetrieval` audit metadata and `teamshared_recall_requests_total` |
+| **Non-empty recall rate per org** | Implemented in audit rollup and console home |
+| **Active agents per org** | Implemented from distinct audit attribution over seven days |
+| **Recall latency p95 per org** | Implemented from privacy-safe `latency_ms` audit metadata |
+| **Distilled memories per org / week** | VectorStore stats exist (`GET /memory`, console home); not time-series per org |
 | **Capture batches** | `POST /sessions/turns` accepted-batch funnel per org is not surfaced |
 | **Session → recall correlation** | Working memory sessions exist; no join from `session_id` to subsequent recall calls |
 | **Paying orgs** (if optimizing for Definition B) | No billing instrumented — entire revenue branch is uninstrumentable today |
 
-Until cross-agent recall hit and non-empty recall rate are measured, WOSR is
-structurally defined but **not actionable**.
+WOSR is now measurable; usefulness still requires the weekly manual sample in
+`knowledge/design-partner-runbook.md`.
 
 ---
 

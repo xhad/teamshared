@@ -64,8 +64,8 @@ Grouped sidebar:
 
 - **Overview** — Home
 - **Memory** — Wiki, Playbooks, Skills, Memory explorer
-- **Work** — Work, Projects, Strategy, Workflows
-- **Admin** — Agents, People, Orgs, API Keys, Approvals, Consent, Audit, Settings
+- **Work** — Work, Projects, Strategy
+- **Admin** — People, Orgs, API Keys, Audit, Settings
 
 ## Banned patterns
 

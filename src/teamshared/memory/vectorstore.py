@@ -320,6 +320,8 @@ class VectorStore:
         query: str,
         scope_filter: ScopeFilter,
         k: int = 8,
+        pillar: str | None = None,
+        time_range: tuple[datetime | None, datetime | None] | None = None,
         author_label: str | None = None,
     ) -> list[MemoryRecord]:
         scope_sql, scope_params = scope_filter.where("mi")
@@ -328,6 +330,21 @@ class VectorStore:
         if author_label is not None:
             author_sql = " AND mi.author_label = %s"
             author_params = [author_label]
+        pillar_sql = ""
+        pillar_params: list[Any] = []
+        if pillar:
+            pillar_sql = " AND mi.pillar = %s"
+            pillar_params = [pillar]
+        time_sql = ""
+        time_params: list[Any] = []
+        if time_range:
+            since, until = time_range
+            if since:
+                time_sql += " AND mi.created_at >= %s"
+                time_params.append(since)
+            if until:
+                time_sql += " AND mi.created_at <= %s"
+                time_params.append(until)
         sql = f"""
             SELECT mi.id, mi.pillar, mi.kind, mi.content, mi.subject, mi.tags,
                    mi.scope, mi.scope_ref_id, mi.visibility, mi.source, mi.confidence,
@@ -337,13 +354,13 @@ class VectorStore:
                      plainto_tsquery('english', %s)
                    ) AS rank
             FROM memory_items mi
-            WHERE mi.status = 'active' AND {scope_sql}{author_sql}
+            WHERE mi.status = 'active' AND {scope_sql}{author_sql}{pillar_sql}{time_sql}
               AND to_tsvector('english', coalesce(mi.content,'') || ' ' || coalesce(mi.summary,''))
                   @@ plainto_tsquery('english', %s)
             ORDER BY rank DESC
             LIMIT %s
         """
-        params = [query, *scope_params, *author_params, query, k]
+        params = [query, *scope_params, *author_params, *pillar_params, *time_params, query, k]
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(sql, params)
             rows = await cur.fetchall()

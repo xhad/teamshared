@@ -7,7 +7,7 @@ By default `memory_recall` and `memory_episodes_list` are **unscoped on
 durable pillars** (semantic, episodic, procedural): every agent on the same
 teamshared deployment sees every other agent's writes. This is the team-wide
 context-sharing model — point all your teammates' agents at one Tailnet-
-exposed teamshared, mint a token per `(human, agent)` pair, and everyone reads
+or HTTPS-exposed teamshared deployment, mint a token per agent, and everyone reads
 the same brain. Working memory is the one exception: it stays caller-scoped
 because it's per-session conversation buffer, not durable knowledge.
 
@@ -17,8 +17,8 @@ single agent's history (e.g. for debugging or "what did I write?" queries).
 The four memory pillars:
 
 - **Working** — Redis-backed per-session conversation buffer.
-- **Semantic** — Mem0-backed facts, preferences, user profiles.
-- **Episodic** — Mem0-backed timeline of summarized sessions.
+- **Semantic** — Postgres/pgvector-backed facts, preferences, user profiles.
+- **Episodic** — Postgres/pgvector-backed timeline of summarized sessions.
 - **Procedural** — Postgres-backed versioned, agent-callable skills.
 - **Graph** — optional Neo4j-backed explicit relationships (`memory_graph_*`).
 
@@ -30,31 +30,33 @@ flowchart LR
   subgraph teamshared [teamshared server]
     Tools[MCP tools]
     Tools --> Working[(Redis)]
-    Tools --> Mem0[Mem0]
+    Tools --> Durable[Durable memory]
     Tools --> Procs[(Postgres)]
     Tools -.->|optional| Neo4j[(Neo4j)]
-    Mem0 --> PG[(pgvector)]
+    Durable --> PG[(Postgres + pgvector)]
   end
 ```
 
 ## Quick start
 
 ```bash
-# 1. Bring up Postgres + Redis + teamshared server + distiller + curator
-cp .env.example .env   # then edit (esp. OPENAI_API_KEY)
-docker compose -f infra/docker-compose.yml up -d --build
+# 1. Configure and start Postgres + Redis
+cp .env.example .env   # edit provider keys and TEAMSHARED_SESSION_SECRET
+make migrate
 
-# 2. Apply migrations
-docker compose -f infra/docker-compose.yml run --rm server teamshared migrate
+# 2. Create the non-superuser application role and verify RLS
+make provision-app-role
+make verify-rls
 
-# 3. Mint a token for each agent
-docker compose -f infra/docker-compose.yml run --rm server teamshared token mint cursor
-docker compose -f infra/docker-compose.yml run --rm server teamshared token mint hermes
-docker compose -f infra/docker-compose.yml run --rm server teamshared token mint openclaw
+# 3. Start the full stack
+make build
 
-# 4. Probe health
-curl -fsS http://localhost:8077/health | jq
+# 4. Mint keys in http://localhost:8077/app/keys, then probe health
+make health
 ```
+
+The Makefile always passes `--env-file .env`; use it instead of invoking
+`docker compose` directly so repo-root settings and port overrides are applied.
 
 **Ollama on the host (default, uses GPU):** with `TEAMSHARED_EMBED_PROVIDER` /
 `TEAMSHARED_LLM_PROVIDER` set to `ollama` in `.env`:
@@ -97,32 +99,34 @@ Postgres. Benchmark with `python scripts/bench_recall.py`.
 
 ### One-command install (curl)
 
-No local clone required — run from your **project root**. One script prompts for
-your harness (Cursor, Codex, Hermes, Claude, OpenClaw), downloads plugin files
-and MCP config, and writes them under `./.cursor`, `./.codex`, `./.hermes`,
-`./.claude`, `./.openclaw`, or `./.mcp.json` (Pi) in the current directory (never `~`):
+No local clone required. One script prompts for your harness and bearer token.
+Cursor installs its memory rule and MCP config globally under `~/.cursor`;
+Codex, Hermes, Claude, OpenClaw, and Pi install project-local config under the
+current directory:
 
 ```bash
-cd /path/to/your/repo
+# Cursor: run anywhere. Other harnesses: run from the project root.
 curl -fsSL https://teamshared.com/install.sh | bash
 ```
 
 The script prompts for your bearer token (mint under **API Keys** in the [console](https://teamshared.com/app/keys))
 and writes it into the harness MCP config. Details: [`/install`](https://teamshared.com/install).
+After restarting the harness, verify the deployment with
+`teamshared doctor --url https://teamshared.com`; operators may add `--token`
+for an authenticated recall check or `--write-smoke` for a temporary
+write/recall/delete probe.
 
-To undo everything the installer wrote in the **current project** (plugin, rule,
-hook, and the `teamshared` entry in each harness's MCP config) run the matching
-uninstaller from the same directory — it prompts for the harness (or `all`) and
-only strips the `teamshared` server, leaving the rest of your config intact:
+To undo the install, run the matching uninstaller. It prompts for the harness
+(or `all`) and removes only teamshared-managed files/config entries:
 
 ```bash
-cd /path/to/your/repo
+# Run from the project root for project-local harnesses.
 curl -fsSL https://teamshared.com/uninstall.sh | bash
 ```
 
-**Cursor:** the installer writes the **teamshared** plugin under `./.cursor`
-(plugin, memory rule, MCP config). Add `.cursor/mcp.json` to the repo's
-`.gitignore` so the bearer token isn't committed.
+**Cursor:** curl installs the rule and MCP config under `~/.cursor`; the bearer
+token stays outside repositories. Install the marketplace plugin separately when
+you also want its bundled hooks and skills.
 
 **Marketplace:** Settings → Plugins → Add marketplace → `https://github.com/xhad/teamshared`, then `/add-plugin teamshared`.
 
@@ -235,7 +239,6 @@ between them and a **New org** action to create more.
   markdown is rendered through an allowlist sanitizer.
 - **Memory explorer** (`/app/memory`) — keyword search and per-record inspection
   across pillars.
-- **Agents** (`/app/agents`) — add or enable/disable agent identities.
 - **API keys** (`/app/keys`) — mint (`tsk_…`, shown once) and revoke keys.
 - **People & roles** (`/app/people`) — list members, **add a teammate by email**
   (they sign in with their own OTP and land in this org), and grant/revoke roles.
@@ -256,7 +259,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
 
 # In one terminal: backing stores
-docker compose -f infra/docker-compose.yml up -d postgres redis
+docker compose --env-file .env -f infra/docker-compose.yml up -d postgres redis
 
 teamshared migrate
 teamshared token mint dev
@@ -272,8 +275,8 @@ Two reference topologies live in [`infra/`](infra):
 - [`tailscale.example.md`](infra/tailscale.example.md) — single always-on
   host running the compose stack, exposed at
   `https://memory.<tailnet>.ts.net/mcp` without opening public ports.
-- [`railway.example.md`](infra/railway.example.md) — four Railway services
-  (pgvector, Redis, server, distiller) wired up via private networking,
+- [`railway.example.md`](infra/railway.example.md) — five Railway services
+  (pgvector, Redis, server, distiller, curator) wired up via private networking,
   driven by [`railway.server.toml`](infra/railway.server.toml) and
   [`railway.distiller.toml`](infra/railway.distiller.toml). Bearer auth on
   a public domain replaces Tailscale.

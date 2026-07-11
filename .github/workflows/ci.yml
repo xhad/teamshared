@@ -10,6 +10,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  image:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build production image
+        run: docker build -f infra/Dockerfile .
+
   checks:
     name: Lint, typecheck, unit tests
     runs-on: ubuntu-latest

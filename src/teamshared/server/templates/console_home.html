@@ -5,6 +5,21 @@
   <p class="sub">The shared brain at a glance — live counts and recent activity.
     <a href="/app/settings">System status</a> is on Settings.</p>
 
+  {% if onboarding_steps and onboarding_steps | selectattr('done', 'equalto', false) | list %}
+  <div class="panel">
+    <h2>Get to first shared recall</h2>
+    <p class="sub">The product becomes useful when two agents can share a real decision.</p>
+    <ul>
+      {% for step in onboarding_steps %}
+      <li>
+        {% if step.done %}<span aria-label="complete">✓</span>{% else %}<span aria-label="incomplete">○</span>{% endif %}
+        <a href="{{ step.href }}">{{ step.label }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
   <h2>Overview</h2>
   <div class="stats-row" role="list">
     <div class="stat" role="listitem">
@@ -33,6 +48,30 @@
         <div class="label">Open tasks</div>
         <div class="hint">{{ work_blocked }} blocked</div>
       </a>
+    </div>
+  </div>
+
+  <h2>Shared recall — last 7 days</h2>
+  <div class="stats-row" role="list">
+    <div class="stat" role="listitem">
+      <div class="num">{{ recall_metrics.get('active_agents', 0) }}</div>
+      <div class="label">Active agents</div>
+      <div class="hint">agents that read or wrote memory</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="num">{{ recall_metrics.get('recall_attempts', 0) }}</div>
+      <div class="label">Recall attempts</div>
+      <div class="hint">{{ recall_metrics.get('non_empty_recalls', 0) }} returned memory</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="num">{{ recall_metrics.get('cross_agent_recalls', 0) }}</div>
+      <div class="label">Cross-agent recalls</div>
+      <div class="hint">returned another agent's memory</div>
+    </div>
+    <div class="stat" role="listitem">
+      <div class="num">{{ recall_metrics.get('recall_latency_p95_ms') or '\u2014' }}</div>
+      <div class="label">Recall p95 (ms)</div>
+      <div class="hint">privacy-safe audit metadata</div>
     </div>
   </div>
 

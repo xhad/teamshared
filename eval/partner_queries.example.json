@@ -1,0 +1,12 @@
+{
+  "cases": [
+    {
+      "name": "cross-agent architecture decision",
+      "query": "Which database did the team choose for durable vector memory?",
+      "scope": ["semantic", "episodic"],
+      "k": 8,
+      "expected_text_any": ["pgvector", "postgres"],
+      "forbidden_text_any": ["pinecone is the selected database"]
+    }
+  ]
+}

@@ -68,6 +68,19 @@ def require_current_principal() -> Principal:
     return principal
 
 
+def principal_state_id(principal: Principal) -> str:
+    """Redis namespace for token+repo client state (``/state``, ``memory_state_*``).
+
+    API-key auth binds state to the presenting key so distinct ``tsk_*`` tokens in
+    the same org cannot read or overwrite each other's bookkeeping blobs.
+    """
+    if principal.api_key_id is not None:
+        return f"p:agent:key:{principal.api_key_id}"
+    if principal.type == "user":
+        return f"p:user:{principal.id}"
+    return f"p:{principal.type}:{principal.id}"
+
+
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     """Validate ``Authorization: Bearer <token>`` via :class:`PrincipalResolver`.
 
@@ -116,7 +129,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if identity is None and principal is not None:
             identity = AgentIdentity(
                 agent=principal.display or principal.attribution,
-                state_id=f"p:{principal.type}:{principal.id}",
+                state_id=principal_state_id(principal),
             )
 
         request.state.agent = identity

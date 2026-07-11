@@ -42,4 +42,5 @@ infra/data/
 
 agent-tools/
 eval/agentic/results/
+eval/private/
 .railway-config-pull-*/

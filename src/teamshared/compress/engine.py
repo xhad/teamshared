@@ -165,7 +165,6 @@ def compress_messages(
                 pass
             out.append(_set_message_content(msg, new_content))
         else:
-            stats.compressed_chars += len(content)
             out.append(msg)
 
     return CompressResult(

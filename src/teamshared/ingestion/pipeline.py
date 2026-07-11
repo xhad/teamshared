@@ -34,6 +34,18 @@ from teamshared.playbook.compose import skill_names_from_recipe
 log = get_logger(__name__)
 
 
+def _safe_title_body(safe_text: str) -> tuple[str, str | None]:
+    title, sep, rest = safe_text.partition("\n")
+    return title, rest if sep else None
+
+
+def _safe_statement_body(kind: str, safe_text: str) -> str:
+    prefix = f"{kind}\n"
+    if safe_text.startswith(prefix):
+        return safe_text[len(prefix):]
+    return safe_text
+
+
 class IngestionRejected(Exception):  # noqa: N818 - idiomatic name; not an *Error
     """Raised when content must not be stored at all (e.g. a hard secret)."""
 
@@ -136,7 +148,10 @@ class IngestionPipeline:
         require_approval: bool = False,
     ) -> IngestionResult:
         await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
-        _ = require_approval
+        if require_approval:
+            raise IngestionRejected(
+                "approval-gated writes are not supported; retry without require_approval"
+            )
 
         # Dedup.
         dup = await self.vector_store.find_duplicate(ctx.org_id, content)
@@ -372,8 +387,8 @@ class IngestionPipeline:
             entity_type="statement",
             screen_text=f"{kind}\n{content_md}",
             agent=agent,
-            create=lambda status: self.strategic.set_statement(
-                ctx.org_id, kind, content_md, agent=agent, status=status  # type: ignore[arg-type]
+            create=lambda status, safe: self.strategic.set_statement(
+                ctx.org_id, kind, _safe_statement_body(kind, safe), agent=agent, status=status  # type: ignore[arg-type]
             ),
             audit_action="strategic.statement.create",
             audit_payload={"kind": kind},
@@ -393,9 +408,9 @@ class IngestionPipeline:
             entity_type="plan",
             screen_text=f"{name}\n{period_start}\n{period_end}",
             agent=agent,
-            create=lambda status: self.strategic.create_plan(
+            create=lambda status, safe: self.strategic.create_plan(
                 ctx.org_id,
-                name=name,
+                name=safe.split("\n", 1)[0],
                 period_start=period_start,
                 period_end=period_end,
                 agent=agent,
@@ -422,11 +437,11 @@ class IngestionPipeline:
             entity_type="objective",
             screen_text=f"{title}\n{description_md or ''}",
             agent=agent,
-            create=lambda status: self.strategic.create_objective(
+            create=lambda status, safe: self.strategic.create_objective(
                 ctx.org_id,
                 plan_id=plan_id,
-                title=title,
-                description_md=description_md,
+                title=_safe_title_body(safe)[0],
+                description_md=_safe_title_body(safe)[1],
                 owner_type=owner_type,
                 owner_id=owner_id,
                 sort_order=sort_order,
@@ -455,11 +470,11 @@ class IngestionPipeline:
             entity_type="key_result",
             screen_text=f"{title}\n{description_md or ''}",
             agent=agent,
-            create=lambda status: self.strategic.create_key_result(
+            create=lambda status, safe: self.strategic.create_key_result(
                 ctx.org_id,
                 objective_id=objective_id,
-                title=title,
-                description_md=description_md,
+                title=_safe_title_body(safe)[0],
+                description_md=_safe_title_body(safe)[1],
                 metric_target=metric_target,
                 metric_current=metric_current,
                 metric_unit=metric_unit,
@@ -487,11 +502,11 @@ class IngestionPipeline:
             entity_type="initiative",
             screen_text=f"{title}\n{description_md or ''}",
             agent=agent,
-            create=lambda status: self.strategic.create_initiative(
+            create=lambda status, safe: self.strategic.create_initiative(
                 ctx.org_id,
                 plan_id=plan_id,
-                title=title,
-                description_md=description_md,
+                title=_safe_title_body(safe)[0],
+                description_md=_safe_title_body(safe)[1],
                 objective_id=objective_id,
                 key_result_id=key_result_id,
                 agent=agent,
@@ -528,11 +543,13 @@ class IngestionPipeline:
             )
             raise IngestionRejected("content contains a hard secret and was not stored")
 
+        safe_text = redact_pii(screen_text) if findings else screen_text
+
         verdict = screen_injection(screen_text)
         status = self._store_status(verdict)
         if verdict.quarantine:
             METRICS.ingestion_quarantined.inc(status=status, reason="prompt_injection_suspected")
-        row = await create(status)
+        row = await create(status, safe_text)
 
         await self.audit.record(
             agent=ctx.principal.attribution,
@@ -576,6 +593,10 @@ class IngestionPipeline:
         item_type: str = "task",
     ) -> WorkIngestionResult:
         await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
+        if require_approval:
+            raise IngestionRejected(
+                "approval-gated writes are not supported; retry without require_approval"
+            )
         screen_text = f"{title}\n{description_md or ''}"
         findings = scan_pii(screen_text)
         if has_hard_secret(findings):
@@ -592,7 +613,6 @@ class IngestionPipeline:
             raise IngestionRejected("content contains a hard secret and was not stored")
 
         verdict = screen_injection(screen_text)
-        _ = require_approval
         status = self._store_status(verdict)
         if verdict.quarantine:
             METRICS.ingestion_quarantined.inc(status=status, reason="prompt_injection_suspected")

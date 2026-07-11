@@ -1,6 +1,6 @@
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.7.0 -->
+<!-- teamshared-rule-version: 1.7.1 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -8,12 +8,12 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version: 1.7.0` in the paired `teamshared.mdc`
+This rule is versioned (`version: 1.7.1` in the paired `teamshared.mdc`
 frontmatter). The server ships the canonical rule and its version. Keep the
 installed copy fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
-   versions), call the `version` tool with this rule's version (`1.7.0`) as
+   versions), call the `version` tool with this rule's version (`1.7.1`) as
    `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
@@ -233,8 +233,8 @@ these are human/browser actions, not MCP tools:
   playbooks rendered as a browsable, human-readable knowledge base.
 - **Work** (`/app/work`): org-wide task queue; assign to people or agents.
 - **Manage:** agents, **API keys** (`tsk_…`, the bearer token MCP/agents use),
-  people (add a teammate by email), approvals, and capture consent (for automatic
-  `/sessions/turns` ingest — not for agent-driven `memory_session_*` logging).
+  and people (add a teammate by email). Automatic capture is controlled by the
+  deployment's capture setting.
 
 A fresh self-serve org starts empty and isolated; joining the shared team brain
 is an admin action (People → add member). The public, no-auth status page is at
@@ -451,8 +451,7 @@ Org-wide vision, mission, purpose, and OKR cycles. **Never** use
 | `memory_strategic_key_result_set` | Propose a key result |
 | `memory_strategic_initiative_set` | Propose an initiative |
 
-All strategic writes return `pending_approval` until a human approves them
-in the console (`/app/approvals`).
+Strategic writes are active immediately after RBAC and ingestion checks.
 
 ### `work_list` / `work_get` / `work_create` / `work_update` / `work_close` / `work_comment_*`
 

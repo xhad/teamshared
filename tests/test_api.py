@@ -99,6 +99,7 @@ async def test_end_to_end_signup_ingest_search() -> None:
             )
             assert resp.status_code == 201
             token = resp.json()["api_key"]["token"]
+            org_id = uuid.UUID(resp.json()["org_id"])
             auth = {"Authorization": f"Bearer {token}"}
 
             resp = await client.post(
@@ -115,5 +116,39 @@ async def test_end_to_end_signup_ingest_search() -> None:
             assert resp.status_code == 200
             contents = [r["content"] for r in resp.json()["records"]]
             assert any("staging db is reset" in c for c in contents)
+
+            # Production-path shared-brain smoke: one agent writes, another
+            # recalls, and the audit rollup records a cross-agent result.
+            agent_tokens: list[str] = []
+            for label in ("cursor", "hermes"):
+                minted = await client.post(
+                    "/v1/api-keys",
+                    headers=auth,
+                    json={"name": label, "label": label, "principal_type": "agent"},
+                )
+                assert minted.status_code == 201
+                agent_tokens.append(minted.json()["token"])
+
+            marker = f"cross-agent-{uuid.uuid4().hex}"
+            written = await client.post(
+                "/v1/memory",
+                headers={"Authorization": f"Bearer {agent_tokens[0]}"},
+                json={"content": f"{marker} uses pgvector", "scope": "org"},
+            )
+            assert written.status_code == 201
+
+            recalled = await client.post(
+                "/v1/memory/search",
+                headers={"Authorization": f"Bearer {agent_tokens[1]}"},
+                json={"query": marker, "scope": ["semantic"]},
+            )
+            assert recalled.status_code == 200
+            records = recalled.json()["records"]
+            assert any(marker in record["content"] for record in records)
+            assert any(record.get("agent") == "cursor" for record in records)
+
+            metrics = await services.audit.recall_metrics(org_id)
+            assert metrics["cross_agent_recalls"] >= 1
+            assert metrics["active_agents"] >= 2
     finally:
         await services.tenant_db.close()

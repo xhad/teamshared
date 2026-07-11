@@ -1,22 +1,21 @@
 {
   "meta": {
-    "generated": "2026-06-23T12:00:00Z",
-    "sourceCount": 10,
+    "generated": "2026-07-11T18:27:13Z",
+    "sourceCount": 13,
     "sourceTypes": [
       "research",
       "prd",
       "memo",
       "doc"
     ],
-    "health": "thin",
+    "health": "developing",
     "notes": [
-      "Eight sources: five internal product-intent docs (symlinked) plus three external research artifacts (company-brain-yc-rfs.md, gbrain-competitor-research.md, shared-brain-landscape-2026.md). Still zero user-interview or support-ticket evidence.",
-      "shared-brain-landscape-2026.md is multi-source vendor/analyst competitive intelligence \u2014 still single-perspective (no buyers interviewed). Stronger than gbrain alone but not user research.",
-      "Internal sources lack YAML frontmatter; types inferred. External research files have proper frontmatter.",
-      "Corpus still meets the 'thin' rule: sourceCount < 8 OR uniqueTypes < 2. sourceCount now 8 but uniqueTypes is 1 (research/prd/memo/doc all classify as 'doc' under the schema's coarser types). Treated as thin; banner mandatory.",
-      "consent-first capture removed from the product (2026-06-19): feature-consent-capture node, assumption-consent-is-adoption-gate, insight-ingest-philosophy-tension, and related edges dropped from this graph pass. The memory-wiki-plan.md source still describes the retired design; it is retained as a historical artifact.",
-      "headroom-research.md added 2026-06-20: Headroom is classified as adjacent context-compression layer, not a durable-memory competitor. Incremental graph pass — full graphify re-run recommended.",
-      "screenpipe-research.md added 2026-06-23: Screenpipe is classified as adjacent ambient desktop capture layer (screen+audio \u2192 local MCP), not a multi-tenant org brain. Incremental graph pass \u2014 full graphify re-run recommended."
+      "Full graphify re-run 2026-07-11: ingested cognee-research.md, mex-research.md, palantir-foundry-ontology-research.md (previously missing from graph).",
+      "Skipped sources/README.md (workspace boilerplate) and sources/interview-template.md (empty template, not evidence).",
+      "Thirteen sources: five internal product-intent docs + eight external research artifacts. Still zero user-interview or support-ticket evidence.",
+      "Internal sources (prod-plan.md, plan.md, memory-wiki-plan.md, teamshared-readme.md, teamshared-agents.md) lack YAML frontmatter; types inferred as prd/memo/doc.",
+      "Cognee classified Tier-1 direct memory competitor alongside GBrain. mex Tier-3 adjacent. Palantir ontology = architectural reference only.",
+      "consent-first capture removed from product (2026-06-19); memory-wiki-plan.md retains historical consent design."
     ]
   },
   "nodes": [
@@ -1152,8 +1151,8 @@
     {
       "id": "assumption-gbrain-is-primary-competitor",
       "type": "Assumption",
-      "label": "GBrain is the primary direct competitor (not the broader field)",
-      "risk": "Positioning and roadmap sequencing. The 2026 landscape shows Hivemind shipping the same skill-codification thesis, plus Mem0/Zep/Letta with orders of magnitude more adoption. If buyers pick a hosted platform, TeamShared's GBrain-only positioning misses the market.",
+      "label": "GBrain or Cognee is the primary direct competitor (not the broader field)",
+      "risk": "Positioning and roadmap sequencing. Cognee (~27.5k\u2605) matches GBrain (~23k\u2605) as Tier-1 graph/memory platform with managed cloud; Hivemind ships auto-skill-mining; Mem0/Zep/Letta have massive adoption. GBrain-only framing misses Cognee in the same MCP slot.",
       "provenance": []
     },
     {
@@ -1182,6 +1181,299 @@
       "type": "Assumption",
       "label": "TeamShared doesn't need a published benchmark number to compete",
       "risk": "Mem0 published ECAI 2025; Zep claims 71% LongMemEval. Without a number, the strategic KPI ('reliable enough to trust') is asserted, not proven \u2014 buyers comparing platforms have no objective recall-quality signal.",
+      "provenance": []
+    },
+    {
+      "id": "comp-cognee",
+      "type": "Competitor",
+      "label": "Cognee (topoteretes/cognee) \u2014 graph+vector AI memory platform (~27.5k\u2605)",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Cognee is the open-source AI memory platform that gives AI agents persistent long-term memory across sessions."
+        }
+      ]
+    },
+    {
+      "id": "feature-cognee-v1-ops",
+      "type": "Feature",
+      "label": "Cognee v1.0 remember / recall / improve / forget lifecycle",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "query via `remember` / `recall` / `improve` / `forget`, expose through MCP, REST"
+        }
+      ]
+    },
+    {
+      "id": "feature-cognee-triple-store",
+      "type": "Feature",
+      "label": "Cognee triple-store architecture (relational + vector + graph)",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Cognee pitches **graph+vector knowledge infrastructure** with induced ontologies and pluggable stores"
+        }
+      ]
+    },
+    {
+      "id": "feature-cognee-mcp-14",
+      "type": "Feature",
+      "label": "Cognee MCP: 14 specialized tools (remember/recall/forget preferred)",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "**14 specialized tools** for memory management, code intelligence, data ops."
+        }
+      ]
+    },
+    {
+      "id": "feature-cognee-cloud",
+      "type": "Feature",
+      "label": "Cognee Cloud managed SaaS (platform.cognee.ai)",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Ships both OSS self-host and **Cognee Cloud** managed SaaS."
+        }
+      ]
+    },
+    {
+      "id": "feature-cognee-session-bridge",
+      "type": "Feature",
+      "label": "Cognee session cache with background improve bridge to permanent graph",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "with `self_improvement=True` (default) bridges to permanent graph in background via `improve`."
+        }
+      ]
+    },
+    {
+      "id": "feature-cognee-recall-auto-route",
+      "type": "Feature",
+      "label": "Cognee recall auto-routing (summary, graph, temporal, coding-rules, lexical)",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Auto-routing by default: classifies query and picks retrieval strategy"
+        }
+      ]
+    },
+    {
+      "id": "feature-cognee-induced-ontology",
+      "type": "Feature",
+      "label": "Cognee induced ontologies during ingestion",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "derived concepts \u2192 **induced ontologies** \u2192 searchable memory"
+        }
+      ]
+    },
+    {
+      "id": "feature-cognee-skills-ingest",
+      "type": "Feature",
+      "label": "Cognee ingest SKILL.md into dataset with improvement proposals",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Skills: `ingest-skill` (SKILL.md), list/get dataset skills, skill-improvement proposals"
+        }
+      ]
+    },
+    {
+      "id": "feature-cognee-dataset-isolation",
+      "type": "Feature",
+      "label": "Cognee multi-user dataset-level isolation (tenants, roles, ACL)",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "**Isolated recall**: retrieval scoped to datasets the authenticated user can read."
+        }
+      ]
+    },
+    {
+      "id": "pain-stateless-llm-calls",
+      "type": "Pain",
+      "label": "LLM calls are stateless \u2014 no memory of prior requests or documents",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "When you call an LLM, each request is stateless: it doesn't remember what happened in the last call"
+        }
+      ]
+    },
+    {
+      "id": "need-document-linked-memory",
+      "type": "Need",
+      "label": "Memory layer that links documents and carries context across LLM calls",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "You need a memory layer that can link your documents together and create the right context for every LLM call."
+        }
+      ]
+    },
+    {
+      "id": "insight-cognee-tier1-direct",
+      "type": "Insight",
+      "label": "Cognee is Tier-1 direct memory competitor (not adjacent like mex/Headroom)",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "**Tier 1 \u2014 direct memory brain** | GBrain, Cognee, TeamShared | Primary competitor"
+        }
+      ]
+    },
+    {
+      "id": "insight-cognee-gbrain-peer-scale",
+      "type": "Insight",
+      "label": "Cognee and GBrain are comparable OSS scale (~27k vs ~23k stars)",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Cognee and GBrain are the two highest-star open-source \"agent memory platform\" peers in this corpus (~27k vs ~23k stars)."
+        }
+      ]
+    },
+    {
+      "id": "insight-cognee-managed-cloud-gtm",
+      "type": "Insight",
+      "label": "Cognee ships managed cloud SKU \u2014 closer to TeamShared GTM than GBrain OSS-only",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Cognee leads on graph ontology infrastructure, managed cloud SKU, and format breadth."
+        }
+      ]
+    },
+    {
+      "id": "comp-mex",
+      "type": "Competitor",
+      "label": "mex (mex-memory/mex) \u2014 repo-scoped markdown scaffold + drift CLI (~1.1k\u2605)",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "mex's category: **persistent project memory for AI coding agents** \u2014 a structured markdown scaffold in-repo plus a CLI that detects when that scaffold drifts from the real codebase."
+        }
+      ]
+    },
+    {
+      "id": "feature-mex-drift-checkers",
+      "type": "Feature",
+      "label": "mex: 11 zero-token drift checkers (paths, deps, staleness, broken links)",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "Eleven checkers validate scaffold against codebase. **Zero tokens, zero AI.**"
+        }
+      ]
+    },
+    {
+      "id": "feature-mex-router-scaffold",
+      "type": "Feature",
+      "label": "mex ROUTER.md task-type \u2192 context file routing (~120-token anchor)",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "The agent starts with a tiny auto-loaded file. That file points to `ROUTER.md`, and the router loads only the context needed for the current task."
+        }
+      ]
+    },
+    {
+      "id": "feature-mex-mcp-draft",
+      "type": "Feature",
+      "label": "mex-mcp draft PR (#84): mex_check, mex_read_file, mex_log, mex_heartbeat",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "Draft PR [#84](https://github.com/mex-memory/mex/pull/84) (`packages/mex-mcp`, stdio, **draft/open** as of 2026-06-18)"
+        }
+      ]
+    },
+    {
+      "id": "pain-scaffold-drift",
+      "type": "Pain",
+      "label": "Agent instruction files drift away from the real codebase",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "it floods the context window, burns tokens, and drifts away from the real codebase."
+        }
+      ]
+    },
+    {
+      "id": "pain-cold-session-dump",
+      "type": "Pain",
+      "label": "Every agent session starts cold with a prompt dump",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "AI agents forget everything between sessions. mex gives them permanent, navigable project memory so every session starts with the right context instead of a cold prompt dump."
+        }
+      ]
+    },
+    {
+      "id": "insight-mex-tier3-adjacent",
+      "type": "Insight",
+      "label": "mex is Tier-3 repo-scoped adjacent \u2014 not a multi-tenant org brain",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "Fits **Tier 3 \u2014 Git-native / repo-scoped memory** alongside xChuCx/agent-memory"
+        }
+      ]
+    },
+    {
+      "id": "insight-mex-complements-teamshared",
+      "type": "Insight",
+      "label": "mex addresses repo hygiene; TeamShared addresses org recall \u2014 complementary axis",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "mex does not pitch multi-tenant org scoping, five memory pillars, distillation workers, or a human console wiki"
+        }
+      ]
+    },
+    {
+      "id": "insight-palantir-ontology-reference",
+      "type": "Insight",
+      "label": "Palantir Foundry ontology is architectural reference, not a memory competitor",
+      "provenance": [
+        {
+          "source": "palantir-foundry-ontology-research.md",
+          "quote": "Treat as directional competitive/architectural intelligence for TeamShared ontology design, not a build spec."
+        }
+      ]
+    },
+    {
+      "id": "feature-palantir-action-types",
+      "type": "Feature",
+      "label": "Palantir action types: governed writes with validation, side effects, audit",
+      "provenance": [
+        {
+          "source": "palantir-foundry-ontology-research.md",
+          "quote": "An action type is the schema definition of a set of changes or edits to objects, property values, and links that a user can take at once."
+        }
+      ]
+    },
+    {
+      "id": "feature-palantir-object-link-types",
+      "type": "Feature",
+      "label": "Palantir ontology: object types (nouns) + link types (relationships) + interfaces",
+      "provenance": [
+        {
+          "source": "palantir-foundry-ontology-research.md",
+          "quote": "The Ontology is the digital twin of an organization, a rich semantic layer that sits on top of the digital assets"
+        }
+      ]
+    },
+    {
+      "id": "assumption-governance-differentiates-vs-cognee",
+      "type": "Assumption",
+      "label": "TeamShared governance (work queue, OKRs, approvals, capture) differentiates vs Cognee without graph parity",
+      "risk": "If buyers pick memory on graph ontology depth or star count alone, Cognee wins without TeamShared needing governance features.",
       "provenance": []
     }
   ],
@@ -1851,6 +2143,210 @@
         {
           "source": "screenpipe-research.md",
           "quote": "screenpipe runs as an MCP server, allowing AI assistants to query your screen history"
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-competes-mcp",
+      "type": "competes-with",
+      "from": "comp-cognee",
+      "to": "feature-mcp-native",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "expose through MCP, REST"
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-competes-multitenant",
+      "type": "competes-with",
+      "from": "comp-cognee",
+      "to": "feature-multi-tenant",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Easily Build Company Brain - unify data from various sources in one place"
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-competes-five-pillars",
+      "type": "competes-with",
+      "from": "comp-cognee",
+      "to": "feature-five-pillars",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "not TeamShared's five-pillar semantic/episodic/procedural/skill/strategic model"
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-competes-wiki",
+      "type": "competes-with",
+      "from": "comp-cognee",
+      "to": "feature-wiki",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "web UI (upload, graph explore, search)"
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-competes-capture",
+      "type": "competes-with",
+      "from": "comp-cognee",
+      "to": "feature-server-side-capture",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Capture appears agent-driven (`remember` calls, session traces) rather than automatic server-side transcript ingest."
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-competes-skills",
+      "type": "competes-with",
+      "from": "comp-cognee",
+      "to": "feature-five-pillars",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "substantial overlap on MCP agent memory, session bridging, skills ingestion"
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-mcp-evidences",
+      "type": "evidences",
+      "from": "feature-cognee-mcp-14",
+      "to": "insight-mcp-is-de-facto",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Integrations ship for **OpenClaw**, **Claude Code** plugin, **Cursor**, **Codex**"
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-stateless-pain",
+      "type": "experiences",
+      "from": "segment-agents",
+      "to": "pain-stateless-llm-calls",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "it doesn't remember what happened in the last call, and it doesn't know about the rest of your documents."
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-need-memory",
+      "type": "experiences",
+      "from": "segment-agents",
+      "to": "need-document-linked-memory",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "You need a memory layer that can link your documents together and create the right context for every LLM call."
+        }
+      ]
+    },
+    {
+      "id": "e-cognee-tier1-insight",
+      "type": "supports",
+      "from": "insight-cognee-tier1-direct",
+      "to": "need-shared-context",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Easily Build Company Brain - unify data from various sources in one place and enable Agents with your domain knowledge"
+        }
+      ]
+    },
+    {
+      "id": "a-cognee-primary-competitor",
+      "type": "assumes",
+      "from": "comp-cognee",
+      "to": "assumption-gbrain-is-primary-competitor",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "Cognee and GBrain are the two highest-star open-source \"agent memory platform\" peers"
+        }
+      ]
+    },
+    {
+      "id": "e-mex-competes-context-rot",
+      "type": "competes-with",
+      "from": "comp-mex",
+      "to": "pain-context-rot",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "it floods the context window, burns tokens"
+        }
+      ]
+    },
+    {
+      "id": "e-mex-drift-pain",
+      "type": "experiences",
+      "from": "segment-agents",
+      "to": "pain-scaffold-drift",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "drifts away from the real codebase."
+        }
+      ]
+    },
+    {
+      "id": "e-mex-cold-pain",
+      "type": "experiences",
+      "from": "segment-agents",
+      "to": "pain-cold-session-dump",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "every session starts with the right context instead of a cold prompt dump."
+        }
+      ]
+    },
+    {
+      "id": "e-mex-tier3-supports",
+      "type": "supports",
+      "from": "insight-mex-tier3-adjacent",
+      "to": "insight-headroom-orthogonal-layer",
+      "provenance": [
+        {
+          "source": "mex-research.md",
+          "quote": "Not Tier 1 company brain (GBrain) or Tier 2 hosted memory API (Mem0/Zep)."
+        }
+      ]
+    },
+    {
+      "id": "e-palantir-action-supports",
+      "type": "supports",
+      "from": "feature-palantir-action-types",
+      "to": "feature-five-pillars",
+      "provenance": [
+        {
+          "source": "palantir-foundry-ontology-research.md",
+          "quote": "In a decision-centric system, you need three things: the data, the logic, and the actions."
+        }
+      ]
+    },
+    {
+      "id": "a-cognee-assumes-governance",
+      "type": "assumes",
+      "from": "comp-cognee",
+      "to": "assumption-governance-differentiates-vs-cognee",
+      "provenance": [
+        {
+          "source": "cognee-research.md",
+          "quote": "From public docs \u2014 no equivalent surfaced for: Human work queue (`work_*`) with assignees and status workflow"
         }
       ]
     }

@@ -17,12 +17,16 @@ def test_counter_and_render() -> None:
 
 def test_histogram_render_has_buckets() -> None:
     m = Metrics()
-    m.retrieval_latency.observe(0.03)
-    m.retrieval_latency.observe(1.2)
+    m.retrieval_latency.observe(0.03, org="org-1")
+    m.retrieval_latency.observe(1.2, org="org-1")
+    m.recall_requests.inc(org="org-1", non_empty="true", cross_agent="true")
+    m.recall_results.inc(3, org="org-1")
     out = m.render()
     assert "teamshared_retrieval_latency_seconds_bucket" in out
     assert 'le="+Inf"' in out
     assert "teamshared_retrieval_latency_seconds_count" in out
+    assert "teamshared_recall_requests_total" in out
+    assert 'teamshared_recall_results_total{org="org-1"} 3' in out
 
 
 def test_gauge_set() -> None:

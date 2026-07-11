@@ -12,7 +12,7 @@ stores.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -1993,6 +1993,7 @@ def _rerank(
             github_target = github_tag(github)
         except ValueError:
             github_target = None
+    now = datetime.now(UTC)
 
     def score_of(r: MemoryRecord) -> float:
         base = r.score if r.score is not None else 0.5
@@ -2002,7 +2003,12 @@ def _rerank(
             score *= _REPO_BOOST
         if github_target and github_target in record_tags:
             score *= _GITHUB_BOOST
-        return score
+        recency_bonus = 0.0
+        if r.created_at and r.pillar in {"episodic", "working"}:
+            age_hours = max((now - r.created_at).total_seconds() / 3600.0, 0.0)
+            recency_bonus = max(0.0, 0.2 * (1.0 / (1.0 + age_hours / 24.0)))
+        importance_bonus = 0.1 * (r.importance or 0.0)
+        return score + recency_bonus + importance_bonus
 
     return sorted(records, key=score_of, reverse=True)[:k]
 

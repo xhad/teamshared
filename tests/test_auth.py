@@ -12,7 +12,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from teamshared.auth import BearerAuthMiddleware, current_agent
+from teamshared.auth import BearerAuthMiddleware, current_agent, principal_state_id
 from teamshared.identity.legacy_bridge import PrincipalResolver
 from teamshared.identity.principal import Principal
 
@@ -124,3 +124,46 @@ def test_auth_disabled_skips_check() -> None:
         resp = client.get("/mcp/whoami")
         assert resp.status_code == 200
         assert resp.json() == {"agent": "anonymous"}
+
+
+def test_principal_state_id_isolates_api_keys() -> None:
+    key_a = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    key_b = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    org = DEFAULT_ORG
+    p_a = Principal(org_id=org, type="agent", id=org, api_key_id=key_a, display="cursor")
+    p_b = Principal(org_id=org, type="agent", id=org, api_key_id=key_b, display="codex")
+    assert principal_state_id(p_a) == f"p:agent:key:{key_a}"
+    assert principal_state_id(p_b) == f"p:agent:key:{key_b}"
+    assert principal_state_id(p_a) != principal_state_id(p_b)
+
+
+def test_principal_state_id_user_uses_user_id() -> None:
+    user_id = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
+    p = Principal(org_id=DEFAULT_ORG, type="user", id=user_id, display="chad@example.com")
+    assert principal_state_id(p) == f"p:user:{user_id}"
+
+
+async def test_middleware_state_id_uses_api_key() -> None:
+    key_id = UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
+    principal = Principal(
+        org_id=DEFAULT_ORG,
+        type="agent",
+        id=DEFAULT_ORG,
+        api_key_id=key_id,
+        display="cursor",
+        roles=("agent",),
+    )
+    resolver = _mock_resolver(on_resolve=principal)
+
+    async def state_probe(request: Request) -> JSONResponse:
+        ident = current_agent()
+        return JSONResponse({"state_id": ident.state_id if ident else None})
+
+    app = Starlette(
+        routes=[Route("/mcp/state", state_probe, methods=["GET"])],
+        middleware=[Middleware(BearerAuthMiddleware, resolver=resolver, auth_disabled=False)],
+    )
+    with TestClient(app) as client:
+        resp = client.get("/mcp/state", headers={"Authorization": "Bearer tsk_test"})
+        assert resp.status_code == 200
+        assert resp.json()["state_id"] == f"p:agent:key:{key_id}"

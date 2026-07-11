@@ -80,13 +80,6 @@ async def check_components(state: ServerState) -> dict[str, Any]:
     except Exception as exc:
         components["curator"] = f"error: {exc}"
 
-    # Background agent-run worker; same short-TTL heartbeat contract.
-    try:
-        beat = await state.working.last_heartbeat("agent-worker")
-        components["agent-worker"] = "ok" if beat else "down"
-    except Exception as exc:
-        components["agent-worker"] = f"error: {exc}"
-
     if state.graph is not None:
         try:
             await state.graph.verify()

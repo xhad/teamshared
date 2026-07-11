@@ -142,10 +142,21 @@ def build_api_app(
         ptype = body.get("principal_type", "agent")
         pid = body.get("principal_id")
         name = body.get("name", "api-key")
+        principal_id = UUID(pid) if pid else ctx.org_id
+        if ptype == "agent":
+            # Agent identity is org-bound (id == org_id). A raw API-key insert
+            # without this binding authenticates but has no memory permissions.
+            principal_id = ctx.org_id
+            await services.roles.bind_role(
+                org_id=ctx.org_id,
+                principal_type="agent",
+                principal_id=principal_id,
+                role_name="agent",
+            )
         key = await services.api_keys.mint(
             org_id=ctx.org_id,
             principal_type=ptype,
-            principal_id=UUID(pid) if pid else ctx.org_id,
+            principal_id=principal_id,
             name=name,
             label=body.get("label") or name,
             scopes=body.get("scopes"),

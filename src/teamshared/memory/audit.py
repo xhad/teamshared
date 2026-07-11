@@ -100,3 +100,41 @@ class AuditLog:
             }
             for r in rows
         ]
+
+    async def recall_metrics(self, org_id: UUID, *, days: int = 7) -> dict[str, Any]:
+        """Return a privacy-safe activation snapshot from audit metadata."""
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                """
+                SELECT
+                    count(*) FILTER (WHERE action = 'memory.read'),
+                    count(*) FILTER (
+                        WHERE action = 'memory.read'
+                          AND COALESCE((payload->>'returned')::int, 0) > 0
+                    ),
+                    count(*) FILTER (
+                        WHERE action = 'memory.read'
+                          AND COALESCE((payload->>'cross_agent_returned')::boolean, false)
+                    ),
+                    count(DISTINCT agent) FILTER (
+                        WHERE action IN ('memory.read', 'memory.create')
+                    ),
+                    percentile_cont(0.95) WITHIN GROUP (
+                        ORDER BY (payload->>'latency_ms')::double precision
+                    ) FILTER (
+                        WHERE action = 'memory.read' AND payload ? 'latency_ms'
+                    )
+                FROM audit_events
+                WHERE occurred_at >= now() - make_interval(days => %s)
+                """,
+                (days,),
+            )
+            row = await cur.fetchone()
+        return {
+            "window_days": days,
+            "recall_attempts": int(row[0] or 0) if row else 0,
+            "non_empty_recalls": int(row[1] or 0) if row else 0,
+            "cross_agent_recalls": int(row[2] or 0) if row else 0,
+            "active_agents": int(row[3] or 0) if row else 0,
+            "recall_latency_p95_ms": round(float(row[4]), 1) if row and row[4] else None,
+        }

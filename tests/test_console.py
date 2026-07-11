@@ -115,6 +115,7 @@ def _build(
             has=AsyncMock(return_value=True),
         )
     )
+    services.roles.bind_role = AsyncMock()
 
     routes = register_console_routes(settings, services)
     app = Starlette(routes=routes)
@@ -139,13 +140,33 @@ def _fake_state() -> SimpleNamespace:
                     return_value=[
                         {"occurred_at": "2026-05-28T10:00:00", "agent": "cursor", "action": "memory.write"}
                     ]
-                )
+                ),
+                recall_metrics=AsyncMock(
+                    return_value={
+                        "active_agents": 2,
+                        "recall_attempts": 7,
+                        "non_empty_recalls": 6,
+                        "cross_agent_recalls": 4,
+                        "recall_latency_p95_ms": 42.0,
+                    }
+                ),
             ),
             strategic=SimpleNamespace(
                 stats=AsyncMock(return_value={"plans": 1, "objectives": 2, "statements": 3})
             ),
             work=SimpleNamespace(
                 stats=AsyncMock(return_value={"open": 4, "blocked": 1, "pending_approval": 2})
+            ),
+            api_keys=SimpleNamespace(
+                list_keys=AsyncMock(
+                    return_value=[
+                        {
+                            "id": "key-1",
+                            "revoked_at": None,
+                            "last_used_at": "2026-05-28T10:00:00+00:00",
+                        }
+                    ]
+                )
             ),
         ),
     )
@@ -368,6 +389,16 @@ def test_home_renders_work_stats(state_with_stats) -> None:
     assert "Open tasks" in resp.text
     assert ">4<" in resp.text
     assert "/app/work" in resp.text
+
+
+def test_home_renders_shared_recall_metrics(state_with_stats) -> None:
+    client, _ = _build()
+    _login(client)
+    resp = client.get("/app")
+    assert resp.status_code == 200
+    assert "Shared recall" in resp.text
+    assert "Cross-agent recalls" in resp.text
+    assert "Recall p95" in resp.text
 
 
 def test_read_screen_redirects_when_unauthed() -> None:
@@ -1112,6 +1143,9 @@ def test_key_mint_shows_token_once() -> None:
     )
     assert resp.status_code == 200
     assert "tsk_abc_secret" in resp.text  # shown once on the page, not via redirect
+    assert "curl -fsSL" in resp.text
+    assert "/install.sh" in resp.text
+    assert "health" in resp.text
     services.api_keys.mint.assert_awaited_once()
     # Keys are org-bound; the label drives memory attribution.
     assert services.api_keys.mint.await_args.kwargs["label"] == "cursor"

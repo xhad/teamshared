@@ -12,6 +12,11 @@
   <div class="panel token-reveal">
     <strong>New key minted &mdash; copy it now, it is shown only once:</strong>
     <code>{{ new_token }}</code>
+    <h2>Connect an agent</h2>
+    <p>Run the installer, choose your harness, and paste the key when prompted:</p>
+    <pre><code>curl -fsSL {{ install_url }} | bash</code></pre>
+    <p class="sub">Restart the harness, then ask its teamshared <code>health</code>
+      tool to verify the connection. Used keys show a “Last used” time below.</p>
   </div>
   {% endif %}
 

@@ -1,6 +1,7 @@
 
 
 COMPOSE := docker compose --env-file .env -f infra/docker-compose.yml
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
 build :; $(COMPOSE) up -d --build
 # Optional in-compose Ollama (CPU-only on macOS); default stack uses host GPU via host.docker.internal.
@@ -23,16 +24,16 @@ invite-create :; $(COMPOSE) up -d postgres redis && $(COMPOSE) run --no-deps --r
 # Paste the printed token into ~/.cursor/mcp.json (see plugins/teamshared/install/cursor/mcp.json)
 health :; curl -fsS http://localhost:8077/health | jq
 
-smoke-all :; python scripts/smoke_all_tools.py
+smoke-all :; $(PYTHON) scripts/smoke_all_tools.py
 # A/B eval: same agent with vs without teamshared memory (see eval/agentic/README.md).
-eval-agentic :; python eval/agentic/runner.py --trials 3
-smoke-cross-agent :; python scripts/smoke_cross_agent.py
+eval-agentic :; $(PYTHON) eval/agentic/runner.py --trials 3
+smoke-cross-agent :; $(PYTHON) scripts/smoke_cross_agent.py
 
 # Quality gates (same commands CI runs). `make check` is the pre-push gate.
-test :; python -m pytest
-test-integration :; python -m pytest -m integration
-lint :; python -m ruff check src tests scripts eval
-typecheck :; python -m mypy src
+test :; $(PYTHON) -m pytest
+test-integration :; $(PYTHON) -m pytest -m integration
+lint :; $(PYTHON) -m ruff check src tests scripts eval
+typecheck :; $(PYTHON) -m mypy src
 check : lint typecheck test
 
 .PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed reembed token-mint invite-create health eval-agentic smoke-all smoke-cross-agent test test-integration lint typecheck check

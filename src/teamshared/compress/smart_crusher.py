@@ -93,6 +93,11 @@ def try_compress_json_text(
         f"[teamshared compressed {meta['original_count']} → {meta['kept_count']} items; "
         f"use context_retrieve(ref=...) for full payload]\n"
     )
-    compressed = summary + json.dumps(kept, ensure_ascii=False, indent=2, default=str)
+    compressed = summary + json.dumps(
+        kept,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    )
     meta["strategy"] = "json_array"
     return compressed, True, meta

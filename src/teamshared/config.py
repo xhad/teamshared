@@ -152,10 +152,10 @@ class Settings(BaseSettings):
         ),
     )
     otp_ttl_seconds: int = Field(
-        default=30,
+        default=300,
         description=(
-            "Lifetime of a console sign-in one-time passcode (OTP). Kept short; the "
-            "code is single-use and capped by otp_max_attempts."
+            "Lifetime of a console sign-in one-time passcode (OTP). The code is "
+            "single-use and capped by otp_max_attempts."
         ),
     )
     otp_max_attempts: int = Field(

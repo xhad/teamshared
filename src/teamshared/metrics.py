@@ -109,6 +109,14 @@ class Metrics:
         self.retrieval_latency = _Histogram(
             "teamshared_retrieval_latency_seconds", "Memory retrieval latency"
         )
+        self.recall_requests = _Counter(
+            "teamshared_recall_requests_total",
+            "Recall attempts by org and result shape",
+        )
+        self.recall_results = _Counter(
+            "teamshared_recall_results_total",
+            "Records returned by recall, grouped by org",
+        )
         self.embed_calls = _Counter("teamshared_embed_calls_total", "Embedding API calls")
         self.embed_texts = _Counter("teamshared_embed_texts_total", "Texts embedded")
         self.queue_depth = _Gauge("teamshared_queue_depth", "Pending jobs per stream")
@@ -179,7 +187,8 @@ class Metrics:
         with self._lock:
             lines: list[str] = []
             for metric in (
-                self.retrieval_latency, self.embed_calls, self.embed_texts,
+                self.retrieval_latency, self.recall_requests, self.recall_results,
+                self.embed_calls, self.embed_texts,
                 self.queue_depth, self.queue_dead_letter, self.queue_pending,
                 self.capture_recorded, self.permission_denied,
                 self.cross_tenant_violation, self.memory_writes, self.auth_rejected,

@@ -20,6 +20,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
+import httpx
 import psycopg
 import typer
 from psycopg import sql
@@ -361,6 +362,154 @@ def worker_health(
         console.print(f"[red]no recent heartbeat for {component}[/red]")
         raise typer.Exit(code=1)
     console.print(f"[green]{component} heartbeat ok[/green]")
+
+
+@app.command()
+def doctor(
+    url: str | None = typer.Option(
+        None,
+        "--url",
+        help="Server base URL (defaults to TEAMSHARED_PUBLIC_URL or local server).",
+    ),
+    token: str | None = typer.Option(
+        None,
+        "--token",
+        help="Optional tsk_ key for MCP connectivity checks.",
+    ),
+    write_smoke: bool = typer.Option(
+        False,
+        "--write-smoke",
+        help="Write, recall, and immediately forget a unique probe memory (requires --token).",
+    ),
+) -> None:
+    """Check server dependencies and optional authenticated MCP connectivity."""
+    from uuid import uuid4
+
+    from fastmcp import Client
+    from fastmcp.client.transports import StreamableHttpTransport
+
+    settings = get_settings()
+    base = (url or settings.public_url or f"http://{settings.host}:{settings.port}").rstrip("/")
+    if write_smoke and not token:
+        raise typer.BadParameter("--write-smoke requires --token")
+
+    async def _run() -> bool:
+        ok = True
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(f"{base}/health")
+                response.raise_for_status()
+                health = response.json()
+        except Exception as exc:
+            console.print(f"[red]HTTP health failed:[/red] {exc}")
+            return False
+
+        status = str(health.get("status") or "unknown")
+        console.print(f"[bold]Server[/bold] {base}: {status}")
+        components = health.get("components") or {}
+        for name, value in components.items():
+            value_text = str(value)
+            healthy = (
+                value_text == "ok"
+                or value_text.startswith("ok ")
+                or value_text in {"disabled", "warning"}
+            )
+            ok = ok and healthy
+            color = "green" if healthy else "red"
+            console.print(f"  [{color}]{name}[/{color}] {value_text}")
+
+        if not token:
+            console.print("[dim]Pass --token to verify authenticated MCP access.[/dim]")
+            return ok and status == "ok"
+
+        transport = StreamableHttpTransport(
+            f"{base}/mcp", headers={"Authorization": f"Bearer {token}"}
+        )
+        try:
+            async with Client(transport) as client:
+                await client.call_tool("health", {})
+                await client.call_tool(
+                    "memory_recall",
+                    {"query": "teamshared doctor connectivity", "k": 1},
+                )
+                console.print("  [green]mcp[/green] authenticated recall ok")
+
+                if write_smoke:
+                    marker = f"teamshared-doctor-{uuid4()}"
+                    written = await client.call_tool(
+                        "memory_remember",
+                        {
+                            "content": marker,
+                            "kind": "note",
+                            "subject": "teamshared doctor",
+                            "tags": ["doctor-smoke"],
+                        },
+                    )
+                    memory_id = (written.data or {}).get("memory_id")
+                    recalled = await client.call_tool(
+                        "memory_recall",
+                        {"query": marker, "scope": ["semantic"], "k": 5},
+                    )
+                    records = (recalled.data or {}).get("records") or []
+                    if not any(marker in str(record.get("content") or "") for record in records):
+                        raise RuntimeError("probe memory was not returned by recall")
+                    if memory_id:
+                        await client.call_tool(
+                            "memory_forget",
+                            {
+                                "memory_id": memory_id,
+                                "reason": "teamshared doctor smoke cleanup",
+                            },
+                        )
+                    console.print("  [green]write/recall[/green] probe passed and was removed")
+        except Exception as exc:
+            console.print(f"[red]MCP check failed:[/red] {exc}")
+            return False
+        return ok and status == "ok"
+
+    if not asyncio.run(_run()):
+        raise typer.Exit(code=1)
+
+
+@app.command("retention-enforce")
+def retention_enforce(
+    org_id: str | None = typer.Option(
+        None,
+        "--org-id",
+        help="Target org UUID (defaults to TEAMSHARED_DEFAULT_ORG_ID).",
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Soft-delete matching memory. The default is a dry run.",
+    ),
+) -> None:
+    """Evaluate or enforce configured durable-memory retention policies."""
+    from uuid import UUID
+
+    from teamshared.admin.retention import enforce_retention
+
+    settings = get_settings()
+    target = UUID(org_id) if org_id else settings.default_org_id
+
+    async def _run() -> dict[str, Any]:
+        services = make_services(settings)
+        await services.tenant_db.connect()
+        try:
+            return await enforce_retention(
+                services.tenant_db,
+                target,
+                dry_run=not apply,
+            )
+        finally:
+            await services.tenant_db.close()
+
+    report = asyncio.run(_run())
+    mode = "applied" if apply else "dry run"
+    count = report["soft_deleted"] if apply else report["would_soft_delete"]
+    console.print(f"[bold]{mode}[/bold]: {count} memory item(s)")
+    for policy in report["policies"]:
+        console.print(f"  {policy['name']}: {policy['matched']}")
 
 
 @app.command()

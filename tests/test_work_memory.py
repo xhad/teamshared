@@ -83,12 +83,35 @@ async def test_ingest_work_create_active() -> None:
         repo=None,
         github=None,
         agent="cursor",
-        require_approval=True,
     )
     assert result.status == "active"
     work.create.assert_awaited_once()
     kwargs = work.create.await_args.kwargs
     assert kwargs["status"] == "active"
+
+
+async def test_ingest_work_create_rejects_unsupported_approval_gate() -> None:
+    pipe, work = _work_pipeline()
+    with pytest.raises(IngestionRejected, match="approval-gated writes are not supported"):
+        await pipe.ingest_work_create(
+            _ctx(),
+            title="Ship work queue",
+            description_md="MVP",
+            tags=None,
+            work_status="todo",
+            priority="normal",
+            requester_type="agent",
+            requester_id=PRINCIPAL_ID,
+            assignee_type=None,
+            assignee_id=None,
+            initiative_id=None,
+            due_at=None,
+            repo=None,
+            github=None,
+            agent="cursor",
+            require_approval=True,
+        )
+    work.create.assert_not_awaited()
 
 
 async def test_ingest_work_create_rejects_secret() -> None:

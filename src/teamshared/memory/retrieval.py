@@ -24,7 +24,6 @@ from __future__ import annotations
 import time
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from uuid import UUID
 
 from teamshared.identity.rbac import Permissions
 from teamshared.logging import get_logger
@@ -112,7 +111,7 @@ class SecureRetrieval:
                     )
                     kw = await self.vector_store.keyword_search(
                         org_id=ctx.org_id, query=query, scope_filter=scope_filter, k=k,
-                        author_label=author_label,
+                        pillar=pillar, time_range=tr, author_label=author_label,
                     )
                 merged = merge_vector_keyword(vec, kw)
                 if explain:
@@ -173,16 +172,36 @@ class SecureRetrieval:
         # (8) permission recheck -- defence in depth.
         safe = _recheck_scope(ranked, scope_filter, org_id=str(ctx.org_id))
 
-        METRICS.retrieval_latency.observe(time.monotonic() - started)
+        elapsed = time.monotonic() - started
+        writers = {record.agent for record in safe if record.agent}
+        cross_agent_returned = any(
+            writer != ctx.principal.attribution for writer in writers
+        )
+        org_label = str(ctx.org_id)
+        METRICS.retrieval_latency.observe(elapsed, org=org_label)
+        METRICS.recall_requests.inc(
+            org=org_label,
+            non_empty=str(bool(safe)).lower(),
+            cross_agent=str(cross_agent_returned).lower(),
+        )
+        METRICS.recall_results.inc(len(safe), org=org_label)
 
         # (9) audit the read.
         await self.audit.record(
             agent=ctx.principal.attribution,
             action="memory.read",
+            org_id=ctx.org_id,
             actor_type=ctx.principal.type,
             actor_id=ctx.principal.id,
             resource_type="memory",
-            payload={"query": query, "returned": len(safe), "scopes": list(scopes_tuple)},
+            payload={
+                "query_length": len(query),
+                "returned": len(safe),
+                "scopes": list(scopes_tuple),
+                "latency_ms": round(elapsed * 1000, 3),
+                "distinct_writers": len(writers),
+                "cross_agent_returned": cross_agent_returned,
+            },
             request_id=ctx.request_id,
         )
         return RecallResult(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from teamshared.memory.agent_state import GITHUB_TAG_PREFIX, github_tag, validate_github
@@ -61,3 +63,13 @@ def test_rerank_github_and_repo_boosts_stack() -> None:
     b = _mk(0.60)
     out = _rerank([a, b], k=2, repo="foo", github="xhad/teamshared")
     assert out[0].id == a.id
+
+
+def test_rerank_prefers_recent_episodic_over_older_same_score() -> None:
+    now = datetime.now(UTC)
+    recent = _mk(0.5, pillar="episodic")
+    recent.created_at = now
+    older = _mk(0.5, pillar="episodic")
+    older.created_at = now - timedelta(days=7)
+    out = _rerank([older, recent], k=2)
+    assert out[0].id == recent.id

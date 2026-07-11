@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Rule 1.7.1:** align governance guidance with the active-write implementation;
+  remove references to retired approvals and capture-consent console surfaces.
+
 ## 0.7.0 — 2026-06-29
 
 - **Rule 1.7.0:** retrieval playbook — durable default scope (exclude working),

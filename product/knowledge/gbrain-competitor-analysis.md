@@ -40,7 +40,7 @@ agent-install protocol).
 
 **3. TeamShared has pillars GBrain doesn't market: work queue, strategic OKRs, approvals**
 - *Confidence: Single-source (internal + shipped code)*
-- TeamShared: `work_*`, `memory_strategic_*`, human approval queue in `/app/approvals`
+- TeamShared: `work_*`, `memory_strategic_*`, RBAC and guarded active writes
 - GBrain research doc notes no equivalent work-queue or approval-queue surface.
 
 **4. GBrain leads on synthesis UX and retrieval rigor**

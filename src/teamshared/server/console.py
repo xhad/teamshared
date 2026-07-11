@@ -223,6 +223,8 @@ async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
         state.services.strategic.stats(org_id),
         state.services.work.stats(org_id),
         state.services.audit.list_events(org_id, limit=8),
+        state.services.audit.recall_metrics(org_id),
+        state.services.api_keys.list_keys(org_id),
         return_exceptions=True,
     )
     working = _safe(results[0], {})
@@ -231,11 +233,37 @@ async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
     strat = _safe(results[3], {})
     work = _safe(results[4], {})
     events = _safe(results[5], [])
+    recall = _safe(results[6], {})
+    api_keys = _safe(results[7], [])
 
     by_agent = sorted(
         (pillar.get("by_agent") or {}).items(), key=lambda kv: kv[1], reverse=True
     )
     by_agent_max = max((c for _, c in by_agent), default=1) or 1
+    active_keys = [key for key in api_keys if not key.get("revoked_at")]
+    onboarding_steps = [
+        {"label": "Mint an API key", "done": bool(active_keys), "href": "/app/keys"},
+        {
+            "label": "Connect an agent",
+            "done": any(key.get("last_used_at") for key in active_keys),
+            "href": "/app/keys",
+        },
+        {
+            "label": "Write the first memory",
+            "done": (pillar.get("semantic", 0) + pillar.get("episodic", 0)) > 0,
+            "href": "/app/memory",
+        },
+        {
+            "label": "Connect a second agent",
+            "done": recall.get("active_agents", 0) >= 2,
+            "href": "/app/people",
+        },
+        {
+            "label": "Complete a cross-agent recall",
+            "done": recall.get("cross_agent_recalls", 0) > 0,
+            "href": "/app/memory",
+        },
+    ]
 
     return {
         "working_active": working.get("active", 0),
@@ -251,6 +279,8 @@ async def _home_context(state: Any, org_id: Any) -> dict[str, Any]:
         "by_agent": by_agent,
         "by_agent_max": by_agent_max,
         "recent": events if isinstance(events, list) else [],
+        "recall_metrics": recall,
+        "onboarding_steps": onboarding_steps,
     }
 
 
@@ -523,7 +553,8 @@ def register_console_routes(
             ctx.update({"working_active": 0, "working_total": 0,
                         "work_open": 0, "work_blocked": 0,
                         "semantic": 0, "episodic": 0, "procedural": 0,
-                        "procedural_versions": 0, "by_agent": [], "by_agent_max": 1, "recent": []})
+                        "procedural_versions": 0, "by_agent": [], "by_agent_max": 1,
+                        "recent": [], "recall_metrics": {}, "onboarding_steps": []})
         return _TEMPLATES.TemplateResponse(request, "console_home.html", ctx)
 
     async def settings_page(request: Request) -> Response:
@@ -1718,6 +1749,7 @@ def register_console_routes(
                 "new_token": new_token,
                 "note": note,
                 "flash": request.query_params.get("flash") or "",
+                "install_url": f"{(settings.public_url or str(request.base_url)).rstrip('/')}/install.sh",
             }
         )
         return _TEMPLATES.TemplateResponse(request, "keys.html", ctx)
@@ -1738,6 +1770,12 @@ def register_console_routes(
             # Self-service: any read/write member (not view-only) can mint an
             # org-bound key. The free-text label drives memory attribution.
             await ctx.authorizer.require(principal, Permissions.MEMORY_CREATE)
+            await services.roles.bind_role(
+                org_id=principal.org_id,
+                principal_type="agent",
+                principal_id=principal.org_id,
+                role_name="agent",
+            )
             minted = await services.api_keys.mint(
                 org_id=principal.org_id, principal_type="agent",
                 principal_id=principal.org_id, name=name, label=label,

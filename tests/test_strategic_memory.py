@@ -100,6 +100,21 @@ async def test_ingest_strategic_plan_active() -> None:
     assert result.entity_type == "plan"
 
 
+async def test_ingest_strategic_statement_redacts_soft_pii() -> None:
+    pipe, strategic = _strategic_pipeline()
+    await pipe.ingest_strategic_statement(
+        _ctx(),
+        kind="mission",
+        content_md="Reach us at teammate@example.com",
+        agent="cursor",
+    )
+    kwargs = strategic.set_statement.await_args.kwargs
+    args = strategic.set_statement.await_args.args
+    stored = kwargs.get("content_md", args[2] if len(args) > 2 else "")
+    assert "teammate@example.com" not in stored
+    assert "[REDACTED:" in stored
+
+
 async def test_activate_statement_supersedes_prior() -> None:
     """Integration-style test with mocked DB connection."""
     db = MagicMock()
