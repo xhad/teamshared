@@ -1144,7 +1144,7 @@ def test_key_mint_shows_token_once() -> None:
     assert resp.status_code == 200
     assert "tsk_abc_secret" in resp.text  # shown once on the page, not via redirect
     assert "curl -fsSL" in resp.text
-    assert "/install.sh" in resp.text
+    assert "https://teamshared.com/install.sh" in resp.text
     assert "health" in resp.text
     services.api_keys.mint.assert_awaited_once()
     # Keys are org-bound; the label drives memory attribution.

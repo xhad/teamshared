@@ -10,6 +10,9 @@ from pathlib import Path
 
 KNOWN_AGENT_TYPES = frozenset({"cursor", "codex", "hermes", "claude", "openclaw", "pi"})
 
+# User-facing origin printed in install curl commands (console, landing page).
+CANONICAL_PUBLIC_ORIGIN = "https://teamshared.com"
+
 # Fallback when the rule markdown carries no parseable ``version:`` marker.
 RULE_VERSION_FALLBACK = "0.0.0"
 
@@ -52,6 +55,11 @@ def teamshared_rule_version() -> str:
         return parse_rule_version(load_teamshared_memory_rule_mdc())
     except FileNotFoundError:
         return RULE_VERSION_FALLBACK
+
+
+def canonical_install_script_url() -> str:
+    """Absolute URL for the unified curl installer shown to humans."""
+    return f"{CANONICAL_PUBLIC_ORIGIN}/install.sh"
 
 
 def normalize_agent_type(value: str) -> str | None:

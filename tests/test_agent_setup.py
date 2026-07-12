@@ -5,6 +5,7 @@ from __future__ import annotations
 from teamshared.clients.agent_setup import (
     RULE_VERSION_FALLBACK,
     agent_setup,
+    canonical_install_script_url,
     load_teamshared_memory_rule_mdc,
     normalize_agent_type,
     parse_rule_version,
@@ -26,6 +27,10 @@ def test_canonical_rule_is_versioned() -> None:
     version = teamshared_rule_version()
     assert version != RULE_VERSION_FALLBACK
     assert version in load_teamshared_memory_rule_mdc()
+
+
+def test_canonical_install_script_url() -> None:
+    assert canonical_install_script_url() == "https://teamshared.com/install.sh"
 
 
 def test_normalize_agent_type() -> None:

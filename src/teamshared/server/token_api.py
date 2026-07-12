@@ -11,6 +11,7 @@ from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, R
 
 from teamshared.clients.agent_setup import (
     KNOWN_AGENT_TYPES,
+    canonical_install_script_url,
     normalize_agent_type,
 )
 from teamshared.config import Settings
@@ -305,7 +306,7 @@ def _service_banner_json() -> JSONResponse:
 
 def _landing_page_html() -> str:
     agents = ", ".join(a.capitalize() for a in sorted(KNOWN_AGENT_TYPES))
-    install_cmd = "curl -fsSL https://teamshared.com/install.sh | bash"
+    install_cmd = f"curl -fsSL {canonical_install_script_url()} | bash"
     return f"""<!doctype html>
 <html lang="en">
 <head>

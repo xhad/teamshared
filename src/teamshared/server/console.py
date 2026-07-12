@@ -29,6 +29,7 @@ from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 
 from teamshared import __version__
+from teamshared.clients.agent_setup import canonical_install_script_url
 from teamshared.admin.service import AdminService
 from teamshared.config import Settings
 from teamshared.identity.principal import Principal
@@ -1749,7 +1750,7 @@ def register_console_routes(
                 "new_token": new_token,
                 "note": note,
                 "flash": request.query_params.get("flash") or "",
-                "install_url": f"{(settings.public_url or str(request.base_url)).rstrip('/')}/install.sh",
+                "install_url": canonical_install_script_url(),
             }
         )
         return _TEMPLATES.TemplateResponse(request, "keys.html", ctx)
