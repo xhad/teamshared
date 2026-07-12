@@ -55,24 +55,26 @@ async def test_middleware_backfills_structured_content_when_unchanged() -> None:
     ctx = MagicMock()
     ctx.message = MagicMock(name="memory_recall")
 
-    with patch("teamshared.server.mcp_output_middleware.get_settings") as gs:
+    with (
+        patch("teamshared.server.mcp_output_middleware.get_settings") as gs,
+        patch("teamshared.server.mcp_output_middleware.get_state") as gst,
+        patch("teamshared.server.mcp_output_middleware.current_principal", return_value=None),
+        patch(
+            "teamshared.server.mcp_output_middleware.normalize_tool_output",
+            new=AsyncMock(
+                return_value=MagicMock(
+                    body=payload,
+                    compressed=False,
+                    cleaned=False,
+                    chars_saved=0,
+                )
+            ),
+        ),
+    ):
         settings = MagicMock()
         settings.mcp_tool_output_normalize_enabled = True
         gs.return_value = settings
-        with patch("teamshared.server.mcp_output_middleware.get_state") as gst:
-            gst.return_value = MagicMock(working=MagicMock())
-            with patch("teamshared.server.mcp_output_middleware.current_principal", return_value=None):
-                with patch(
-                    "teamshared.server.mcp_output_middleware.normalize_tool_output",
-                    new=AsyncMock(
-                        return_value=MagicMock(
-                            body=payload,
-                            compressed=False,
-                            cleaned=False,
-                            chars_saved=0,
-                        )
-                    ),
-                ):
-                    out = await middleware.on_call_tool(ctx, call_next)
+        gst.return_value = MagicMock(working=MagicMock())
+        out = await middleware.on_call_tool(ctx, call_next)
 
     assert out.structured_content == payload

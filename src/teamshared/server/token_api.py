@@ -210,6 +210,7 @@ _LANDING_CSS = """
     .section-head p { color: var(--muted); margin-top: .9rem; font-size: 1.05rem; }
 
     .grid { display: grid; gap: 1.1rem; }
+    .grid-6 { grid-template-columns: repeat(3, 1fr); }
     .grid-5 { grid-template-columns: repeat(5, 1fr); }
     .grid-4 { grid-template-columns: repeat(4, 1fr); }
     .grid-3 { grid-template-columns: repeat(3, 1fr); }
@@ -271,6 +272,7 @@ _LANDING_CSS = """
     .footer-links a:hover { color: #fff; }
 
     @media (max-width: 900px) {
+      .grid-6 { grid-template-columns: repeat(2, 1fr); }
       .grid-5 { grid-template-columns: repeat(2, 1fr); }
       .grid-4 { grid-template-columns: repeat(2, 1fr); }
       .grid-3 { grid-template-columns: 1fr; }
@@ -278,6 +280,7 @@ _LANDING_CSS = """
     }
     @media (max-width: 640px) {
       .nav-links { display: none; }
+      .grid-6 { grid-template-columns: 1fr; }
       .grid-5 { grid-template-columns: 1fr; }
       .grid-4 { grid-template-columns: 1fr; }
       .hero { padding-top: 4.5rem; }
@@ -329,6 +332,7 @@ def _landing_page_html() -> str:
       </a>
       <nav class="nav-links">
         <a href="#pillars">Memory</a>
+        <a href="#compression">Compression</a>
         <a href="#how">How it works</a>
         <a href="#console">Console</a>
       </nav>
@@ -370,15 +374,15 @@ def _landing_page_html() -> str:
     <section id="pillars" class="section">
       <div class="section-head">
         <h2>Memory with structure, not logs.</h2>
-        <p>Five pillars keep context organized so recall stays sharp as your team's
-        knowledge grows.</p>
+        <p>Six pillars keep context organized — from session buffer to strategic OKRs
+        and assignable work — so recall stays sharp as your team's knowledge grows.</p>
       </div>
-      <div class="grid grid-5">
+      <div class="grid grid-6">
         <article class="card">
           <div class="card-icon">◷</div>
           <h3>Working</h3>
-          <p>A fast, Redis-backed buffer for the current task. Per-session by default,
-          distilled into durable memory when it matters.</p>
+          <p>A fast, Redis-backed buffer for the current task. Distilled into durable
+          memory when the session closes.</p>
         </article>
         <article class="card">
           <div class="card-icon">◆</div>
@@ -395,14 +399,48 @@ def _landing_page_html() -> str:
         <article class="card">
           <div class="card-icon">▤</div>
           <h3>Procedural</h3>
-          <p>Versioned, how-to playbooks agents can read and follow — your team's best
-          workflows, encoded.</p>
+          <p>Versioned <strong>skills</strong> (atomic how-tos) and <strong>playbooks</strong>
+          (composed flows) agents can read and follow.</p>
         </article>
         <article class="card">
           <div class="card-icon">◎</div>
           <h3>Strategic</h3>
           <p>Vision, mission, and OKRs that keep agents aligned to where the team is
           headed — long-horizon goals, not just facts.</p>
+        </article>
+        <article class="card">
+          <div class="card-icon">☰</div>
+          <h3>Work</h3>
+          <p>An org-wide task queue with projects, dependencies, and assignees — durable
+          work state agents and humans share.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="compression" class="section section-alt">
+      <div class="section-head">
+        <h2>Context compression, built in.</h2>
+        <p>Long chats shouldn't replay megabytes of tool output every turn. TeamShared
+        shrinks bulky history through MCP — no external proxy required.</p>
+      </div>
+      <div class="grid grid-3 steps">
+        <article class="step">
+          <span class="step-n">↯</span>
+          <h3>Automatic on MCP</h3>
+          <p>Server middleware normalizes fat tool responses from
+          <code>memory_recall</code> and friends before they hit your context window.</p>
+        </article>
+        <article class="step">
+          <span class="step-n">⊟</span>
+          <h3>Compress on demand</h3>
+          <p><code>context_compress</code> and <code>context_prepare</code> shrink message
+          history; originals stay retrievable via <code>context_retrieve</code> CCR refs.</p>
+        </article>
+        <article class="step">
+          <span class="step-n">→</span>
+          <h3>Turn-end commit</h3>
+          <p><code>context_commit</code> batches the assistant summary, durable fact writes,
+          and optional session close in one call.</p>
         </article>
       </div>
     </section>
@@ -422,14 +460,16 @@ def _landing_page_html() -> str:
         <article class="step">
           <span class="step-n">2</span>
           <h3>Recall before acting</h3>
-          <p>Agents call <code>memory_recall</code> early in a task to pull relevant
-          facts, episodes, and playbooks — grounded in your team's real history.</p>
+          <p>Agents call <code>memory_recall</code> or <code>memory_think</code> early in a
+          task to pull relevant facts, episodes, skills, and playbooks — grounded in your
+          team's real history.</p>
         </article>
         <article class="step">
           <span class="step-n">3</span>
           <h3>Remember what matters</h3>
-          <p>A call to <code>memory_remember</code> persists durable knowledge that every
-          teammate's agent can read by default. Working memory stays private.</p>
+          <p><code>memory_remember</code>, <code>memory_skill_set</code>, and
+          <code>context_commit</code> persist durable knowledge every teammate's agent can
+          read by default. Working memory stays per-session.</p>
         </article>
       </div>
     </section>
@@ -442,10 +482,12 @@ def _landing_page_html() -> str:
           <p>The team console is a server-rendered web app for browsing and curating the
           brain — no API client required. Sign in with your email and a one-time code.</p>
           <ul class="checks">
-            <li>Memory wiki — facts, episodes, and playbooks as a living knowledge base.</li>
-            <li>Memory explorer — search and inspect records across every pillar.</li>
-            <li>Agents &amp; keys — add agents, mint and revoke API keys.</li>
-            <li>Approvals — review captured memory before it goes live.</li>
+            <li>Memory wiki — curated topic pages, timeline, skills, and playbooks.</li>
+            <li>Work &amp; projects — org task queue with boards, dependencies, and assignees.</li>
+            <li>Strategy — vision, mission, and OKR cycles agents can recall.</li>
+            <li>Memory explorer — search, inspect records, and <strong>Ask the brain</strong>.</li>
+            <li>Ontology — entity types, link types, and governed actions.</li>
+            <li>People, orgs &amp; keys — multi-tenant OTP sign-in, invite teammates, mint API keys.</li>
           </ul>
           <div class="split-actions">
             <a class="btn btn-primary" href="/login">Open the console</a>
@@ -457,9 +499,9 @@ def _landing_page_html() -> str:
             <div class="window-body">
               <div class="wrow"><span class="pill pill-sem">semantic</span> Prefer pytest over unittest for new tests</div>
               <div class="wrow"><span class="pill pill-epi">episodic</span> Shipped multi-tenant orgs · 013_accounts.sql</div>
-              <div class="wrow"><span class="pill pill-proc">procedural</span> ship-pr · v4</div>
-              <div class="wrow"><span class="pill pill-sem">semantic</span> Prod host is teamshared.com</div>
-              <div class="wrow muted">recall("how do we release?") → 8 hits</div>
+              <div class="wrow"><span class="pill pill-proc">skill</span> ship-pr · atomic playbook building block</div>
+              <div class="wrow"><span class="pill pill-epi">work</span> Multi-tenant OTP console shipped</div>
+              <div class="wrow muted">memory_think("how do we release?") → cited answer</div>
             </div>
           </div>
         </div>

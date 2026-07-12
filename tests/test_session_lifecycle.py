@@ -208,7 +208,7 @@ async def test_session_ensure_appends_user_turn() -> None:
 
 @pytest.mark.asyncio
 async def test_session_append_reopen_preserves_repo_from_stale_meta() -> None:
-    facade, working, agent_state = _facade()
+    facade, working, _agent_state = _facade()
     working.get_metadata = AsyncMock(
         return_value={"agent": AGENT, "closed_at": "now", "repo": REPO, "github": "x/y", "topic": "t"},
     )

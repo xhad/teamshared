@@ -108,10 +108,7 @@ def _mock_transport(handler: Any) -> Any:
 
 def test_conversation_fingerprint_stable_and_distinct() -> None:
     msgs_a = [{"role": "system", "content": "s"}, {"role": "user", "content": "hello"}]
-    msgs_a_longer = msgs_a + [
-        {"role": "assistant", "content": "hi"},
-        {"role": "user", "content": "more"},
-    ]
+    msgs_a_longer = [*msgs_a, {"role": "assistant", "content": "hi"}, {"role": "user", "content": "more"}]
     msgs_b = [{"role": "user", "content": "different opener"}]
     assert conversation_fingerprint(msgs_a) == conversation_fingerprint(msgs_a_longer)
     assert conversation_fingerprint(msgs_a) != conversation_fingerprint(msgs_b)

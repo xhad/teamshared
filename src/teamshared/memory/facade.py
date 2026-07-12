@@ -11,6 +11,7 @@ stores.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from typing import Any, cast
@@ -845,10 +846,8 @@ class MemoryFacade:
                     "resumed": True,
                 }
             else:
-                try:
+                with contextlib.suppress(KeyError):
                     await self.working.close_session(principal.org_id, existing, distill=True)
-                except KeyError:
-                    pass
                 session_id = await self.working.open_session(
                     principal.org_id, agent, topic=topic, ttl=ttl, repo=repo, github=github
                 )

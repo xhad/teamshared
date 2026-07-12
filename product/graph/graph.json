@@ -1,23 +1,22 @@
 {
   "meta": {
-    "generated": "2026-07-11T22:45:00Z",
-    "sourceCount": 14,
+    "generated": "2026-07-12",
+    "sourceCount": 18,
     "sourceTypes": [
-      "research",
-      "prd",
-      "memo",
-      "doc"
+      "doc",
+      "research"
     ],
     "health": "developing",
     "notes": [
-      "Incremental graphify 2026-07-11: ingested ract-research.md (LucRoot/RACT agentic coding CLI).",
-      "Full graphify re-run 2026-07-11: ingested cognee-research.md, mex-research.md, palantir-foundry-ontology-research.md (previously missing from graph).",
+      "Graphify 2026-07-12: ingested shipped-state-2026-07-12.md (type: doc) \u2014 canonical shipped product state from codebase.",
+      "teamshared-product.md is a symlink to PRODUCT.md; read as untagged product context doc.",
       "Skipped sources/README.md (workspace boilerplate) and sources/interview-template.md (empty template, not evidence).",
-      "Fourteen sources: five internal product-intent docs + nine external research artifacts. Still zero user-interview or support-ticket evidence.",
-      "RACT classified Tier-3 adjacent agentic coding harness (MCP consumer); competes with Cursor surface, complements TeamShared MCP provider.",
-      "Internal sources (prod-plan.md, plan.md, memory-wiki-plan.md, teamshared-readme.md, teamshared-agents.md) lack YAML frontmatter; types inferred as prd/memo/doc.",
-      "Cognee classified Tier-1 direct memory competitor alongside GBrain. mex Tier-3 adjacent. Palantir ontology = architectural reference only.",
-      "consent-first capture removed from product (2026-06-19); memory-wiki-plan.md retains historical consent design."
+      "Eighteen sources: six internal product docs (incl. shipped-state) + nine external research artifacts + design-partner-tracker + clean-room-run. Still zero user-interview or support-ticket evidence.",
+      "Untagged sources (no YAML type): clean-room-run-2026-07-11.md, design-partner-tracker.md, memory-wiki-plan.md, plan.md, prod-plan.md, teamshared-agents.md, teamshared-product.md, teamshared-readme.md.",
+      "shipped-state supersedes prod-plan.md for what-is-built; prod-plan remains roadmap/aspirational.",
+      "Six memory pillars + optional graph, context compression MCP, work queue + projects, skills vs playbooks, ontology console, OTP multi-tenant console (no /app/approvals), distiller/curator workers, optional gateway \u2014 all evidenced from shipped-state + readme + agents.",
+      "Primary Tier-1 competitors reaffirmed: GBrain, Cognee. Adjacent: Headroom, Screenpipe, mex, RACT.",
+      "New assumptions from shipped-state gaps: approvals UI deferred, connectors not blocking, design-partner validation still needed, manual skills vs auto-mine."
     ]
   },
   "nodes": [
@@ -265,6 +264,10 @@
         {
           "source": "plan.md",
           "quote": "Every table containing customer data must include `org_id` or be clearly tenant-owned through a parent relation."
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "OTP email sign-in (no password). Self-service: any email provisions a private org; admins add teammates to share a team brain. Multi-org accounts with header org switcher."
         }
       ]
     },
@@ -291,6 +294,10 @@
         {
           "source": "prod-plan.md",
           "quote": "Fine-grained permission checks before retrieval"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Global `accounts` table; per-org `users` + RBAC (`org:admin`, etc.)"
         }
       ]
     },
@@ -302,6 +309,10 @@
         {
           "source": "plan.md",
           "quote": "Audit logging for every memory read/write/delete/share event"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Rate limits, signed queue jobs, audit log for reads/writes"
         }
       ]
     },
@@ -324,6 +335,10 @@
         {
           "source": "memory-wiki-plan.md",
           "quote": "One server-rendered web app \u2014 the **team mind** \u2014 where a human signs in to:"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Wiki | `/app/wiki` | Curated topic pages + timeline + playbooks"
         }
       ]
     },
@@ -335,6 +350,10 @@
         {
           "source": "memory-wiki-plan.md",
           "quote": "a `CuratorWorker` synthesizes all facts + recent episodes + relations for a subject into one canonical markdown article"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Curator \u2014 debounced queue; (re)synthesizes human-readable `wiki_pages` articles per subject"
         }
       ]
     },
@@ -346,17 +365,29 @@
         {
           "source": "prod-plan.md",
           "quote": "MCP-native interface"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "TeamShared is a shared agent memory MCP server for engineering teams."
         }
       ]
     },
     {
       "id": "feature-five-pillars",
       "type": "Feature",
-      "label": "Five memory pillars (working/semantic/episodic/procedural/strategic + work)",
+      "label": "Six memory pillars + optional graph (working/semantic/episodic/procedural/strategic/work + Neo4j)",
       "provenance": [
         {
           "source": "prod-plan.md",
           "quote": "TeamShared organizes memory across five pillars: Working, Semantic, Episodic, Procedural, and Strategic."
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Memory pillars (six + optional graph)"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Durable recall is shared across agents by default on semantic, episodic, procedural, skill, strategic, and work pillars"
         }
       ]
     },
@@ -366,8 +397,16 @@
       "label": "Server-side ToolCallCaptureMiddleware + /sessions/turns ingest (capture not hook-dependent)",
       "provenance": [
         {
-          "source": "AGENTS.md",
-          "quote": "a `ToolCallCaptureMiddleware` plus the `POST /sessions/turns` ingest endpoint record turn-by-turn natural-language conversation across harnesses (gated by `capture_enabled`), so capture does not depend on Cursor-only `.ts` hooks"
+          "source": "teamshared-agents.md",
+          "quote": "Conversation capture is server-side: a `ToolCallCaptureMiddleware` plus the `POST /sessions/turns` ingest endpoint record turn-by-turn natural-language conversation across harnesses (gated by `capture_enabled`), so capture does not depend on Cursor-only `.ts` hooks"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Server-side: `ToolCallCaptureMiddleware` records MCP tool calls per agent"
+        },
+        {
+          "source": "teamshared-agents.md",
+          "quote": "Conversation capture is server-side: a `ToolCallCaptureMiddleware` plus the `POST /sessions/turns` ingest endpoint"
         }
       ]
     },
@@ -1120,7 +1159,16 @@
       "type": "Assumption",
       "label": "Slack/GitHub/Notion/etc. connectors are the adoption lever",
       "risk": "GBrain already ingests meetings/email/tweets/voice via recipes. Connector roadmap may be table stakes, not differentiation.",
-      "provenance": []
+      "provenance": [
+        {
+          "source": "prod-plan.md",
+          "quote": "Integrations with external tools"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "External connectors (Slack, GitHub, Notion, Linear, \u2026) as first-class sync"
+        }
+      ]
     },
     {
       "id": "assumption-enterprise-security-gates-deals",
@@ -1474,9 +1522,14 @@
     {
       "id": "assumption-governance-differentiates-vs-cognee",
       "type": "Assumption",
-      "label": "TeamShared governance (work queue, OKRs, approvals, capture) differentiates vs Cognee without graph parity",
-      "risk": "If buyers pick memory on graph ontology depth or star count alone, Cognee wins without TeamShared needing governance features.",
-      "provenance": []
+      "label": "TeamShared governance (work queue, OKRs, ontology console) differentiates vs Cognee without graph parity",
+      "risk": "If buyers pick memory on graph ontology depth or star count alone, Cognee wins; approvals UI is also not shipped despite data model.",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Work queue + projects + strategic OKRs in the same brain"
+        }
+      ]
     },
     {
       "id": "comp-ract",
@@ -1587,6 +1640,318 @@
           "quote": "README positions directly against **Cursor, Claude Code, and Lovable** (IDE/hosted coding agents)"
         }
       ]
+    },
+    {
+      "id": "feature-context-compression-mcp",
+      "type": "Feature",
+      "label": "Context compression MCP tools (context_compress/prepare/normalize/retrieve + CCR refs)",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Context compression: `context_compress`, `context_prepare`, `context_normalize`, `context_retrieve` (CCR refs)"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Headroom-class problem: solved in-product via MCP `context_*` tools and middleware \u2014 no separate proxy required"
+        },
+        {
+          "source": "teamshared-readme.md",
+          "quote": "`context_compress` | Shrink tool outputs/logs before sending a prompt to an LLM"
+        }
+      ]
+    },
+    {
+      "id": "feature-work-queue",
+      "type": "Feature",
+      "label": "Org work queue with assignees, dependencies, followers",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Work | `/app/work` | Task queue; assign to people or agents"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "**Work** | Postgres | Org task queue with projects, dependencies, followers"
+        },
+        {
+          "source": "teamshared-readme.md",
+          "quote": "`work_list` | List org work items (status, assignee, mine, sort, exclude_closed)"
+        }
+      ]
+    },
+    {
+      "id": "feature-projects-boards",
+      "type": "Feature",
+      "label": "Asana-style projects with sections and status updates",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Projects | `/app/projects` | Asana-style boards with sections"
+        },
+        {
+          "source": "teamshared-readme.md",
+          "quote": "`project_create` | Create a project (Asana-style task container)"
+        }
+      ]
+    },
+    {
+      "id": "feature-skills-playbooks",
+      "type": "Feature",
+      "label": "Skills (atomic how-tos) vs playbooks (composed flows)",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "**Procedural** | Postgres | Versioned **skills** (atomic) and **playbooks** (composed flows)"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Skills | `/app/skills` | Atomic how-tos"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Playbooks | `/app/playbooks` | Compose skills into flows"
+        }
+      ]
+    },
+    {
+      "id": "feature-ontology-console",
+      "type": "Feature",
+      "label": "Ontology console for entity types, link types, governed actions",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Ontology | `/app/ontology` | Entity types, link types, governed actions"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Ontology: `memory_ontology_list`, `memory_ontology_propose_entity`, `memory_action_apply`"
+        }
+      ]
+    },
+    {
+      "id": "feature-otp-console",
+      "type": "Feature",
+      "label": "OTP email sign-in multi-tenant console at /app",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "OTP email sign-in (no password). Self-service: any email provisions a private org"
+        },
+        {
+          "source": "teamshared-readme.md",
+          "quote": "Sign in with a one-time passcode (OTP): enter your email, then type the short numeric code"
+        }
+      ]
+    },
+    {
+      "id": "feature-distiller-worker",
+      "type": "Feature",
+      "label": "Distiller worker: LLM summarizes closed sessions into durable memory",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Distiller \u2014 consumes Redis queue; LLM summarizes closed sessions into durable memory"
+        },
+        {
+          "source": "teamshared-agents.md",
+          "quote": "The distillation worker is a separate process that reads a Redis queue"
+        }
+      ]
+    },
+    {
+      "id": "feature-gateway-optional",
+      "type": "Feature",
+      "label": "Optional chat-completions gateway with pre-LLM compression + enrichment",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Gateway (opt-in): `POST /gateway/v1/chat/completions` runs pre-LLM compression + enrichment for harnesses with custom base URLs"
+        },
+        {
+          "source": "teamshared-readme.md",
+          "quote": "POST /gateway/v1/chat/completions is an OpenAI-compatible proxy"
+        }
+      ]
+    },
+    {
+      "id": "feature-shared-recall-default",
+      "type": "Feature",
+      "label": "Cross-agent shared recall by default on durable pillars",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Durable recall is shared across agents by default on semantic, episodic, procedural, skill, strategic, and work pillars"
+        },
+        {
+          "source": "teamshared-readme.md",
+          "quote": "By default `memory_recall` and `memory_episodes_list` are unscoped on durable pillars"
+        }
+      ]
+    },
+    {
+      "id": "feature-memory-think",
+      "type": "Feature",
+      "label": "memory_think synthesized answers with citations + gap analysis",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Recall & synthesis: `memory_recall`, `memory_think`, `memory_assemble_context`, `memory_entity_view`"
+        },
+        {
+          "source": "teamshared-readme.md",
+          "quote": "`memory_think` | Synthesized answer with citations + gap analysis (GBrain `think` parity)"
+        }
+      ]
+    },
+    {
+      "id": "feature-strategic-okrs",
+      "type": "Feature",
+      "label": "Strategic pillar: vision, mission, purpose, OKR cycles",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "**Strategic** | Postgres | Vision, mission, purpose, OKR cycles"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Strategy | `/app/strategy` | Vision, mission, OKRs"
+        }
+      ]
+    },
+    {
+      "id": "feature-optional-neo4j-graph",
+      "type": "Feature",
+      "label": "Optional Neo4j graph pillar for explicit entity relationships",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "**Graph** (optional) | Neo4j | Explicit entity relationships (`memory_graph_*`)"
+        },
+        {
+          "source": "teamshared-readme.md",
+          "quote": "Graph \u2014 optional Neo4j-backed explicit relationships (`memory_graph_*`)."
+        }
+      ]
+    },
+    {
+      "id": "feature-memory-explorer-think",
+      "type": "Feature",
+      "label": "Memory explorer with keyword search and Ask the brain",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Memory explorer | `/app/memory` | Keyword search + **Ask the brain** (`memory_think`)"
+        }
+      ]
+    },
+    {
+      "id": "feature-public-memory-dashboard",
+      "type": "Feature",
+      "label": "Public /memory status dashboard (no auth)",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "/memory | Public memory status dashboard (no auth)"
+        }
+      ]
+    },
+    {
+      "id": "feature-unified-install",
+      "type": "Feature",
+      "label": "Unified curl install.sh agent onboarding",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Unified `curl -fsSL https://teamshared.com/install.sh | bash`"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Cursor plugin bundles MCP wiring, recall rule, continual-learning hooks"
+        }
+      ]
+    },
+    {
+      "id": "insight-shipped-governance-differentiator",
+      "type": "Insight",
+      "label": "Shipped differentiation: governance + team workflow over raw graph depth",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "TeamShared differentiates on governance + team workflow, not raw graph depth"
+        }
+      ]
+    },
+    {
+      "id": "insight-approvals-ui-not-shipped",
+      "type": "Insight",
+      "label": "Human approvals console route not shipped despite pending_approval data model",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "There is no `/app/approvals` console route today. Guarded ingestion and `pending_approval` status exist in the data model"
+        }
+      ]
+    },
+    {
+      "id": "insight-connectors-not-shipped",
+      "type": "Insight",
+      "label": "External connectors (Slack, GitHub, Notion, Linear) not shipped as first-class sync",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "External connectors (Slack, GitHub, Notion, Linear, \u2026) as first-class sync"
+        }
+      ]
+    },
+    {
+      "id": "insight-clean-room-engineering-only",
+      "type": "Insight",
+      "label": "Clean-room activation validates engineering baseline, not design-partner fit",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Does not substitute design-partner validation."
+        }
+      ]
+    },
+    {
+      "id": "insight-tier1-competitors-gbrain-cognee",
+      "type": "Insight",
+      "label": "Primary Tier-1 memory competitors in corpus: GBrain and Cognee",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Primary Tier-1 memory competitors in corpus: GBrain, Cognee."
+        }
+      ]
+    },
+    {
+      "id": "assumption-approvals-ui-deferred",
+      "type": "Assumption",
+      "label": "Teams can govern agent writes without a human approvals console UI",
+      "provenance": [],
+      "risk": "If buyers require in-console review queues for guarded ingestion, the missing /app/approvals route blocks enterprise adoption despite the data model existing."
+    },
+    {
+      "id": "assumption-connectors-not-blocking-adoption",
+      "type": "Assumption",
+      "label": "MCP-native memory is sufficient without first-class external connector sync",
+      "provenance": [],
+      "risk": "If teams expect Slack/GitHub/Notion as first-class sync (listed as not shipped), adoption stalls at \"another MCP server\" without integration breadth."
+    },
+    {
+      "id": "assumption-design-partner-validation-needed",
+      "type": "Assumption",
+      "label": "Engineering clean-room pass is enough to start design-partner outreach",
+      "provenance": [],
+      "risk": "Clean-room activation passed in ~10\u201311 minutes but explicitly does not substitute design-partner validation \u2014 market fit remains unproven."
+    },
+    {
+      "id": "assumption-manual-skills-sufficient",
+      "type": "Assumption",
+      "label": "Manual skill/playbook authoring beats auto-trace mining for target buyers",
+      "provenance": [],
+      "risk": "Shipped-state lists auto-trace-to-skill mining (Hivemind-style) as not shipped; if buyers expect skills to compound automatically, manual authoring feels inferior."
     }
   ],
   "edges": [
@@ -2464,7 +2829,7 @@
     },
     {
       "id": "e-ract-code-rot-pain",
-      "type": "addresses",
+      "type": "supports",
       "from": "comp-ract",
       "to": "pain-code-rot",
       "provenance": [
@@ -2488,7 +2853,7 @@
     },
     {
       "id": "e-ract-root-knot-unsigned",
-      "type": "addresses",
+      "type": "supports",
       "from": "feature-ract-root-knot",
       "to": "pain-unsigned-agent-code",
       "provenance": [
@@ -2531,6 +2896,202 @@
         {
           "source": "ract-research.md",
           "quote": "Not Tier 1 company brain. Potential **complement**: RACT harness + TeamShared MCP for org recall across repos."
+        }
+      ]
+    },
+    {
+      "id": "e-shipped-pillars-supports-recall",
+      "type": "supports",
+      "from": "feature-five-pillars",
+      "to": "feature-shared-recall-default",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Durable recall is shared across agents by default on semantic, episodic, procedural, skill, strategic, and work pillars"
+        }
+      ]
+    },
+    {
+      "id": "e-context-compression-supports-headroom-insight",
+      "type": "supports",
+      "from": "feature-context-compression-mcp",
+      "to": "insight-headroom-orthogonal-layer",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Headroom-class problem: solved in-product via MCP `context_*` tools and middleware \u2014 no separate proxy required"
+        }
+      ]
+    },
+    {
+      "id": "e-work-queue-supports-governance",
+      "type": "supports",
+      "from": "feature-work-queue",
+      "to": "insight-shipped-governance-differentiator",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Work queue + projects + strategic OKRs in the same brain"
+        }
+      ]
+    },
+    {
+      "id": "e-ontology-supports-governance",
+      "type": "supports",
+      "from": "feature-ontology-console",
+      "to": "insight-shipped-governance-differentiator",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Human console (wiki, ontology, memory explorer) alongside MCP"
+        }
+      ]
+    },
+    {
+      "id": "e-shipped-contradicts-connectors",
+      "type": "contradicts",
+      "from": "insight-connectors-not-shipped",
+      "to": "feature-connectors",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "External connectors (Slack, GitHub, Notion, Linear, \u2026) as first-class sync"
+        }
+      ]
+    },
+    {
+      "id": "e-approvals-insight-assumes",
+      "type": "assumes",
+      "from": "insight-approvals-ui-not-shipped",
+      "to": "assumption-approvals-ui-deferred",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "There is no `/app/approvals` console route today"
+        }
+      ]
+    },
+    {
+      "id": "e-connectors-not-shipped-assumes",
+      "type": "assumes",
+      "from": "insight-connectors-not-shipped",
+      "to": "assumption-connectors-not-blocking-adoption",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "External connectors (Slack, GitHub, Notion, Linear, \u2026) as first-class sync"
+        }
+      ]
+    },
+    {
+      "id": "e-clean-room-assumes-design-partner",
+      "type": "assumes",
+      "from": "insight-clean-room-engineering-only",
+      "to": "assumption-design-partner-validation-needed",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Does not substitute design-partner validation."
+        }
+      ]
+    },
+    {
+      "id": "e-distiller-supports-curator",
+      "type": "supports",
+      "from": "feature-distiller-worker",
+      "to": "feature-curator",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Distiller \u2014 consumes Redis queue; LLM summarizes closed sessions into durable memory"
+        },
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Curator \u2014 debounced queue; (re)synthesizes human-readable `wiki_pages` articles per subject"
+        }
+      ]
+    },
+    {
+      "id": "e-skills-supports-need",
+      "type": "supports",
+      "from": "feature-skills-playbooks",
+      "to": "need-company-executable-skills",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Skills/playbooks as first-class procedural memory"
+        }
+      ]
+    },
+    {
+      "id": "e-gateway-supports-compression",
+      "type": "supports",
+      "from": "feature-gateway-optional",
+      "to": "feature-context-compression-mcp",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Gateway (opt-in): `POST /gateway/v1/chat/completions` runs pre-LLM compression + enrichment"
+        }
+      ]
+    },
+    {
+      "id": "e-otp-supports-multi-tenant",
+      "type": "supports",
+      "from": "feature-otp-console",
+      "to": "feature-multi-tenant",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Self-service: any email provisions a private org; admins add teammates to share a team brain"
+        }
+      ]
+    },
+    {
+      "id": "e-shipped-gbrain-tier1",
+      "type": "supports",
+      "from": "insight-tier1-competitors-gbrain-cognee",
+      "to": "comp-gbrain",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Primary Tier-1 memory competitors in corpus: GBrain, Cognee."
+        }
+      ]
+    },
+    {
+      "id": "e-shipped-cognee-tier1",
+      "type": "supports",
+      "from": "insight-tier1-competitors-gbrain-cognee",
+      "to": "comp-cognee",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Primary Tier-1 memory competitors in corpus: GBrain, Cognee."
+        }
+      ]
+    },
+    {
+      "id": "e-manual-skills-assumes-hivemind",
+      "type": "assumes",
+      "from": "feature-skills-playbooks",
+      "to": "assumption-manual-skills-sufficient",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Auto-trace-to-skill mining (Hivemind-style)"
+        }
+      ]
+    },
+    {
+      "id": "e-headroom-competes-context-compression",
+      "type": "competes-with",
+      "from": "comp-headroom",
+      "to": "feature-context-compression-mcp",
+      "provenance": [
+        {
+          "source": "shipped-state-2026-07-12.md",
+          "quote": "Context compression built into MCP (vs external Headroom proxy)"
         }
       ]
     }

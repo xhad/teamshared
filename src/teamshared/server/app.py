@@ -49,6 +49,10 @@ from teamshared.server.compress_api import handle_compress, handle_compress_retr
 from teamshared.server.console import register_console_routes
 from teamshared.server.console_csrf import ConsoleCsrfCookieMiddleware
 from teamshared.server.dashboard import handle_memory_dashboard
+from teamshared.server.gateway_api import (
+    handle_gateway_chat_completions,
+    handle_gateway_models,
+)
 from teamshared.server.health import check_components
 from teamshared.server.idempotency import RedisIdempotencyGuard
 from teamshared.server.install_api import (
@@ -57,10 +61,6 @@ from teamshared.server.install_api import (
     handle_install_sh,
     handle_plugin_bundle,
     handle_uninstall_sh,
-)
-from teamshared.server.gateway_api import (
-    handle_gateway_chat_completions,
-    handle_gateway_models,
 )
 from teamshared.server.llm_prepare_api import handle_llm_prepare
 from teamshared.server.mcp_output_middleware import ToolOutputNormalizeMiddleware

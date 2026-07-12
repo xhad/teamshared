@@ -29,8 +29,8 @@ from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 
 from teamshared import __version__
-from teamshared.clients.agent_setup import canonical_install_script_url
 from teamshared.admin.service import AdminService
+from teamshared.clients.agent_setup import canonical_install_script_url
 from teamshared.config import Settings
 from teamshared.identity.principal import Principal
 from teamshared.identity.provisioning import signup_org

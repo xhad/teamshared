@@ -36,9 +36,7 @@ class AuditReport:
 def _ok(data: Any) -> bool:
     if data is None:
         return False
-    if isinstance(data, dict) and data.get("error"):
-        return False
-    return True
+    return not (isinstance(data, dict) and data.get("error"))
 
 
 def unwrap_tool_payload(data: Any) -> Any:
@@ -127,7 +125,7 @@ async def _timed(client: Client, tool: str, args: dict[str, Any] | None = None) 
     except ToolError as exc:
         ms = int((time.perf_counter() - start) * 1000)
         return None, ms, f"ToolError: {exc}"
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         ms = int((time.perf_counter() - start) * 1000)
         return None, ms, f"{type(exc).__name__}: {exc}"
 
@@ -163,7 +161,7 @@ async def run_audit(url: str, token: str, repo: str, github: str) -> AuditReport
             if expect is not None:
                 try:
                     ok = expect(data)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     report.add(tool, "fail", f"expect failed: {exc}", ms)
                     return data
                 if not ok:
@@ -172,7 +170,7 @@ async def run_audit(url: str, token: str, repo: str, github: str) -> AuditReport
                             if warn_if(unwrap_tool_payload(data)):
                                 report.add(tool, "warn", str(data)[:200], ms)
                                 return data
-                        except Exception:  # noqa: BLE001
+                        except Exception:
                             pass
                     report.add(tool, "fail", str(data)[:200], ms)
                     return data
@@ -180,13 +178,13 @@ async def run_audit(url: str, token: str, repo: str, github: str) -> AuditReport
             return data
 
         # --- infra / meta ---
-        health = await test("health", expect=lambda d: d.get("status") in ("ok", "degraded"))
+        await test("health", expect=lambda d: d.get("status") in ("ok", "degraded"))
         await test("version", {"installed_rule_version": "1.8.0"}, expect=lambda d: "rule_version" in d)
         await test("memory_tools_catalog", {"scope": "memory", "tier": "core"}, expect=lambda d: d.get("count", 0) > 0)
 
         # --- context ---
         big_json = json.dumps({"rows": [{"id": i, "payload": "x" * 200} for i in range(40)]})
-        norm = await test(
+        await test(
             "context_normalize",
             {"tool_name": "Shell", "output": big_json},
             expect=lambda d: "output" in d,

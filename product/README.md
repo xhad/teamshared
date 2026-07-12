@@ -12,41 +12,51 @@ thinking sharper.
 ```
 product/
 ├── sources/      raw research (one file per artifact); graphify reads these
-│                 currently: symlinks to the repo's internal planning docs
+│                 symlinks to README.md, AGENTS.md, PRODUCT.md, prod-plan.md
 ├── engine/
 │   └── graph-schema.json   the contract graphify output must satisfy
 ├── graph/
 │   ├── graph.json          the evidence graph (schema-valid, provenance on every node/edge)
 │   └── graph.md            human-readable summary + health banner
 ├── knowledge/
-│   └── assumption-audit.md the 8 load-bearing bets ranked by decision-at-risk
+│   └── assumption-audit.md the load-bearing bets ranked by decision-at-risk
 └── README.md
 ```
 
-## Current state
+## Current state (2026-07-12)
 
-The graph was built from **internal product intent** (`prod-plan.md`,
-`plan.md`, `memory-wiki-plan.md`, plus `README.md`/`AGENTS.md`) and **external
-signals** (`company-brain-yc-rfs.md`, `gbrain-competitor-research.md`,
-`shared-brain-landscape-2026.md`, `palantir-foundry-ontology-research.md`,
-`headroom-research.md`, `screenpipe-research.md`, `mex-research.md`,
-`cognee-research.md`, `ract-research.md`). Corpus health is still **thin** — there is no captured
-user research yet. The headline finding: the plan is detailed, but the core bets
-have **zero user evidence**. GBrain and Cognee are the primary Tier-1 memory
-competitors (`knowledge/gbrain-competitor-analysis.md`,
-`knowledge/cognee-competitor-analysis.md` — graph+vector platform ~27.5k stars,
-MCP + Cognee Cloud); Headroom is
-the main **adjacent** context-compression layer (`knowledge/headroom-architecture-analysis.md`
-— orthogonal to TeamShared, not a brain replacement); Screenpipe is the main
-**adjacent** ambient desktop capture layer (`knowledge/screenpipe-competitor-analysis.md`
-— local screen+audio memory + MCP, not a multi-tenant org brain); Palantir Foundry
-ontology is the architectural reference for a governed entity/action layer
-(`knowledge/palantir-ontology-analysis.md`); mex is the main **adjacent** repo-scoped
-markdown scaffold + drift CLI (`knowledge/mex-competitor-analysis.md` — git-local
-ROUTER/patterns, not a multi-tenant org brain); RACT is the main **adjacent**
-CLI agentic coding harness with anti-rot verifiers (`knowledge/ract-competitor-analysis.md`
-— MCP consumer, competes with Cursor surface, complements TeamShared MCP). See
-`knowledge/assumption-audit.md`.
+**Canonical shipped description:** `sources/shipped-state-2026-07-12.md` — what the
+codebase actually ships today (six memory pillars, context compression, work/projects,
+ontology console, OTP multi-tenant console, curator/distiller workers). Use this
+as the source of truth for product messaging; `prod-plan.md` remains roadmap.
+
+The graph was last built from **18 sources**: six internal docs (including shipped
+state, README, AGENTS, PRODUCT) plus nine external research artifacts (YC RFS,
+GBrain, shared-brain-landscape-2026, Headroom, Screenpipe, mex, Palantir
+ontology, Cognee, RACT). Corpus health is **developing** — there is still **no
+captured user research** (interviews, tickets, support threads).
+
+**Graph stats:** 165 nodes · 94 edges · 17 assumptions surfaced.
+
+**Headline finding:** The product is substantially built (clean-room engineering
+baseline passed 2026-07-11), but the core bets still have **zero user evidence**.
+GBrain and Cognee are the primary Tier-1 memory competitors; TeamShared's shipped
+differentiation is governance + team workflow (work queue, OKRs, curated wiki,
+ontology, context compression) — not graph depth alone. See
+`knowledge/assumption-audit.md` and `graph/graph.md`.
+
+**Competitor analyses** (mogkit `discovery-query` + `tradeoff-frame`):
+
+| Adjacent / Tier-1 | Knowledge doc |
+|---|---|
+| GBrain | `knowledge/gbrain-competitor-analysis.md` |
+| Cognee | `knowledge/cognee-competitor-analysis.md` |
+| Headroom (compression) | `knowledge/headroom-architecture-analysis.md` |
+| Screenpipe (desktop capture) | `knowledge/screenpipe-competitor-analysis.md` |
+| mex (repo scaffold) | `knowledge/mex-competitor-analysis.md` |
+| RACT (coding harness) | `knowledge/ract-competitor-analysis.md` |
+| Palantir ontology (reference) | `knowledge/palantir-ontology-analysis.md` |
+| Landscape | `knowledge/shared-brain-landscape-analysis.md` |
 
 ## How to move it forward
 
@@ -58,9 +68,17 @@ CLI agentic coding harness with anti-rot verifiers (`knowledge/ract-competitor-a
 3. **Discovery wedge** (graph-based): `graphify` → `assumption-audit` →
    `discovery-query` → `interview-guide` → `synthesis-map` → `prd-interrogate`.
 4. **Standalone skills** (no graph needed) that fit TeamShared right now:
-   - `metrics-tree` — TeamShared has no measurable outcome; give it one.
-   - `narrative-review` — pressure-test `prod-plan.md` as an exec would.
+   - `metrics-tree` — TeamShared has no measurable outcome; give it one (`knowledge/metrics-tree.md`).
+   - `narrative-review` — pressure-test `prod-plan.md` as an exec would (`knowledge/narrative-review.md`).
    - `spec-stress-test` — red-team the capture/ingestion spec.
    - `tradeoff-frame` — frame shared-by-default vs isolated-by-default honestly.
 
-Run a playbook by fetching it from teamshared: `memory_procedure_get(name="graphify")`.
+Run a playbook by fetching it from teamshared: `memory_skill_get(name="graphify")`.
+
+## Syncing product docs with the codebase
+
+When shipping significant features, update `sources/shipped-state-2026-07-12.md`
+(or add a dated successor), then re-run `graphify` so the evidence graph and
+`graph.md` health banner stay aligned with reality. The public landing page lives
+in `src/teamshared/server/token_api.py` (`_landing_page_html`) — keep it in sync
+with shipped-state.

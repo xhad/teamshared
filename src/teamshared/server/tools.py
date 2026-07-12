@@ -1752,7 +1752,7 @@ def register_tools(mcp: Any) -> None:
         object_entity: Annotated[
             str | None, Field(description="Target entity")
         ] = None,
-        object: Annotated[  # noqa: A002 - MCP-facing alias
+        object: Annotated[
             str | None, Field(description="Alias for object_entity")
         ] = None,
         weight: Annotated[float, Field(ge=0.0, le=10.0)] = 1.0,
