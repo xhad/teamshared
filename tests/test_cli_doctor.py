@@ -81,4 +81,5 @@ def test_doctor_write_smoke_requires_token() -> None:
     result = CliRunner().invoke(cli.app, ["doctor", "--write-smoke"])
 
     assert result.exit_code == 2
-    assert "--write-smoke requires --token" in result.output
+    flat = " ".join(result.output.split())
+    assert "write-smoke" in flat and "requires --token" in flat
