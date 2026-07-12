@@ -48,6 +48,7 @@ from teamshared.memory.types import (
     TimeRange,
 )
 from teamshared.memory.wiki import slugify
+from teamshared.memory.work import PartyType
 from teamshared.memory.working import WorkingMemory
 from teamshared.playbook.compose import (
     expand_playbook_skills,
@@ -76,6 +77,22 @@ _GITHUB_BOOST = 1.3
 
 # Agent-state key holding the active working-memory session for one repo/chat.
 _ACTIVE_SESSION_KEY = "conversation/active-session"
+
+
+def _party_type(principal_type: str, *, fallback: PartyType = "agent") -> PartyType:
+    if principal_type == "user":
+        return "user"
+    if principal_type == "agent":
+        return "agent"
+    return fallback
+
+
+def _optional_party_type(principal_type: str) -> PartyType | None:
+    if principal_type == "user":
+        return "user"
+    if principal_type == "agent":
+        return "agent"
+    return None
 
 
 class MemoryFacade:
@@ -1526,7 +1543,7 @@ class MemoryFacade:
             assignee_id=assignee_id,
             assignee_email=assignee_email,
         )
-        requester_type = writer.type if writer.type in {"user", "agent"} else None
+        requester_type = _optional_party_type(writer.type)
         requester_id = writer.id if requester_type else None
         init_uuid = UUID(initiative_id) if initiative_id else None
         # Work creation is direct for everyone — humans and agents alike. New
@@ -1540,7 +1557,7 @@ class MemoryFacade:
             tags=tags,
             work_status=work_status,  # type: ignore[arg-type]
             priority=priority,  # type: ignore[arg-type]
-            requester_type=requester_type,  # type: ignore[arg-type]
+            requester_type=requester_type,
             requester_id=requester_id,
             assignee_type=resolved_assignee_type,  # type: ignore[arg-type]
             assignee_id=resolved_assignee_id,
@@ -1730,11 +1747,11 @@ class MemoryFacade:
         findings = scan_pii(body_md)
         if has_hard_secret(findings):
             raise IngestionRejected("comment contains a hard secret and was not stored")
-        author_type = writer.type if writer.type in {"user", "agent"} else "agent"
+        author_type = _party_type(writer.type)
         row = await self.services.work.add_comment(
             principal.org_id,
             UUID(work_id),
-            author_type=author_type,  # type: ignore[arg-type]
+            author_type=author_type,
             author_id=writer.id,
             body_md=body_md,
         )
@@ -1921,13 +1938,13 @@ class MemoryFacade:
         )
         ctx = self._ctx(writer)
         await ctx.authorizer.require(ctx.principal, Permissions.PROJECT_WRITE)
-        author_type = writer.type if writer.type in {"user", "agent"} else "agent"
+        author_type = _party_type(writer.type)
         row = await self.services.projects.post_status(
             principal.org_id,
             UUID(project_id),
             state=state,  # type: ignore[arg-type]
             body_md=body_md,
-            author_type=author_type,  # type: ignore[arg-type]
+            author_type=author_type,
             author_id=writer.id,
         )
         return _serialize_work(row)
