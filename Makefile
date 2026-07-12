@@ -27,6 +27,13 @@ health :; curl -fsS http://localhost:8077/health | jq
 smoke-all :; $(PYTHON) scripts/smoke_all_tools.py
 # A/B eval: same agent with vs without teamshared memory (see eval/agentic/README.md).
 eval-agentic :; $(PYTHON) eval/agentic/runner.py --trials 3
+# Conversation replay: token cost baseline vs teamshared per turn (see eval/conversation_replay.example.yaml).
+eval-conversation :; $(PYTHON) eval/conversation_replay.py eval/conversation_replay.example.yaml
+# Run bundled fixtures and open comparison dashboard (eval/conversation_replay/results/dashboard.html).
+eval-conversation-report :; $(PYTHON) eval/conversation_replay_report.py
+eval-conversation-report-http :; $(PYTHON) eval/conversation_replay_report.py --mode http
+open-conversation-dashboard : eval-conversation-report
+	@open eval/conversation_replay/results/dashboard.html
 smoke-cross-agent :; $(PYTHON) scripts/smoke_cross_agent.py
 
 # Quality gates (same commands CI runs). `make check` is the pre-push gate.
@@ -36,4 +43,4 @@ lint :; $(PYTHON) -m ruff check src tests scripts eval
 typecheck :; $(PYTHON) -m mypy src
 check : lint typecheck test
 
-.PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed reembed token-mint invite-create health eval-agentic smoke-all smoke-cross-agent test test-integration lint typecheck check
+.PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed reembed token-mint invite-create health eval-agentic eval-conversation eval-conversation-report eval-conversation-report-http open-conversation-dashboard smoke-all smoke-cross-agent test test-integration lint typecheck check

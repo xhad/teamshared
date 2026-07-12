@@ -1,0 +1,47 @@
+# Example multi-turn conversation for eval/conversation_replay.py
+#
+# Run offline (compression only):
+#   python eval/conversation_replay.py eval/conversation_replay.example.yaml
+#
+# Run against a seeded org (compression + enrichment + recall probe):
+#   export TEAMSHARED_EVAL_URL=https://teamshared.com/mcp/
+#   export TEAMSHARED_EVAL_TOKEN=tsk_...
+#   python eval/conversation_replay.py --mode http eval/conversation_replay.example.yaml
+
+name: integration-test-thread
+
+repo: Users-chad-code-teamshared
+github: xhad/teamshared
+
+# Checked against memory arm additional_context + messages (http mode)
+# or final raw history (engine mode — usually fails unless you embed the fact).
+context_expect_any:
+  - "5433"
+
+# Live recall probe (http mode only; skipped in engine mode)
+recall:
+  query: integration tests postgres port env file
+  expect_any:
+    - "5433"
+    - "--env-file"
+
+# Optional agent scoring when using --agent (same shape as eval/agentic/tasks.yaml)
+agent_expect:
+  - ["5433"]
+  - ["--env-file", "make"]
+  - ["integration"]
+
+turns:
+  - user: >-
+      How do I run this repo's integration tests on this machine?
+      Be specific about ports and env files.
+  - assistant: I'll search the repo and check team memory.
+  - tool:
+      name: Shell
+      generate: grep_json_500
+  - tool:
+      name: MCP:memory_recall
+      generate: memory_recall_fat
+  - assistant: >-
+      Integration tests need compose Postgres/Redis; host Postgres is often on 5433
+      when 5432 is taken. Always pass --env-file .env with docker compose.

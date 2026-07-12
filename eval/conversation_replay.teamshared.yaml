@@ -1,0 +1,70 @@
+# Realistic multi-turn teamshared debugging session (tribal knowledge + follow-up).
+#
+# Offline token replay:
+#   python eval/conversation_replay.py eval/conversation_replay.teamshared.yaml --json --out eval/conversation_replay/results/
+#
+# Full stack (recall + enrichment + dashboard):
+#   export TEAMSHARED_EVAL_URL=https://teamshared.com/mcp/
+#   export TEAMSHARED_EVAL_TOKEN=tsk_...
+#   python eval/conversation_replay_report.py
+
+name: teamshared-tribal-knowledge-debug
+
+repo: Users-chad-code-teamshared
+github: xhad/teamshared
+
+description: >-
+  Two-turn debugging thread: Mem0 kwarg contract + shared-brain caller/agent
+  split, then a follow-up on the legacy distance-score flip in semantic recall.
+
+recall:
+  query: mem0 search filters top_k caller agent shared brain
+  expect_any:
+    - "filters"
+    - "top_k"
+    - "caller"
+
+context_expect_any:
+  - "filters"
+  - "caller"
+
+agent_expect:
+  - ["filters"]
+  - ["top_k"]
+  - ["distance", "threshold"]
+  - ["cross-agent", "shared brain", "caller"]
+
+turns:
+  - user: >-
+      I'm fixing memory_recall in teamshared. What Mem0 Memory.search() and
+      Memory.get_all() kwarg mistakes must I avoid, and why must agent= stay
+      separate from caller= on read paths?
+  - assistant: I'll recall team notes first, then grep semantic.py and the tests.
+  - tool:
+      name: Shell
+      generate: grep_json_300
+  - tool:
+      name: MCP:memory_recall
+      generate: memory_recall_fat
+  - assistant: >-
+      Mem0 rejects top-level user_id and limit on search/get_all — pass
+      filters={"user_id": ...} and top_k instead. memory_recall keeps agent=
+      as an opt-in filter while caller= scopes working memory only.
+  - user: >-
+      Follow-up: semantic recall sometimes drops the closest matches. Why does
+      that happen in Mem0/pgvector land and what workaround does semantic.py use?
+  - assistant: Checking score_and_rank threshold behavior and the 1-distance flip.
+  - tool:
+      name: Shell
+      generate: grep_json_500
+  - tool:
+      name: Shell
+      generate: error_log_200
+  - tool:
+      name: Read
+      output: |
+        # teamshared/memory/semantic.py (excerpt)
+        # Legacy Mem0 returns cosine distance in score (smaller = better) but
+        # score_and_rank treats it as similarity and drops close matches below
+        # threshold=0.1. Workaround: threshold=0, high top_k over-fetch, flip
+        # via 1 - distance at the boundary. See tests/test_semantic_mem0_calls.py.
