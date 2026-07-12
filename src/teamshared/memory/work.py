@@ -153,6 +153,7 @@ class WorkStore:
         limit: int = 50,
         project_id: UUID | None = None,
         offset: int = 0,
+        created_by: str | None = None,
     ) -> list[dict[str, Any]]:
         clauses = ["status = %s"]
         params: list[Any] = [approval_status]
@@ -167,13 +168,25 @@ class WorkStore:
             )
             params.append(str(project_id))
         if assignee_type is not None:
-            clauses.append("assignee_type = %s")
+            assignee_clauses = ["assignee_type = %s"]
             params.append(assignee_type)
             if assignee_id is not None:
-                clauses.append("assignee_id = %s")
+                assignee_clauses.append("assignee_id = %s")
                 params.append(str(assignee_id))
             else:
-                clauses.append("assignee_id IS NULL")
+                assignee_clauses.append("assignee_id IS NULL")
+            if created_by is not None:
+                # "mine": assigned to me OR created by me (agent principals
+                # share one org-bound id, so created_by is their identity).
+                clauses.append(
+                    f"(({' AND '.join(assignee_clauses)}) OR created_by = %s)"
+                )
+                params.append(created_by)
+            else:
+                clauses.extend(assignee_clauses)
+        elif created_by is not None:
+            clauses.append("created_by = %s")
+            params.append(created_by)
         if initiative_id is not None:
             clauses.append("initiative_id = %s")
             params.append(str(initiative_id))
@@ -409,9 +422,14 @@ class WorkStore:
             item["assignee_label"] = _resolve_label(
                 item.get("assignee_type"), item.get("assignee_id"), agent_names, user_labels,
             )
-            item["requester_label"] = _resolve_label(
-                item.get("requester_type"), item.get("requester_id"), agent_names, user_labels,
-            )
+            # Agent principals are org-bound (id == org_id), so the stored
+            # created_by display label is the meaningful requester identity.
+            if item.get("requester_type") == "agent" and item.get("created_by"):
+                item["requester_label"] = item["created_by"]
+            else:
+                item["requester_label"] = _resolve_label(
+                    item.get("requester_type"), item.get("requester_id"), agent_names, user_labels,
+                )
             init_id = item.get("initiative_id")
             item["initiative_title"] = (
                 initiative_titles.get(str(init_id)) if init_id else None

@@ -1,12 +1,12 @@
 # TeamShared — discovery graph
 
-> **CORPUS HEALTH: DEVELOPING.** Thirteen sources: five internal product-intent docs
-> plus eight external research artifacts (YC RFS, GBrain, shared-brain-landscape-2026,
-> Headroom, Screenpipe, **mex**, **Palantir ontology**, **Cognee**). There is still
+> **CORPUS HEALTH: DEVELOPING.** Fourteen sources: five internal product-intent docs
+> plus nine external research artifacts (YC RFS, GBrain, shared-brain-landscape-2026,
+> Headroom, Screenpipe, **mex**, **Palantir ontology**, **Cognee**, **RACT**). There is still
 > **zero user-research evidence** — no interviews, tickets, or support threads.
 
-Generated 2026-07-11. Sources: 13. Types: research, prd, memo, doc.
-Nodes: 131 · Edges: 72 · Assumptions surfaced: 13.
+Generated 2026-07-11. Sources: 14. Types: research, prd, memo, doc.
+Nodes: 141 · Edges: 78 · Assumptions surfaced: 13.
 
 ## Segments (7)
 
@@ -35,7 +35,7 @@ Nodes: 131 · Edges: 72 · Assumptions surfaced: 13.
 | Recall anything seen or heard on the desktop without manual logging | 1 |
 | **Memory layer linking documents across LLM calls** *new* | 1 |
 
-## Pains (10)
+## Pains (12)
 
 | Pain | Sources |
 |---|---|
@@ -49,8 +49,10 @@ Nodes: 131 · Edges: 72 · Assumptions surfaced: 13.
 | **LLM calls are stateless — no memory of prior requests** *new* | 1 |
 | **Agent instruction files drift from the real codebase** *new* | 1 |
 | **Every agent session starts cold with a prompt dump** *new* | 1 |
+| **AI-assisted code rot (duplication, dead code)** *new* | 1 |
+| **Agent loops compound unsigned code changes** *new* | 1 |
 
-## Features (50)
+## Features (54)
 
 | Feature | Sources |
 |---|---|
@@ -94,8 +96,12 @@ Nodes: 131 · Edges: 72 · Assumptions surfaced: 13.
 | **mex-mcp draft (PR #84)** *new* | 1 |
 | **Palantir action types (governed writes)** *new* | 1 |
 | **Palantir object/link types + interfaces** *new* | 1 |
+| **RACT Root Knot continuity sentinel** *new* | 1 |
+| **RACT anti-rot CLI (consolidate, auction, fence)** *new* | 1 |
+| **RACT signed run receipts** *new* | 1 |
+| **RACT MCP consumer (rootact.yaml)** *new* | 1 |
 
-## Competitors (22)
+## Competitors (23)
 
 | Entity | Sources | Tier |
 |---|---|---|
@@ -121,14 +127,17 @@ Nodes: 131 · Edges: 72 · Assumptions surfaced: 13.
 | Hindsight-style distillation | 1 | — |
 | Headroom — context compression, 41k★ (adjacent) | 1 | Tier 3 |
 | Screenpipe — ambient desktop capture + MCP (adjacent) | 1 | Tier 3 |
+| **RACT (LucRoot/RACT)** — CLI coding harness + anti-rot, ~3★ *new* | 1 | Tier 3 |
 
 > **Cognee** joins **GBrain** as a Tier-1 direct memory competitor with comparable
 > OSS scale (~27.5k vs ~23k stars) and managed cloud GTM. See
 > `knowledge/cognee-competitor-analysis.md`. **mex** is Tier-3 repo-scaffold
 > adjacent — see `knowledge/mex-competitor-analysis.md`. **Palantir Foundry
 > ontology** is architectural reference only — see `knowledge/palantir-ontology-analysis.md`.
+> **RACT** is Tier-3 adjacent coding harness (MCP consumer) — see
+> `knowledge/ract-competitor-analysis.md`.
 
-## Insights (18)
+## Insights (21)
 
 | Insight | Sources |
 |---|---|
@@ -150,6 +159,9 @@ Nodes: 131 · Edges: 72 · Assumptions surfaced: 13.
 | **mex is Tier-3 repo-scoped adjacent** *new* | 1 |
 | **mex complements TeamShared (repo hygiene vs org recall)** *new* | 1 |
 | **Palantir ontology is architectural reference, not memory competitor** *new* | 1 |
+| **RACT is Tier-3 adjacent coding harness** *new* | 1 |
+| **RACT + TeamShared MCP is complementary (consumer + provider)** *new* | 1 |
+| **RACT competes with Cursor harness surface** *new* | 1 |
 
 ## Contradictions (1)
 

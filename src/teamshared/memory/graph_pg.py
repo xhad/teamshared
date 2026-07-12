@@ -81,17 +81,23 @@ class PostgresGraphStore:
             )
             rows = await cur.fetchall()
 
-        return [
-            MemoryRecord(
-                id=f"graph:{r[0]}",
-                pillar="semantic",
-                content=f"{name} --[{r[1]}]--> {r[0]}",
-                subject=r[0],
-                metadata={"hops": r[2], "predicates": [r[1]]},
-                score=1.0,
+        seen: set[str] = set()
+        out: list[MemoryRecord] = []
+        for r in rows:
+            if r[0] in seen:
+                continue
+            seen.add(r[0])
+            out.append(
+                MemoryRecord(
+                    id=f"graph:{r[0]}",
+                    pillar="semantic",
+                    content=f"{name} --[{r[1]}]--> {r[0]}",
+                    subject=r[0],
+                    metadata={"hops": r[2], "predicates": [r[1]]},
+                    score=1.0,
+                )
             )
-            for r in rows
-        ]
+        return out
 
     async def neighbors_for_boost(
         self, org_id: str, names: list[str], *, limit: int = 10

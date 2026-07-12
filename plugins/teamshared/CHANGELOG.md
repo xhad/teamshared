@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Rule 1.8.0:** session logging now uses `memory_session_ensure` (one-call
+  bootstrap that recovers or rotates the active session) and `context_commit`
+  (turn-end batch: assistant summary + durable facts + optional close).
+  `memory_session_append` self-heals expired sessions (`reopened: true`).
+- **Server:** compression middleware no longer inflates compressed dict
+  payloads; `work_list(mine=true)` matches items an agent created;
+  `work_follower_add/remove` default to the caller; FTS pillar scores
+  normalized onto the RRF scale in recall; graph `related` deduplicates
+  neighbors; param aliases (`description`, `work_id`/`depends_on_id`,
+  `object`, `kind`, `action`, `status`) accepted on their tools; migration 033
+  grants `memory:delete` to agent/service_account roles.
 - **Rule 1.7.1:** align governance guidance with the active-write implementation;
   remove references to retired approvals and capture-consent console surfaces.
 

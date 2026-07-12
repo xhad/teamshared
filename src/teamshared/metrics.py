@@ -174,6 +174,10 @@ class Metrics:
             "Estimated tokens used per assembled context pack",
             buckets=(50, 100, 250, 500, 1000, 2000, 4000, 8000),
         )
+        self.gateway_requests = _Counter(
+            "teamshared_gateway_requests_total",
+            "Chat-completions gateway requests by outcome",
+        )
         self.compress_requests = _Counter(
             "teamshared_compress_requests_total",
             "Prompt payloads compressed before LLM calls",
@@ -196,6 +200,7 @@ class Metrics:
                 self.rate_limited, self.job_signature_invalid,
                 self.admin_export_total, self.admin_purge_total,
                 self.context_pack_built, self.context_pack_tokens,
+                self.gateway_requests,
                 self.compress_requests, self.compress_chars_saved,
             ):
                 lines.extend(metric.render())

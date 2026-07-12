@@ -95,6 +95,10 @@ def _auto_session_key(org_id: UUID | str, agent: str) -> str:
     return f"working:{_org(org_id)}:agent:{agent}:autosession"
 
 
+def _conversation_key(org_id: UUID | str, agent: str, fingerprint: str) -> str:
+    return f"working:{_org(org_id)}:agent:{agent}:conversation:{fingerprint}"
+
+
 def _redis_text(value: str | bytes) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8")
@@ -228,15 +232,25 @@ class WorkingMemory:
         return session_id
 
     async def append_turn(self, org_id: UUID | str, session_id: str, role: str, content: str) -> int:
-        """Append a turn and return the new total turn count."""
-        await self._require_open(org_id, session_id)
+        """Append a turn and return the new total turn count.
+
+        Refreshes the session TTL so an actively-used session never expires
+        mid-conversation (the TTL is a *idle* timeout, not a hard lifetime).
+        """
+        meta = await self._require_open(org_id, session_id)
         turn = {
             "role": role,
             "content": content,
             "ts": datetime.now(UTC).isoformat(),
         }
-        await self.client.rpush(_turns_key(org_id, session_id), json.dumps(turn))
-        return int(await self.client.llen(_turns_key(org_id, session_id)))
+        ttl = int(meta.get("ttl") or self._default_ttl)
+        pipe = self.client.pipeline()
+        pipe.rpush(_turns_key(org_id, session_id), json.dumps(turn))
+        pipe.expire(_session_key(org_id, session_id), ttl)
+        pipe.expire(_turns_key(org_id, session_id), ttl)
+        pipe.llen(_turns_key(org_id, session_id))
+        results = await pipe.execute()
+        return int(results[-1])
 
     async def get_turns(self, org_id: UUID | str, session_id: str) -> list[dict[str, Any]]:
         raw = await self.client.lrange(_turns_key(org_id, session_id), 0, -1)
@@ -336,6 +350,42 @@ class WorkingMemory:
         )
         await self.client.set(pointer_key, pointer_payload)
         await self.client.expire(pointer_key, self._default_ttl)
+        return session_id
+
+    async def resolve_conversation_session(
+        self,
+        org_id: UUID | str,
+        agent: str,
+        fingerprint: str,
+        *,
+        topic: str | None = None,
+        repo: str | None = None,
+        github: str | None = None,
+    ) -> str:
+        """Return the session bound to ``fingerprint``, opening one if needed.
+
+        The gateway proxies stateless chat-completions requests, so it maps
+        each distinct conversation (fingerprinted client-side from the first
+        user message) to one working session. The mapping key shares the
+        session TTL and is refreshed on every hit, so parallel conversations
+        from the same agent land in distinct sessions instead of interleaving.
+        """
+        key = _conversation_key(org_id, agent, fingerprint)
+        raw = await self.client.get(key)
+        if raw:
+            existing = _redis_text(raw)
+            try:
+                await self._require_open(org_id, existing)
+            except (KeyError, ValueError):
+                pass
+            else:
+                await self.client.expire(key, self._default_ttl)
+                return existing
+
+        session_id = await self.open_session(
+            org_id, agent, topic=topic, repo=repo, github=github
+        )
+        await self.client.set(key, session_id, ex=self._default_ttl)
         return session_id
 
     async def record_tool_call(
@@ -546,13 +596,14 @@ class WorkingMemory:
         await self._push_queue_job(CURATE_QUEUE_KEY, job)
         log.warning("curate_job_requeued", subject=job.get("subject"), attempts=attempts)
 
-    async def _require_open(self, org_id: UUID | str, session_id: str) -> None:
+    async def _require_open(self, org_id: UUID | str, session_id: str) -> dict[str, str]:
         raw = await self.client.hgetall(_session_key(org_id, session_id))
         if not raw:
             raise KeyError(f"unknown session: {session_id}")
         meta = _normalize_hash(raw)
         if meta.get("closed_at"):
             raise ValueError(f"session {session_id} is closed")
+        return meta
 
     async def _push_queue_job(self, queue_key: str, job: dict[str, Any]) -> None:
         await self.client.rpush(queue_key, encode_job(job, self._job_signing_secret))

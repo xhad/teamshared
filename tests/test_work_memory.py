@@ -182,6 +182,54 @@ async def test_list_items_excludes_closed_by_default() -> None:
     assert "work_status NOT IN ('done', 'cancelled')" in sql
 
 
+async def test_list_items_mine_matches_assignee_or_created_by() -> None:
+    """Agent principals share one org-bound id, so 'mine' must also match created_by."""
+    from teamshared.memory.work import WorkStore
+
+    db = MagicMock()
+    conn = MagicMock()
+    cur = MagicMock()
+    cur.fetchall = AsyncMock(return_value=[])
+    conn.execute = AsyncMock(return_value=cur)
+    conn.__aenter__ = AsyncMock(return_value=conn)
+    conn.__aexit__ = AsyncMock(return_value=False)
+    db.org = MagicMock(return_value=conn)
+
+    store = WorkStore(db)
+    await store.list_items(
+        ORG, assignee_type="agent", assignee_id=ORG, created_by="cursor"
+    )
+    sql = conn.execute.await_args.args[0]
+    params = conn.execute.await_args.args[1]
+    assert "OR created_by = %s" in sql
+    assert "cursor" in params
+
+
+async def test_enrich_labels_uses_created_by_for_agent_requester() -> None:
+    from teamshared.memory.work import WorkStore
+
+    db = MagicMock()
+    conn = MagicMock()
+    cur = MagicMock()
+    cur.fetchall = AsyncMock(return_value=[])
+    conn.execute = AsyncMock(return_value=cur)
+    conn.__aenter__ = AsyncMock(return_value=conn)
+    conn.__aexit__ = AsyncMock(return_value=False)
+    db.org = MagicMock(return_value=conn)
+
+    store = WorkStore(db)
+    items = [{
+        "assignee_type": None,
+        "assignee_id": None,
+        "requester_type": "agent",
+        "requester_id": ORG,
+        "created_by": "cursor",
+        "initiative_id": None,
+    }]
+    await store.enrich_labels(ORG, items)
+    assert items[0]["requester_label"] == "cursor"
+
+
 async def test_work_close_emits_episodic_event() -> None:
     from teamshared.memory.facade import MemoryFacade
 

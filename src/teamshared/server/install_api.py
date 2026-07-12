@@ -16,10 +16,15 @@ from teamshared.clients.install_scripts import (
 )
 
 _ASSET_PLACEHOLDER = "__MCP_URL__"
+_GATEWAY_PLACEHOLDER = "__GATEWAY_URL__"
 
 
 def _mcp_url(request: Request) -> str:
     return f"{str(request.base_url).rstrip('/')}/mcp"
+
+
+def _gateway_url(request: Request) -> str:
+    return f"{str(request.base_url).rstrip('/')}/gateway/v1"
 
 
 def _plugin_tarball_bytes() -> bytes | None:
@@ -68,6 +73,8 @@ async def handle_install_asset(request: Request) -> Response:
         text = path.read_text(encoding="utf-8")
         if _ASSET_PLACEHOLDER in text:
             text = text.replace(_ASSET_PLACEHOLDER, _mcp_url(request))
+        if _GATEWAY_PLACEHOLDER in text:
+            text = text.replace(_GATEWAY_PLACEHOLDER, _gateway_url(request))
         media = "application/json" if suffix == ".json" else "text/plain; charset=utf-8"
         if suffix == ".sh":
             media = "text/x-shellscript; charset=utf-8"

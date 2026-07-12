@@ -58,6 +58,10 @@ from teamshared.server.install_api import (
     handle_plugin_bundle,
     handle_uninstall_sh,
 )
+from teamshared.server.gateway_api import (
+    handle_gateway_chat_completions,
+    handle_gateway_models,
+)
 from teamshared.server.llm_prepare_api import handle_llm_prepare
 from teamshared.server.mcp_output_middleware import ToolOutputNormalizeMiddleware
 from teamshared.server.mcp_path import McpSlashMiddleware
@@ -220,6 +224,9 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
     - ``PUT  /state``   -- bearer-scoped JSON state write (`{repo, key, value}` body).
     - ``POST /sessions/turns`` -- bearer-scoped conversation-turn ingestion into capture session.
     - ``POST /llm/prepare`` -- bearer-scoped pre-LLM pipeline (REST mirror of ``context_prepare``).
+    - ``POST /gateway/v1/chat/completions`` -- OpenAI-compatible memory-companion proxy
+                                              (prepare -> upstream -> capture reply).
+    - ``GET  /gateway/v1/models`` -- minimal model catalog for gateway clients.
     - ``POST /compress`` -- bearer-scoped message compression (CCR).
     - ``GET  /compress/retrieve`` -- fetch CCR original by ref.
     - ``POST /tools/normalize`` -- bearer-scoped tool output strip/clean/compress (REST mirror of ``context_normalize``).
@@ -524,6 +531,12 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/compress", handle_compress, methods=["POST"]),
             Route("/compress/retrieve", handle_compress_retrieve, methods=["GET"]),
             Route("/llm/prepare", handle_llm_prepare, methods=["POST"]),
+            Route(
+                "/gateway/v1/chat/completions",
+                handle_gateway_chat_completions,
+                methods=["POST"],
+            ),
+            Route("/gateway/v1/models", handle_gateway_models, methods=["GET"]),
             Route("/tools/normalize", handle_tool_normalize, methods=["POST"]),
             *register_console_routes(settings, services),
             *([Mount("/v1", app=api_app)] if api_app is not None else []),

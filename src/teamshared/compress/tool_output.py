@@ -183,13 +183,6 @@ async def normalize_tool_output(
         )
 
     new_text, compressed, _meta = compress_text(text, settings)
-    ref: str | None = None
-
-    if compressed and store is not None:
-        ref = await store.put(org_scope, text)
-        new_text = f"{new_text.rstrip()}\nref={ref}\n"
-
-    chars_saved = max(0, original_chars - len(new_text if compressed else text))
 
     if not compressed and not cleaned:
         return NormalizedToolOutput(body=body)
@@ -199,45 +192,36 @@ async def normalize_tool_output(
         return NormalizedToolOutput(
             body=body,
             cleaned=True,
-            chars_saved=chars_saved,
+            chars_saved=clean_chars_saved,
         )
 
-    if isinstance(body, dict) and compressed:
-        try:
-            parsed = json.loads(new_text)
-            if isinstance(parsed, dict):
-                parsed["_teamshared"] = {
-                    "compressed": True,
-                    "chars_saved": chars_saved,
-                    **({"ref": ref} if ref else {}),
-                }
-                return NormalizedToolOutput(
-                    body=parsed,
-                    compressed=True,
-                    chars_saved=chars_saved,
-                    ref=ref,
-                    cleaned=cleaned,
-                )
-        except json.JSONDecodeError:
-            pass
+    ref: str | None = None
+    if store is not None:
+        ref = await store.put(org_scope, text)
 
+    # The compressed text *replaces* the payload — never ship both the original
+    # body and a compressed preview (that would inflate, not shrink, context).
     out_body: Any
-    if isinstance(body, dict):
-        out_body = {
-            **body,
-            "_teamshared": {
-                "compressed": True,
-                "chars_saved": chars_saved,
-                **({"ref": ref} if ref else {}),
-                **({"body": new_text} if compressed else {}),
-            },
+    try:
+        parsed = json.loads(new_text)
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        parsed["_teamshared"] = {
+            "compressed": True,
+            **({"ref": ref} if ref else {}),
         }
+        out_body = parsed
+        chars_saved = max(0, original_chars - len(_serialize(out_body)))
     else:
+        if ref:
+            new_text = f"{new_text.rstrip()}\nref={ref}\n"
         out_body = new_text
+        chars_saved = max(0, original_chars - len(new_text))
 
     return NormalizedToolOutput(
         body=out_body,
-        compressed=compressed,
+        compressed=True,
         chars_saved=chars_saved,
         ref=ref,
         cleaned=cleaned,

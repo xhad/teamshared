@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from teamshared.identity.rbac import Permissions
 from teamshared.logging import get_logger
 from teamshared.memory.audit import AuditLog
-from teamshared.memory.hybrid import merge_vector_keyword
+from teamshared.memory.hybrid import RRF_K, merge_vector_keyword
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.types import MemoryRecord, MemoryScope, RecallResult, TimeRange
@@ -133,7 +133,7 @@ class SecureRetrieval:
         # procedural -- org-scoped FTS.
         if want("procedural"):
             try:
-                proc = await self._procedural_search(ctx, query, k)
+                proc = _normalize_fts_scores(await self._procedural_search(ctx, query, k))
                 counts["procedural"] = len(proc)
                 records.extend(proc)
             except Exception as exc:
@@ -142,7 +142,7 @@ class SecureRetrieval:
 
         if want("skill"):
             try:
-                skill_hits = await self._skill_search(ctx, query, k)
+                skill_hits = _normalize_fts_scores(await self._skill_search(ctx, query, k))
                 counts["skill"] = len(skill_hits)
                 records.extend(skill_hits)
             except Exception as exc:
@@ -151,7 +151,9 @@ class SecureRetrieval:
 
         if want("strategic"):
             try:
-                strat = await self.strategic.search(ctx.org_id, query, limit=k)
+                strat = _normalize_fts_scores(
+                    await self.strategic.search(ctx.org_id, query, limit=k)
+                )
                 counts["strategic"] = len(strat)
                 records.extend(strat)
             except Exception as exc:
@@ -160,7 +162,9 @@ class SecureRetrieval:
 
         if want("work"):
             try:
-                work_hits = await self.work.search(ctx.org_id, query, limit=k)
+                work_hits = _normalize_fts_scores(
+                    await self.work.search(ctx.org_id, query, limit=k)
+                )
                 counts["work"] = len(work_hits)
                 records.extend(work_hits)
             except Exception as exc:
@@ -289,6 +293,25 @@ class SecureRetrieval:
                 )
             )
         return out
+
+
+def _normalize_fts_scores(records: list[MemoryRecord]) -> list[MemoryRecord]:
+    """Rescale raw ``ts_rank`` scores onto the reciprocal-rank scale.
+
+    Semantic/episodic hits carry RRF-fused scores (~``1/(60+rank)``) while the
+    FTS pillars (procedural, skill, strategic, work) return Postgres
+    ``ts_rank`` values on an unrelated scale (often 5-10x larger). Without
+    normalization a weak lexical skill hit outranks a strong keyword-matched
+    semantic/episodic hit. ``records`` are assumed rank-ordered (best first),
+    which is how every pillar search returns them.
+    """
+    for rank, rec in enumerate(records, start=1):
+        meta = dict(rec.metadata)
+        if rec.score is not None:
+            meta["fts_rank"] = rec.score
+        rec.score = 1.0 / (RRF_K + rank)
+        rec.metadata = meta
+    return records
 
 
 def _rerank(records: list[MemoryRecord], *, k: int) -> list[MemoryRecord]:

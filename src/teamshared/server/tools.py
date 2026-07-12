@@ -264,6 +264,74 @@ def register_tools(mcp: Any) -> None:
             return {"error": str(exc)}
 
     @mcp.tool()
+    async def context_commit(
+        summary: Annotated[
+            str,
+            Field(description="Faithful summary of your reply — appended as the assistant turn."),
+        ],
+        session_id: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Working-memory session to commit to. Omit to resolve it from the "
+                    "conversation/active-session state pointer (requires repo)."
+                ),
+            ),
+        ] = None,
+        facts: Annotated[
+            list[dict[str, Any]] | None,
+            Field(
+                description=(
+                    "Durable memories to write in the same call: "
+                    '[{"content": "...", "kind": "fact|preference|event|note", '
+                    '"subject": "...", "tags": [...]}]. Only include things still '
+                    "true next week."
+                ),
+            ),
+        ] = None,
+        repo: Annotated[
+            str | None,
+            Field(description="Workspace slug; scopes fact tags and the state pointer."),
+        ] = None,
+        github: Annotated[
+            str | None,
+            Field(description="GitHub owner/repo tag for the facts."),
+        ] = None,
+        close: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Close the session (queueing distillation) and clear the state "
+                    "pointer. Pass true when the task is done or the user says goodbye."
+                ),
+            ),
+        ] = False,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Turn-end batch: assistant summary + durable writes + optional close.
+
+        One call replaces the end-of-turn memory_session_append +
+        memory_remember (+ memory_session_close + memory_state_set) sequence.
+        The append self-heals expired sessions; the response's ``session_id``
+        is authoritative. Returns ``{session_id, turn_count, reopened,
+        memories, closed}``.
+        """
+        ident = current_agent()
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.session_commit(
+            principal,
+            state_id=ident.state_id if ident else None,
+            session_id=session_id,
+            summary=summary,
+            facts=facts,
+            repo=repo,
+            github=github,
+            close=close,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
     async def context_normalize(
         tool_name: Annotated[
             str,
@@ -623,12 +691,75 @@ def register_tools(mcp: Any) -> None:
         )
 
     @mcp.tool()
+    async def memory_session_ensure(
+        repo: Annotated[
+            str,
+            Field(
+                description=(
+                    "Workspace slug (absolute path with leading / removed and / "
+                    "replaced by -). Keys the conversation/active-session state pointer."
+                ),
+            ),
+        ],
+        topic: Annotated[
+            str | None,
+            Field(description="What this session is about (used when opening a new one)"),
+        ] = None,
+        github: Annotated[
+            str | None,
+            Field(description="GitHub owner/repo; distilled memories inherit the tag"),
+        ] = None,
+        ttl: Annotated[
+            int | None,
+            Field(description="Session TTL in seconds (default from server config)"),
+        ] = None,
+        fresh: Annotated[
+            bool,
+            Field(
+                description=(
+                    "Force rotation: close any stored session (queueing distillation) "
+                    "and open a new one. Pass true on the first turn of a new chat."
+                ),
+            ),
+        ] = False,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """One-call session bootstrap: recover the active session or open one.
+
+        Replaces the memory_state_get → memory_session_close →
+        memory_session_open → memory_state_set ritual. Reuses the session in
+        the ``conversation/active-session`` state pointer when it is still
+        open and owned by the caller; otherwise closes it (distilling) and
+        opens a fresh one, updating state. Returns ``{session_id, agent,
+        resumed}``.
+        """
+        ident = require_current_agent()
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.session_ensure(
+            principal,
+            state_id=ident.state_id,
+            repo=repo,
+            topic=topic,
+            github=github,
+            ttl=ttl,
+            fresh=fresh,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
     async def memory_session_append(
         session_id: Annotated[str, Field(description="Session id from memory_session_open")],
         role: Annotated[SessionRole, Field(description="user, assistant, tool, or system")],
         content: Annotated[str, Field(description="Turn content")],
-    ) -> dict[str, int]:
-        """Append a turn to a working-memory session."""
+    ) -> dict[str, Any]:
+        """Append a turn to a working-memory session (self-healing).
+
+        When ``session_id`` has expired or was closed, a fresh session is
+        opened automatically and the turn lands there; the response then
+        carries the replacement ``session_id`` and ``reopened: true`` — update
+        your ``conversation/active-session`` state when you see it.
+        """
         state = get_state()
         principal = await _principal()
         return await state.facade.session_append(
@@ -1146,6 +1277,9 @@ def register_tools(mcp: Any) -> None:
     async def work_create(
         title: Annotated[str, Field(description="Short task title")],
         description_md: Annotated[str | None, Field(description="Optional markdown body")] = None,
+        description: Annotated[
+            str | None, Field(description="Alias for description_md")
+        ] = None,
         tags: Annotated[list[str] | None, Field(description="Optional tags")] = None,
         work_status: Annotated[WorkStatus, Field(description="Initial workflow status")] = "todo",
         priority: Annotated[WorkPriority, Field(description="urgent, high, normal, low")] = "normal",
@@ -1179,7 +1313,7 @@ def register_tools(mcp: Any) -> None:
         return await state.facade.work_create(
             principal,
             title=title,
-            description_md=description_md,
+            description_md=description_md if description_md is not None else description,
             tags=tags,
             work_status=work_status,
             priority=priority,
@@ -1407,16 +1541,20 @@ def register_tools(mcp: Any) -> None:
     async def project_status_post(
         project_id: Annotated[str, Field(description="Project UUID")],
         state_label: Annotated[
-            ProjectStatusState, Field(description="on_track, at_risk, or off_track")
-        ] = "on_track",
+            ProjectStatusState | None, Field(description="on_track, at_risk, or off_track")
+        ] = None,
+        status: Annotated[
+            ProjectStatusState | None, Field(description="Alias for state_label")
+        ] = None,
         body_md: Annotated[str | None, Field(description="Status note (markdown ok)")] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
         """Post a project status update (on-track / at-risk / off-track banner)."""
+        resolved = state_label if state_label is not None else (status or "on_track")
         state = get_state()
         principal = await _principal()
         return await state.facade.project_status_post(
-            principal, project_id=project_id, state=state_label, body_md=body_md,
+            principal, project_id=project_id, state=resolved, body_md=body_md,
             agent_override=agent,
         )
 
@@ -1474,27 +1612,55 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def work_dependency_add(
-        blocker_id: Annotated[str, Field(description="Task that must finish first")],
-        blocked_id: Annotated[str, Field(description="Task that is blocked")],
+        blocker_id: Annotated[
+            str | None, Field(description="Task that must finish first")
+        ] = None,
+        blocked_id: Annotated[
+            str | None, Field(description="Task that is blocked")
+        ] = None,
+        work_id: Annotated[
+            str | None, Field(description="Alias for blocked_id (the task that waits)")
+        ] = None,
+        depends_on_id: Annotated[
+            str | None, Field(description="Alias for blocker_id (the task it waits on)")
+        ] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Add a dependency: blocker must finish before blocked can proceed."""
+        """Add a dependency: blocker must finish before blocked can proceed.
+
+        Pass ``blocker_id`` + ``blocked_id``, or equivalently
+        ``work_id`` (blocked) + ``depends_on_id`` (blocker).
+        """
+        blocker, blocked = _resolve_dependency_ids(
+            blocker_id=blocker_id, blocked_id=blocked_id,
+            work_id=work_id, depends_on_id=depends_on_id,
+        )
         state = get_state()
         principal = await _principal()
         return await state.facade.work_dependency_add(
-            principal, blocker_id=blocker_id, blocked_id=blocked_id, agent_override=agent,
+            principal, blocker_id=blocker, blocked_id=blocked, agent_override=agent,
         )
 
     @mcp.tool()
     async def work_dependency_remove(
-        blocker_id: Annotated[str, Field(description="Blocker task UUID")],
-        blocked_id: Annotated[str, Field(description="Blocked task UUID")],
+        blocker_id: Annotated[str | None, Field(description="Blocker task UUID")] = None,
+        blocked_id: Annotated[str | None, Field(description="Blocked task UUID")] = None,
+        work_id: Annotated[
+            str | None, Field(description="Alias for blocked_id (the task that waits)")
+        ] = None,
+        depends_on_id: Annotated[
+            str | None, Field(description="Alias for blocker_id (the task it waits on)")
+        ] = None,
     ) -> dict[str, Any]:
         """Remove a task dependency."""
+        blocker, blocked = _resolve_dependency_ids(
+            blocker_id=blocker_id, blocked_id=blocked_id,
+            work_id=work_id, depends_on_id=depends_on_id,
+        )
         state = get_state()
         principal = await _principal()
         return await state.facade.work_dependency_remove(
-            principal, blocker_id=blocker_id, blocked_id=blocked_id,
+            principal, blocker_id=blocker, blocked_id=blocked,
         )
 
     @mcp.tool()
@@ -1546,23 +1712,32 @@ def register_tools(mcp: Any) -> None:
     async def memory_graph_relate(
         subject: Annotated[str, Field(description="Source entity")],
         predicate: Annotated[str, Field(description="Relationship label, e.g. 'works_on'")],
-        object_entity: Annotated[str, Field(description="Target entity")],
+        object_entity: Annotated[
+            str | None, Field(description="Target entity")
+        ] = None,
+        object: Annotated[  # noqa: A002 - MCP-facing alias
+            str | None, Field(description="Alias for object_entity")
+        ] = None,
         weight: Annotated[float, Field(ge=0.0, le=10.0)] = 1.0,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
         """Record an explicit relationship in the optional org-scoped graph store.
 
-        No-op (with a reason) when Neo4j isn't enabled. Use this when you learn
-        a structured fact like "alice -> works_on -> teamshared" that vector
-        recall would obscure.
+        No-op (with a reason) when the graph isn't enabled. Use this when you
+        learn a structured fact like "alice -> works_on -> teamshared" that
+        vector recall would obscure. ``predicate`` must be a registered link
+        type (see ``memory_ontology_list``).
         """
+        target = object_entity if object_entity is not None else object
+        if target is None:
+            raise ValueError("object_entity (alias: object) is required")
         state = get_state()
         principal = await _principal()
         return await state.facade.graph_relate(
             principal,
             subject=subject,
             predicate=predicate,
-            object_=object_entity,
+            object_=target,
             weight=weight,
             agent_override=agent,
         )
@@ -1596,8 +1771,12 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def memory_ontology_propose_entity(
-        kind_name: Annotated[str, Field(description="Registered object kind, e.g. Person or Project")],
         name: Annotated[str, Field(description="Display name for the entity")],
+        kind_name: Annotated[
+            str | None,
+            Field(description="Registered object kind, e.g. Person or Project"),
+        ] = None,
+        kind: Annotated[str | None, Field(description="Alias for kind_name")] = None,
         properties: Annotated[
             dict[str, Any] | None,
             Field(description="Optional JSON properties matching the kind schema"),
@@ -1605,11 +1784,14 @@ def register_tools(mcp: Any) -> None:
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
         """Propose a typed ontology entity (active immediately)."""
+        resolved_kind = kind_name if kind_name is not None else kind
+        if resolved_kind is None:
+            raise ValueError("kind_name (alias: kind) is required")
         state = get_state()
         principal = await _principal()
         return await state.facade.ontology_propose_entity(
             principal,
-            kind_name=kind_name,
+            kind_name=resolved_kind,
             name=name,
             properties=properties,
             agent_override=agent,
@@ -1663,20 +1845,24 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def memory_action_apply(
-        action_name: Annotated[
-            str, Field(description="Registered action type name, e.g. link_entities")
-        ],
         parameters: Annotated[
             dict[str, Any], Field(description="Parameters matching the action schema")
         ],
+        action_name: Annotated[
+            str | None, Field(description="Registered action type name, e.g. link_entities")
+        ] = None,
+        action: Annotated[str | None, Field(description="Alias for action_name")] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
         """Execute a governed ontology action and write an audit log entry."""
+        resolved_action = action_name if action_name is not None else action
+        if resolved_action is None:
+            raise ValueError("action_name (alias: action) is required")
         state = get_state()
         principal = await _principal()
         return await state.facade.action_apply(
             principal,
-            action_name=action_name,
+            action_name=resolved_action,
             parameters=parameters,
             agent_override=agent,
         )
@@ -1741,6 +1927,23 @@ def register_tools(mcp: Any) -> None:
         return await state.facade.state_set(
             principal, state_id=ident.state_id, repo=repo, key=key, value=value
         )
+
+
+def _resolve_dependency_ids(
+    *,
+    blocker_id: str | None,
+    blocked_id: str | None,
+    work_id: str | None,
+    depends_on_id: str | None,
+) -> tuple[str, str]:
+    """Coalesce the canonical and alias spellings of a work dependency pair."""
+    blocker = blocker_id if blocker_id is not None else depends_on_id
+    blocked = blocked_id if blocked_id is not None else work_id
+    if blocker is None or blocked is None:
+        raise ValueError(
+            "pass blocker_id + blocked_id (or the aliases depends_on_id + work_id)"
+        )
+    return blocker, blocked
 
 
 def _serialize_procedure(proc: dict[str, Any]) -> dict[str, Any]:

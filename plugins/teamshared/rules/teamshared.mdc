@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.7.1
+version: 1.8.0
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.7.1 -->
+<!-- teamshared-rule-version: 1.8.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.7.1`).
+This rule is versioned (`version` in the frontmatter above, currently `1.8.0`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
    versions), call the `version` tool with this rule's frontmatter `version`
-   (`1.7.1`) as `installed_rule_version`. Do not call `version` every turn.
+   (`1.8.0`) as `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
    `~/.cursor/rules/teamshared.mdc`; repo:
@@ -34,19 +34,24 @@ Never invent a version; read it from the frontmatter or the `version` tool.
 
 Run these in order on **every** turn (see **Session logging** for setup details):
 
-1. **Ensure session** — recover or open `session_id` (do not open a second
-   session if `conversation/active-session` already has one for this chat).
+1. **`memory_session_ensure(repo=..., topic=..., fresh=<first turn>)`** — one
+   call recovers the active session or rotates to a new one. Pass `fresh=true`
+   only on the first turn of a new chat; omit it mid-chat.
 2. **`memory_session_append(session_id, "user", ...)`** — the substantive user
-   request (not boilerplate system context).
+   request (not boilerplate system context). Appends self-heal: if the response
+   has `reopened: true`, adopt the returned `session_id`.
 3. **`memory_recall(...)`** with durable scope (see **Retrieval playbook**) for
    non-trivial tasks (architecture, debugging, past work, "how do we…"). Add
    `memory_think` only when you need synthesis and recall already surfaced hits.
    Skip both for pure one-liner acknowledgments.
 4. **Do the work** — tools, edits, answers.
-5. **`memory_session_append(session_id, "assistant", ...)`** — a faithful summary
-   of your reply. This should be your **last MCP call** before ending the turn.
-6. **`memory_remember` / `work_*` / `memory_skill_set` / `memory_playbook_set`**
-   — as needed for durable facts, tasks, atomic how-tos, or composed flows.
+5. **`context_commit(summary=..., facts=[...], repo=..., close=<done?>)`** — one
+   turn-end call: appends the faithful assistant summary, writes any durable
+   facts, and (when the task is done or the user says goodbye) closes the
+   session with distillation. This should be your **last MCP call** of the turn.
+6. **`work_*` / `memory_skill_set` / `memory_playbook_set`** — as needed for
+   tasks, atomic how-tos, or composed flows (facts/preferences go in
+   `context_commit.facts` or `memory_remember`).
 
 After significant tool use from **non-teamshared** tools (Shell, Grep, Read),
 optionally append a one-line `tool` turn summarizing what ran and the outcome.
@@ -229,33 +234,34 @@ capture; there is no client-side transcript hook. Session logging via
 `memory_session_*` is agent-initiated and does **not** use the `/sessions/turns`
 consent path (unlike automatic transcript ingest).
 
-Always resolve `repo=` first (see above). State key: `conversation/active-session`.
-Treat a missing or empty `session_id` in state as no active session.
+Always resolve `repo=` first (see above). The server keeps the
+`conversation/active-session` state pointer for you — one tool call per
+lifecycle event:
 
 **First turn of a thread** (no prior assistant turns in your context):
 
-1. `memory_state_get(repo=..., key="conversation/active-session")`.
-2. If `session_id` is present → `memory_session_close(session_id, distill=true)`.
-3. `memory_session_open(topic=<first user message, max ~120 chars>, repo=..., github=...)`.
-4. `memory_state_set(repo=..., key="conversation/active-session", value={"session_id": "<id>"})`.
+- `memory_session_ensure(repo=..., topic=<first user message, max ~120 chars>,
+  github=..., fresh=true)` — closes any stale session (distilling it), opens a
+  new one, and updates state in one call.
 
-Do **not** call `memory_session_open` if state already holds a `session_id` for
-this chat.
+**Mid-thread** (any later turn): `memory_session_ensure(repo=..., topic=...)`
+without `fresh` — returns the existing `session_id` (`resumed: true`); it never
+opens a duplicate.
 
 **Mid-thread pivot** (user clearly starts a new topic — do not wait for a new
-Cursor chat):
-
-1. `memory_session_close(session_id, distill=true)`.
-2. `memory_state_set(..., value={})`.
-3. Immediately `memory_session_open` with the new topic and update state — same turn.
+Cursor chat): `memory_session_ensure(repo=..., topic=<new topic>, fresh=true)`.
 
 **When done** (task complete, user says goodbye):
+`context_commit(summary=..., repo=..., close=true)` — appends the final
+assistant summary, closes with distillation, and clears state.
 
-1. `memory_session_close(session_id, distill=true)`.
-2. `memory_state_set(..., value={})`.
+**Append failure recovery** is automatic: `memory_session_append` and
+`context_commit` reopen a fresh session when the old one expired and return the
+new `session_id` with `reopened: true` — adopt it.
 
-**Append failure recovery** — if `memory_session_append` fails (expired or
-unknown `session_id`): open a new session, update state, retry the append once.
+The granular `memory_state_get` / `memory_session_open` /
+`memory_session_close` / `memory_state_set` tools still work if you need
+manual control, but `memory_session_ensure` + `context_commit` are preferred.
 
 Append the substantive user request and a faithful summary of your reply — not
 UI boilerplate. Truncate long tool output. Never append secrets, tokens, or
@@ -396,6 +402,22 @@ Pre-LLM pipeline: session append → compress incoming history → enrich org me
 Returns compressed `messages`, optional `additional_context`, `session_id`, and
 `stats`.
 
+### `context_commit`
+
+Turn-end batch: assistant summary + durable writes + optional session close in
+one call.
+
+| Param | Use |
+|---|---|
+| `summary` | Faithful summary of your reply — the assistant turn (required) |
+| `session_id` | Session to commit to (omit to resolve from state via `repo`) |
+| `facts` | Optional durable writes: `[{"content", "kind", "subject", "tags"}]` |
+| `repo` / `github` | Scope tags for facts and the state pointer |
+| `close` | `true` when done: closes with distillation and clears state |
+
+Returns `{session_id, turn_count, reopened, memories, closed}`. The append
+self-heals expired sessions — the returned `session_id` is authoritative.
+
 ### `context_normalize`
 
 Strip, clean, and compress a **non-teamshared** tool output (Shell, Grep, Read).
@@ -425,14 +447,15 @@ Write semantic or episodic memory.
 Routing: `event` → episodic; others → semantic. Rejects `kind=procedure`.
 For code work, pass `repo=` and/or `github=`; omit both for cross-cutting facts.
 
-### `memory_session_open` / `memory_session_append` / `memory_session_close` / `memory_session_get`
+### `memory_session_ensure` / `memory_session_open` / `memory_session_append` / `memory_session_close` / `memory_session_get`
 
 Working-memory buffer in Redis — one session per chat (see **Session logging**).
 
 | Tool | Key params |
 |---|---|
-| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo`, `github` → `{session_id, agent}` |
-| `memory_session_append` | `session_id`, `role` (`user` \| `assistant` \| `tool` \| `system`), `content` → `{turn_count}` |
+| `memory_session_ensure` | `repo` (required), `topic`, `github`, `fresh` → `{session_id, agent, resumed}`; reuses the state-pointed session or rotates + updates state |
+| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo`, `github` → `{session_id, agent}` (prefer `memory_session_ensure`) |
+| `memory_session_append` | `session_id`, `role` (`user` \| `assistant` \| `tool` \| `system`), `content` → `{turn_count, session_id}`; self-heals expired sessions (`reopened: true`) |
 | `memory_session_close` | `session_id`, `distill=true` (default) queues distillation to durable memory |
 | `memory_session_get` | `session_id` → current turns/metadata |
 
@@ -558,10 +581,12 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 | Synthesized answer + gaps | `memory_think` after recall, or for strategic questions |
 | One context pack for a task | `memory_assemble_context` |
 | Pre-LLM session + compress + enrich | `context_prepare` |
+| Turn-end summary + facts + close | `context_commit` |
 | Shrink a message list | `context_compress` |
 | Clean Shell/Grep/Read output | `context_normalize` |
 | Expand compressed original | `context_retrieve` |
 | Store preference/fact/event/note | `memory_remember` |
+| Start-of-chat session bootstrap | `memory_session_ensure` |
 | Log every chat + distillation | `memory_session_*` |
 | Client incremental state | `memory_state_get` / `memory_state_set` |
 | Browse timeline | `memory_episodes_list` |
@@ -582,7 +607,7 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 - Don't echo raw memory IDs unless the user asks.
 - Don't fabricate hits — if `memory_recall` is empty, say so.
 - Don't store secrets, tokens, or credentials in any memory tool.
-- Don't open a second `memory_session_open` when state already has a `session_id` for this chat.
+- Don't open a second session when state already has a `session_id` for this chat — `memory_session_ensure` handles reuse; never follow it with `memory_session_open`.
 - Don't store atomic instructions as playbooks (use `memory_skill_set`).
 - Don't re-call `context_normalize` on teamshared MCP outputs (middleware handles them).
 - Don't probe `TEAMSHARED_*` env vars in shell — call `health`.

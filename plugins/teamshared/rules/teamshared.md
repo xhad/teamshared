@@ -1,6 +1,6 @@
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.7.1 -->
+<!-- teamshared-rule-version: 1.8.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -8,12 +8,12 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version: 1.7.1` in the paired `teamshared.mdc`
+This rule is versioned (`version: 1.8.0` in the paired `teamshared.mdc`
 frontmatter). The server ships the canonical rule and its version. Keep the
 installed copy fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
-   versions), call the `version` tool with this rule's version (`1.7.1`) as
+   versions), call the `version` tool with this rule's version (`1.8.0`) as
    `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
@@ -28,38 +28,94 @@ Never invent a version; read it from the frontmatter or the `version` tool.
 
 Run these in order on **every** turn (see **Session logging** for setup details):
 
-1. **Ensure session** — recover or open `session_id` (do not open a second
-   session if `conversation/active-session` already has one for this chat).
+1. **`memory_session_ensure(repo=..., topic=..., fresh=<first turn>)`** — one
+   call recovers the active session or rotates to a new one. Pass `fresh=true`
+   only on the first turn of a new chat; omit it mid-chat.
 2. **`memory_session_append(session_id, "user", ...)`** — the substantive user
-   request (not boilerplate system context).
+   request (not boilerplate system context). Appends self-heal: if the response
+   has `reopened: true`, adopt the returned `session_id`.
 3. **`memory_recall(...)`** with durable scope (see **Retrieval playbook**) for
    non-trivial tasks (architecture, debugging, past work, "how do we…"). Add
    `memory_think` only when you need synthesis and recall already surfaced hits.
    Skip both for pure one-liner acknowledgments.
 4. **Do the work** — tools, edits, answers.
-5. **`memory_session_append(session_id, "assistant", ...)`** — a faithful summary
-   of your reply. This should be your **last MCP call** before ending the turn.
-6. **`memory_remember` / `work_*` / `memory_skill_set` / `memory_playbook_set`**
-   — as needed for durable facts, tasks, atomic how-tos, or composed flows.
+5. **`context_commit(summary=..., facts=[...], repo=..., close=<done?>)`** — one
+   turn-end call: appends the faithful assistant summary, writes any durable
+   facts, and (when the task is done or the user says goodbye) closes the
+   session with distillation. This should be your **last MCP call** of the turn.
+6. **`work_*` / `memory_skill_set` / `memory_playbook_set`** — as needed for
+   tasks, atomic how-tos, or composed flows (facts/preferences go in
+   `context_commit.facts` or `memory_remember`).
 
-After significant tool use, optionally append a one-line `tool` turn summarizing
-what ran and the outcome. When a **non-teamshared** tool (Shell, Grep, Read,
-etc.) returns bulky output, call `context_normalize` and use the trimmed
-`output` in your reasoning. teamshared MCP responses are already normalized by
-server middleware — do not re-normalize them. Server middleware also logs MCP
-tool calls to a separate autosession; your explicit session holds the NL story.
+After significant tool use from **non-teamshared** tools (Shell, Grep, Read),
+optionally append a one-line `tool` turn summarizing what ran and the outcome.
+**Do not** append `[tool]` turns for teamshared MCP calls — autosession already
+captures them; tool-turn appends pollute the next recall when you opt into
+`scope=["working"]`. When a **non-teamshared** tool returns bulky output, call
+`context_normalize` and use the trimmed `output` in your reasoning. teamshared
+MCP responses are already normalized by server middleware — do not re-normalize
+them. Server middleware also logs MCP tool calls to a separate autosession;
+your explicit session holds the NL story.
 
 ## Core workflows
 
 ### Recall first
 
 Before any non-trivial request, call `memory_recall` with durable scope (see
-**Retrieval playbook**). Use `memory_think` for synthesis only after durable
-recall surfaced hits. Default scope excludes working; pass `scope=["working"]`
-only for this chat's session turns. Pass `repo=` and `github=` on every call.
-Use short keyword anchors (`query="mex"`) for entity/competitor questions.
+**Retrieval playbook**). Ground answers in hits; cite them. Use `memory_think`
+for synthesis only after durable recall surfaced hits, or for open strategic
+questions.
 
-See `teamshared.mdc` for the full retrieval playbook and tool reference.
+- Default scope (omit `scope` or pass durable pillars only): semantic, episodic,
+  procedural, skill, strategic, work — **not** working.
+- `scope=["working"]` only when you need this chat's open session turns.
+- `scope=["procedural"]` / `scope=["skill"]` for "how do we usually…" (playbooks
+  vs atomic skills).
+- `scope=["strategic"]` for vision, mission, OKRs, and initiatives.
+- `scope=["work"]` for open tasks, blockers, and assignee-owned work.
+- `scope=["episodic"]` for "what did we do on X?".
+- `scope=["semantic"]` for stable facts and preferences.
+- `memory_recall(..., explain=true)` for attribution on each hit.
+- For code/repo-specific work, pass `repo=<workspace-slug>` and/or
+  `github=<owner>/<repo>` to softly boost scoped memories (nothing is hidden).
+
+If recall is empty, say so before answering from priors.
+
+### Retrieval playbook
+
+**Step 1 — durable recall** (always pass `repo=` and `github=`):
+
+```text
+memory_recall(
+  query=<short keyword anchor>,
+  scope=["semantic","episodic","procedural","skill","strategic","work"],
+  repo=<workspace-slug>,
+  github=<owner/repo>,
+  explain=true
+)
+```
+
+**Step 2 — anchor, then broaden** when the topic has a named entity:
+
+1. Short keyword: `query="mex"` or `query="Hivemind"` (1–3 tokens).
+2. If thin, broaden: `query="mex teamshared competitor"`.
+3. Do **not** start with only a long conversational question as the query.
+
+**Step 3 — pick the tool:**
+
+| Need | Tool |
+|---|---|
+| Raw hits to cite | `memory_recall` |
+| Prose answer + gaps | `memory_think` after step 1–2 found durable hits |
+| One budgeted pack | `memory_assemble_context(task=...)` |
+
+**Quality check:** with `explain=true`, prefer hits where
+`metadata.matched_keyword` is true. If top hits are `[tool]` working turns,
+retry excluding working: use durable scope only.
+
+**Avoid:** `memory_think` as the first and only call on entity/competitor/code
+questions — it inherits default durable recall but still depends on query
+wording; keyword-anchored `memory_recall` first is more reliable.
 
 ### Assemble context
 
@@ -123,7 +179,10 @@ Call `memory_remember(content, kind=...)` for things still true next week:
 
 Optional: `subject`, `tags`. `[[Entity]]` wikilinks autolink on write. For
 code/repo-specific memories, pass `repo=<workspace-slug>` and/or
-`github=<owner>/<repo>`; omit both for cross-cutting preferences. Do **not** use
+`github=<owner>/<repo>`; omit both for cross-cutting preferences. After
+finishing research docs or competitor analysis, store a **dense summary**
+(`subject=<entity>`, tags like `competitor` / `product`) — one keyword-rich
+paragraph beats hoping recall finds a long markdown file. Do **not** use
 `memory_remember` for skills or playbooks — use `memory_skill_set` /
 `memory_playbook_set`.
 
@@ -169,33 +228,34 @@ capture; there is no client-side transcript hook. Session logging via
 `memory_session_*` is agent-initiated and does **not** use the `/sessions/turns`
 consent path (unlike automatic transcript ingest).
 
-Always resolve `repo=` first (see above). State key: `conversation/active-session`.
-Treat a missing or empty `session_id` in state as no active session.
+Always resolve `repo=` first (see above). The server keeps the
+`conversation/active-session` state pointer for you — one tool call per
+lifecycle event:
 
 **First turn of a thread** (no prior assistant turns in your context):
 
-1. `memory_state_get(repo=..., key="conversation/active-session")`.
-2. If `session_id` is present → `memory_session_close(session_id, distill=true)`.
-3. `memory_session_open(topic=<first user message, max ~120 chars>, repo=..., github=...)`.
-4. `memory_state_set(repo=..., key="conversation/active-session", value={"session_id": "<id>"})`.
+- `memory_session_ensure(repo=..., topic=<first user message, max ~120 chars>,
+  github=..., fresh=true)` — closes any stale session (distilling it), opens a
+  new one, and updates state in one call.
 
-Do **not** call `memory_session_open` if state already holds a `session_id` for
-this chat.
+**Mid-thread** (any later turn): `memory_session_ensure(repo=..., topic=...)`
+without `fresh` — returns the existing `session_id` (`resumed: true`); it never
+opens a duplicate.
 
 **Mid-thread pivot** (user clearly starts a new topic — do not wait for a new
-Cursor chat):
-
-1. `memory_session_close(session_id, distill=true)`.
-2. `memory_state_set(..., value={})`.
-3. Immediately `memory_session_open` with the new topic and update state — same turn.
+Cursor chat): `memory_session_ensure(repo=..., topic=<new topic>, fresh=true)`.
 
 **When done** (task complete, user says goodbye):
+`context_commit(summary=..., repo=..., close=true)` — appends the final
+assistant summary, closes with distillation, and clears state.
 
-1. `memory_session_close(session_id, distill=true)`.
-2. `memory_state_set(..., value={})`.
+**Append failure recovery** is automatic: `memory_session_append` and
+`context_commit` reopen a fresh session when the old one expired and return the
+new `session_id` with `reopened: true` — adopt it.
 
-**Append failure recovery** — if `memory_session_append` fails (expired or
-unknown `session_id`): open a new session, update state, retry the append once.
+The granular `memory_state_get` / `memory_session_open` /
+`memory_session_close` / `memory_state_set` tools still work if you need
+manual control, but `memory_session_ensure` + `context_commit` are preferred.
 
 Append the substantive user request and a faithful summary of your reply — not
 UI boilerplate. Truncate long tool output. Never append secrets, tokens, or
@@ -212,8 +272,9 @@ separate searches.
 
 - **Shared brain (default):** `memory_recall` and `memory_episodes_list` return
   every agent's durable memories unless you pass `agent=` to narrow.
-- **Caller-scoped working memory:** recall always includes the caller's own
-  session turns; durable pillars are not filtered by caller unless `agent=` is set.
+- **Working memory (opt-in):** pass `scope=["working"]` to include this chat's
+  session turns in recall; default scope excludes working so tool-turn noise
+  does not crowd out durable facts.
 - **Writes:** `memory_remember`, `memory_session_*`, `memory_skill_set`,
   `memory_playbook_set`, and `memory_graph_relate` attribute to the bearer token
   unless `agent=` overrides. Guarded writes land **active** immediately; hard
@@ -270,29 +331,29 @@ to write to the local rule file. See **Staying current** above.
 
 ### `memory_recall`
 
-Hybrid search across semantic, episodic, procedural, skill, strategic, work, and
-working pillars.
+Hybrid search across semantic, episodic, procedural, skill, strategic, and work
+pillars. Default scope excludes working (opt in with `scope=["working"]`).
 
 | Param | Use |
 |---|---|
-| `query` | Natural-language search (required) |
-| `scope` | Subset of pillars; omit = all (includes work) |
+| `query` | Short keyword anchor for entities; NL for broad topics (required) |
+| `scope` | Durable pillars by default; add `working` only for session turns |
 | `k` | Max records (1–50, default 8) |
 | `time_range` | Optional bounds for episodic/working hits |
 | `agent` | Optional filter to one agent's durable writes |
 | `repo` | Optional workspace slug; soft-boosts `repo:<slug>` tags (nothing hidden) |
 | `github` | Optional `owner/repo`; soft-boosts `github:<owner>/<repo>` tags |
-| `explain` | `true` to include attribution per hit |
+| `explain` | `true` to include attribution per hit; prefer `matched_keyword: true` |
 
 Returns `records` with pillar, agent, timestamps, and content for citation.
 For code work, pass `repo=<workspace-slug>` and/or `github=<owner>/<repo>`.
 
 ### `memory_think`
 
-Synthesized answer with citations and gap analysis (use `memory_recall` for raw
-records). Same params as `memory_recall`. Returns a grounded answer plus the
-records it drew from and what's missing. Pick one of `memory_think` /
-`memory_recall` per turn — not both.
+Synthesized answer with citations and gap analysis. Runs durable recall (no
+working by default), then composes prose + gaps. Use **after** keyword-anchored
+`memory_recall` for entity/competitor/code questions; use directly for open
+strategic or process questions.
 
 ### `memory_assemble_context`
 
@@ -335,6 +396,22 @@ Pre-LLM pipeline: session append → compress incoming history → enrich org me
 Returns compressed `messages`, optional `additional_context`, `session_id`, and
 `stats`.
 
+### `context_commit`
+
+Turn-end batch: assistant summary + durable writes + optional session close in
+one call.
+
+| Param | Use |
+|---|---|
+| `summary` | Faithful summary of your reply — the assistant turn (required) |
+| `session_id` | Session to commit to (omit to resolve from state via `repo`) |
+| `facts` | Optional durable writes: `[{"content", "kind", "subject", "tags"}]` |
+| `repo` / `github` | Scope tags for facts and the state pointer |
+| `close` | `true` when done: closes with distillation and clears state |
+
+Returns `{session_id, turn_count, reopened, memories, closed}`. The append
+self-heals expired sessions — the returned `session_id` is authoritative.
+
 ### `context_normalize`
 
 Strip, clean, and compress a **non-teamshared** tool output (Shell, Grep, Read).
@@ -364,14 +441,15 @@ Write semantic or episodic memory.
 Routing: `event` → episodic; others → semantic. Rejects `kind=procedure`.
 For code work, pass `repo=` and/or `github=`; omit both for cross-cutting facts.
 
-### `memory_session_open` / `memory_session_append` / `memory_session_close` / `memory_session_get`
+### `memory_session_ensure` / `memory_session_open` / `memory_session_append` / `memory_session_close` / `memory_session_get`
 
 Working-memory buffer in Redis — one session per chat (see **Session logging**).
 
 | Tool | Key params |
 |---|---|
-| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo`, `github` → `{session_id, agent}` |
-| `memory_session_append` | `session_id`, `role` (`user` \| `assistant` \| `tool` \| `system`), `content` → `{turn_count}` |
+| `memory_session_ensure` | `repo` (required), `topic`, `github`, `fresh` → `{session_id, agent, resumed}`; reuses the state-pointed session or rotates + updates state |
+| `memory_session_open` | `topic`, optional `ttl`, `agent`, `repo`, `github` → `{session_id, agent}` (prefer `memory_session_ensure`) |
+| `memory_session_append` | `session_id`, `role` (`user` \| `assistant` \| `tool` \| `system`), `content` → `{turn_count, session_id}`; self-heals expired sessions (`reopened: true`) |
 | `memory_session_close` | `session_id`, `distill=true` (default) queues distillation to durable memory |
 | `memory_session_get` | `session_id` → current turns/metadata |
 
@@ -493,14 +571,16 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 |---|---|
 | Is the server healthy? | `health` |
 | Server/rule version + update check | `version` |
-| Search all memory (raw records) | `memory_recall` |
-| Synthesized answer + gaps | `memory_think` |
+| Search durable memory (raw records) | `memory_recall` with durable scope + keyword anchor |
+| Synthesized answer + gaps | `memory_think` after recall, or for strategic questions |
 | One context pack for a task | `memory_assemble_context` |
 | Pre-LLM session + compress + enrich | `context_prepare` |
+| Turn-end summary + facts + close | `context_commit` |
 | Shrink a message list | `context_compress` |
 | Clean Shell/Grep/Read output | `context_normalize` |
 | Expand compressed original | `context_retrieve` |
 | Store preference/fact/event/note | `memory_remember` |
+| Start-of-chat session bootstrap | `memory_session_ensure` |
 | Log every chat + distillation | `memory_session_*` |
 | Client incremental state | `memory_state_get` / `memory_state_set` |
 | Browse timeline | `memory_episodes_list` |
@@ -521,7 +601,8 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 - Don't echo raw memory IDs unless the user asks.
 - Don't fabricate hits — if `memory_recall` is empty, say so.
 - Don't store secrets, tokens, or credentials in any memory tool.
-- Don't open a second `memory_session_open` when state already has a `session_id` for this chat.
+- Don't open a second session when state already has a `session_id` for this chat — `memory_session_ensure` handles reuse; never follow it with `memory_session_open`.
 - Don't store atomic instructions as playbooks (use `memory_skill_set`).
 - Don't re-call `context_normalize` on teamshared MCP outputs (middleware handles them).
 - Don't probe `TEAMSHARED_*` env vars in shell — call `health`.
+- Don't append `[tool]` turns for teamshared MCP calls (pollutes working recall).

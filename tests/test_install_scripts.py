@@ -149,6 +149,12 @@ def test_install_routes() -> None:
         assert cursor_mcp.status_code == 200
         assert "__TEAMSHARED_TOKEN__" in cursor_mcp.text
 
+        openclaw_cmds = client.get("/install/assets/openclaw/commands.sh")
+        assert openclaw_cmds.status_code == 200
+        assert "https://teamshared.com/mcp" in openclaw_cmds.text
+        assert "https://teamshared.com/gateway/v1" in openclaw_cmds.text
+        assert "__GATEWAY_URL__" not in openclaw_cmds.text
+
         cursor_rule = client.get("/install/assets/cursor/teamshared.mdc")
         assert cursor_rule.status_code == 200
         assert "teamshared Memory Protocol" in cursor_rule.text

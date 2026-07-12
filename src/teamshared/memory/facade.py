@@ -73,6 +73,9 @@ _PILLAR_WEIGHTS: dict[str, float] = {
 _REPO_BOOST = 1.3
 _GITHUB_BOOST = 1.3
 
+# Agent-state key holding the active working-memory session for one repo/chat.
+_ACTIVE_SESSION_KEY = "conversation/active-session"
+
 
 class MemoryFacade:
     def __init__(
@@ -732,10 +735,174 @@ class MemoryFacade:
 
     async def session_append(
         self, principal: Principal, *, session_id: str, role: str, content: str
-    ) -> dict[str, int]:
-        await self._require_session_owner(principal, session_id)
-        count = await self.working.append_turn(principal.org_id, session_id, role, content)
-        return {"turn_count": count}
+    ) -> dict[str, Any]:
+        """Append a turn, self-healing when the session expired or was closed.
+
+        A ``session_id`` that no longer resolves (Redis TTL expiry) or was
+        already closed is replaced with a fresh session and the turn lands
+        there; the response carries the replacement ``session_id`` and
+        ``reopened: true`` so the caller can update its bookkeeping.
+        Ownership violations still raise.
+        """
+        try:
+            await self._require_session_owner(principal, session_id)
+            count = await self.working.append_turn(principal.org_id, session_id, role, content)
+            return {"turn_count": count, "session_id": session_id}
+        except PermissionError:
+            raise
+        except (KeyError, ValueError):
+            agent = principal.display or principal.attribution
+            new_id = await self.working.open_session(principal.org_id, agent)
+            count = await self.working.append_turn(principal.org_id, new_id, role, content)
+            log.info(
+                "session_append_reopened",
+                stale_session_id=session_id,
+                session_id=new_id,
+                agent=agent,
+            )
+            return {"turn_count": count, "session_id": new_id, "reopened": True}
+
+    async def session_ensure(
+        self,
+        principal: Principal,
+        *,
+        state_id: str,
+        repo: str,
+        topic: str | None,
+        github: str | None = None,
+        ttl: int | None = None,
+        fresh: bool = False,
+        agent_override: str | None = None,
+    ) -> dict[str, Any]:
+        """One-call session bootstrap: recover the active session or open one.
+
+        Replaces the open/state-get/state-set ritual: reads the
+        ``conversation/active-session`` state pointer for ``repo``, reuses the
+        stored session when it is still open and owned by the caller, and
+        otherwise closes it (queueing distillation) and opens a fresh session,
+        updating the state pointer. ``fresh=True`` forces rotation (use on the
+        first turn of a new chat).
+        """
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="session_ensure",
+            request_id=caller_ctx.request_id,
+        )
+        agent = writer.display or writer.attribution
+        org = str(principal.org_id)
+        state = await self.agent_state.get(
+            state_id, repo, _ACTIVE_SESSION_KEY, org=org
+        )
+        existing = str((state or {}).get("session_id") or "") or None
+
+        if existing:
+            reusable = False
+            try:
+                meta = await self.working.get_metadata(principal.org_id, existing)
+                reusable = not meta.get("closed_at") and meta.get("agent") == agent
+            except KeyError:
+                pass
+            if reusable and not fresh:
+                return {"session_id": existing, "agent": agent, "resumed": True}
+            try:
+                await self.working.close_session(principal.org_id, existing, distill=True)
+            except KeyError:
+                pass
+
+        session_id = await self.working.open_session(
+            principal.org_id, agent, topic=topic, ttl=ttl, repo=repo, github=github
+        )
+        await self.agent_state.set(
+            state_id, repo, _ACTIVE_SESSION_KEY, {"session_id": session_id}, org=org
+        )
+        return {"session_id": session_id, "agent": agent, "resumed": False}
+
+    async def session_commit(
+        self,
+        principal: Principal,
+        *,
+        state_id: str | None,
+        session_id: str | None,
+        summary: str,
+        facts: list[dict[str, Any]] | None = None,
+        repo: str | None = None,
+        github: str | None = None,
+        close: bool = False,
+        agent_override: str | None = None,
+    ) -> dict[str, Any]:
+        """Turn-end batch: assistant summary + durable writes + optional close.
+
+        Appends ``summary`` as the assistant turn (self-healing via
+        :meth:`session_append`), writes each entry in ``facts`` through
+        ``remember``, and — when ``close`` is set — closes the session with
+        distillation and clears the ``conversation/active-session`` pointer.
+        When ``session_id`` is omitted it is resolved from state (requires
+        ``repo``).
+        """
+        org = str(principal.org_id)
+        if session_id is None and repo and state_id:
+            state = await self.agent_state.get(
+                state_id, repo, _ACTIVE_SESSION_KEY, org=org
+            )
+            session_id = str((state or {}).get("session_id") or "") or None
+        if session_id is None:
+            agent = principal.display or principal.attribution
+            session_id = await self.working.open_session(
+                principal.org_id, agent, topic=None, repo=repo, github=github
+            )
+
+        appended = await self.session_append(
+            principal, session_id=session_id, role="assistant", content=summary
+        )
+        session_id = str(appended.get("session_id") or session_id)
+        if appended.get("reopened") and repo and state_id:
+            await self.agent_state.set(
+                state_id, repo, _ACTIVE_SESSION_KEY, {"session_id": session_id}, org=org
+            )
+
+        memories: list[dict[str, Any]] = []
+        for fact in facts or []:
+            content = str(fact.get("content") or "").strip()
+            if not content:
+                memories.append({"status": "skipped", "reason": "empty content"})
+                continue
+            kind_raw = str(fact.get("kind") or "note")
+            kind = cast(
+                MemoryKind,
+                kind_raw if kind_raw in {"fact", "preference", "event", "note"} else "note",
+            )
+            try:
+                memories.append(
+                    await self.remember(
+                        principal,
+                        content=content,
+                        kind=kind,
+                        subject=fact.get("subject"),
+                        tags=fact.get("tags"),
+                        agent_override=agent_override,
+                        repo=repo,
+                        github=github,
+                    )
+                )
+            except (ValueError, IngestionRejected) as exc:
+                memories.append({"status": "rejected", "reason": str(exc)})
+
+        closed = False
+        if close:
+            await self.session_close(principal, session_id=session_id, distill=True)
+            closed = True
+            if repo and state_id:
+                await self.agent_state.set(
+                    state_id, repo, _ACTIVE_SESSION_KEY, {}, org=org
+                )
+
+        return {
+            "session_id": session_id,
+            "turn_count": appended.get("turn_count"),
+            "reopened": bool(appended.get("reopened")),
+            "memories": memories,
+            "closed": closed,
+        }
 
     async def session_close(
         self, principal: Principal, *, session_id: str, distill: bool
@@ -1216,9 +1383,13 @@ class MemoryFacade:
         await ctx.authorizer.require(ctx.principal, Permissions.WORK_READ)
         assignee_type: str | None = None
         assignee_id: UUID | None = None
+        created_by: str | None = None
         if mine:
             assignee_type = principal.type
             assignee_id = principal.id
+            # Agent principals are org-bound (id == org_id), so "mine" also
+            # matches items the caller created (created_by display label).
+            created_by = principal.display or principal.attribution
         elif assignee:
             user_id = await self.services.work.resolve_user_id_by_email(
                 principal.org_id, assignee,
@@ -1238,6 +1409,7 @@ class MemoryFacade:
             limit=limit,
             project_id=UUID(project_id) if project_id else None,
             offset=offset,
+            created_by=created_by,
         )
         next_offset = offset + len(rows) if len(rows) == limit else None
         return {
@@ -1795,14 +1967,7 @@ class MemoryFacade:
     ) -> dict[str, Any]:
         ctx = self._ctx(principal)
         await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
-        ftype, fid = await self._resolve_assignee(
-            principal.org_id,
-            assignee_type=None,
-            assignee_id=None,
-            assignee_email=follower_email,
-        )
-        if ftype is None or fid is None:
-            raise ValueError("could not resolve follower")
+        ftype, fid = await self._resolve_follower(principal, follower_email)
         row = await self.services.work.add_follower(
             principal.org_id, UUID(work_id), follower_type=ftype, follower_id=fid,  # type: ignore[arg-type]
         )
@@ -1817,14 +1982,7 @@ class MemoryFacade:
     ) -> dict[str, Any]:
         ctx = self._ctx(principal)
         await ctx.authorizer.require(ctx.principal, Permissions.WORK_WRITE)
-        ftype, fid = await self._resolve_assignee(
-            principal.org_id,
-            assignee_type=None,
-            assignee_id=None,
-            assignee_email=follower_email,
-        )
-        if ftype is None or fid is None:
-            raise ValueError("could not resolve follower")
+        ftype, fid = await self._resolve_follower(principal, follower_email)
         await self.services.work.remove_follower(
             principal.org_id, UUID(work_id), follower_type=ftype, follower_id=fid,  # type: ignore[arg-type]
         )
@@ -1871,6 +2029,23 @@ class MemoryFacade:
             )
         except Exception as exc:
             log.warning("work_close_episode_failed", work_id=str(row.get("id")), error=str(exc))
+
+    async def _resolve_follower(
+        self, principal: Principal, follower_email: str | None
+    ) -> tuple[str, UUID]:
+        """Resolve a follower party; default to the caller when no email given."""
+        if follower_email:
+            uid = await self.services.work.resolve_user_id_by_email(
+                principal.org_id, follower_email,
+            )
+            if uid is None:
+                raise ValueError(
+                    f"no org member with email {follower_email!r}; "
+                    "omit follower_email to follow as yourself"
+                )
+            return "user", uid
+        ftype = principal.type if principal.type in {"user", "agent"} else "agent"
+        return ftype, principal.id
 
     async def _resolve_assignee(
         self,
@@ -2018,6 +2193,15 @@ def _summarize_record(record: MemoryRecord) -> MemoryRecord:
     return record.model_copy(update={"content": snippet, "metadata": {}})
 
 
+def _body_snippet(body: Any, *, limit: int = 160) -> str:
+    """First non-empty line of a markdown body, stripped of heading markers."""
+    for line in str(body or "").splitlines():
+        text = line.strip().lstrip("#").strip()
+        if text:
+            return text[:limit]
+    return ""
+
+
 def _summarize_playbook(row: dict[str, Any], *, include_body: bool) -> dict[str, Any]:
     out = dict(row)
     tool_recipe = out.get("tool_recipe")
@@ -2031,7 +2215,11 @@ def _summarize_playbook(row: dict[str, Any], *, include_body: bool) -> dict[str,
                 **({"loop": loop} if loop else {}),
             }
     out["skill_names"] = skill_names
-    out["content_md"] = row.get("steps_md") if include_body else (row.get("description") or "")
+    out["content_md"] = (
+        row.get("steps_md")
+        if include_body
+        else (row.get("description") or _body_snippet(row.get("steps_md")))
+    )
     return out
 
 
@@ -2039,5 +2227,9 @@ def _summarize_skill(row: dict[str, Any], *, include_body: bool) -> dict[str, An
     out = dict(row)
     if not include_body:
         out.pop("body_md", None)
-    out["content_md"] = row.get("body_md") if include_body else (row.get("description") or "")
+    out["content_md"] = (
+        row.get("body_md")
+        if include_body
+        else (row.get("description") or _body_snippet(row.get("body_md")))
+    )
     return out

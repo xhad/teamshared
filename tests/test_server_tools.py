@@ -99,7 +99,19 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
         )
     )
     facade.session_open = AsyncMock(return_value={"session_id": "sess_abc", "agent": "anonymous"})
-    facade.session_append = AsyncMock(return_value={"turn_count": 1})
+    facade.session_append = AsyncMock(return_value={"turn_count": 1, "session_id": "sess_abc"})
+    facade.session_ensure = AsyncMock(
+        return_value={"session_id": "sess_abc", "agent": "anonymous", "resumed": False}
+    )
+    facade.session_commit = AsyncMock(
+        return_value={
+            "session_id": "sess_abc",
+            "turn_count": 2,
+            "reopened": False,
+            "memories": [],
+            "closed": False,
+        }
+    )
     facade.session_close = AsyncMock(
         return_value={"session_id": "sess_abc", "turn_count": 1, "closed_at": "now",
                       "distill_enqueued": False}
@@ -169,6 +181,15 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.work_close = AsyncMock(return_value={"id": "w1", "work_status": "done"})
     facade.work_comment_add = AsyncMock(return_value={"id": "c1", "body_md": "note"})
     facade.work_comment_list = AsyncMock(return_value={"count": 0, "comments": []})
+    facade.work_dependency_add = AsyncMock(
+        return_value={"blocker_id": "b", "blocked_id": "a", "already_exists": False}
+    )
+    facade.work_dependency_remove = AsyncMock(
+        return_value={"blocker_id": "b", "blocked_id": "a", "removed": True}
+    )
+    facade.project_status_post = AsyncMock(
+        return_value={"id": "s1", "state": "on_track"}
+    )
 
     settings = MagicMock()
     settings.embed_provider = "openai"
@@ -579,6 +600,114 @@ async def test_work_comment_tools(
     state.facade.work_comment_add.assert_awaited_once()
     await _call(mcp, "work_comment_list", work_id="w1")
     state.facade.work_comment_list.assert_awaited_once()
+
+
+async def test_memory_session_ensure_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    from teamshared.auth import AgentIdentity, _current_agent
+
+    mcp, state = mcp_with_mocks
+    token = _current_agent.set(AgentIdentity(agent="cursor", state_id="teamshared_test"))
+    try:
+        out = await _call(
+            mcp,
+            "memory_session_ensure",
+            repo="Users-me-code-myrepo",
+            topic="debug retrieval",
+            fresh=True,
+        )
+        assert out["session_id"] == "sess_abc"
+        kwargs = state.facade.session_ensure.await_args.kwargs
+        assert kwargs["state_id"] == "teamshared_test"
+        assert kwargs["repo"] == "Users-me-code-myrepo"
+        assert kwargs["fresh"] is True
+    finally:
+        _current_agent.reset(token)
+
+
+async def test_context_commit_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    out = await _call(
+        mcp,
+        "context_commit",
+        summary="Fixed the flaky test.",
+        facts=[{"content": "CI clock is pinned", "kind": "fact"}],
+        repo="Users-me-code-myrepo",
+        close=False,
+    )
+    assert out["session_id"] == "sess_abc"
+    kwargs = state.facade.session_commit.await_args.kwargs
+    assert kwargs["summary"] == "Fixed the flaky test."
+    assert kwargs["facts"] == [{"content": "CI clock is pinned", "kind": "fact"}]
+    assert kwargs["close"] is False
+
+
+async def test_work_create_accepts_description_alias(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "work_create", title="t", description="alias body")
+    assert state.facade.work_create.await_args.kwargs["description_md"] == "alias body"
+
+
+async def test_work_dependency_add_accepts_aliases(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "work_dependency_add", work_id="blocked-1", depends_on_id="blocker-1")
+    kwargs = state.facade.work_dependency_add.await_args.kwargs
+    assert kwargs["blocker_id"] == "blocker-1"
+    assert kwargs["blocked_id"] == "blocked-1"
+
+
+async def test_work_dependency_add_requires_a_pair(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    from fastmcp.exceptions import ToolError
+
+    mcp, _ = mcp_with_mocks
+    with pytest.raises((ToolError, ValueError)):
+        await _call(mcp, "work_dependency_add", blocker_id="only-one")
+
+
+async def test_memory_graph_relate_accepts_object_alias(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(
+        mcp, "memory_graph_relate", subject="a", predicate="works_on", object="b"
+    )
+    assert state.facade.graph_relate.await_args.kwargs["object_"] == "b"
+
+
+async def test_memory_action_apply_accepts_action_alias(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(
+        mcp, "memory_action_apply", action="link_entities",
+        parameters={"subject": "a", "predicate": "mentions", "object_entity": "b"},
+    )
+    assert state.facade.action_apply.await_args.kwargs["action_name"] == "link_entities"
+
+
+async def test_memory_ontology_propose_entity_accepts_kind_alias(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "memory_ontology_propose_entity", kind="Project", name="Acme")
+    assert state.facade.ontology_propose_entity.await_args.kwargs["kind_name"] == "Project"
+
+
+async def test_project_status_post_accepts_status_alias(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(mcp, "project_status_post", project_id="p1", status="at_risk")
+    assert state.facade.project_status_post.await_args.kwargs["state"] == "at_risk"
 
 
 async def test_memory_state_get_and_set(

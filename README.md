@@ -152,6 +152,7 @@ Manual snippets and install templates live under [`plugins/teamshared/`](plugins
 | `context_compress`          | Shrink tool outputs/logs before sending a prompt to an LLM   |
 | `context_retrieve`          | Fetch original content for a CCR ref from compression        |
 | `context_prepare`           | Session append → compress history → enrich org memory        |
+| `context_commit`            | Turn-end batch: assistant summary + durable facts + optional close |
 | `context_normalize`         | Strip/clean/compress a non-teamshared tool output            |
 
 See **[Context compression](docs/context-compression.md)** for how teamshared reduces token burn in multi-turn agent conversations (MCP tools, middleware, CCR, configuration).
@@ -161,8 +162,9 @@ See **[Context compression](docs/context-compression.md)** for how teamshared re
 | `memory_think`              | Synthesized answer with citations + gap analysis (GBrain `think` parity) |
 | `memory_remember`           | Write a fact / preference / event / note (`repo=` / `github=` scope tags) |
 | `memory_assemble_context`   | One parallel, token-budgeted, cited context pack across all pillars + graph |
-| `memory_session_open`       | Start a working-memory session                               |
-| `memory_session_append`     | Append a turn                                                |
+| `memory_session_ensure`     | One-call bootstrap: recover the active session or rotate to a new one |
+| `memory_session_open`       | Start a working-memory session (prefer `memory_session_ensure`) |
+| `memory_session_append`     | Append a turn (self-heals expired sessions)                  |
 | `memory_session_close`      | Close + enqueue for distillation                             |
 | `memory_session_get`        | Read session metadata and turns                              |
 | `memory_episodes_list`      | Browse the episodic timeline                                 |
@@ -311,6 +313,22 @@ Two reference topologies live in [`infra/`](infra):
   new) after `TEAMSHARED_CAPTURE_IDLE_SECONDS` of inactivity or
   `TEAMSHARED_CAPTURE_MAX_TURNS` turns for middleware/autosession capture; set
   `TEAMSHARED_CAPTURE_ENABLED=false` to disable server-side tool capture.
+
+- **Chat-completions gateway (memory companion)**: `POST /gateway/v1/chat/completions`
+  is an OpenAI-compatible proxy for harnesses that support a custom model base
+  URL (e.g. OpenClaw's `models.providers.<name>.baseUrl`). Each request is run
+  through the pre-LLM pipeline (session append → history compression →
+  context-pack enrichment) and forwarded to the configured upstream provider,
+  streaming SSE back verbatim; the assistant reply is appended to the same
+  working session on completion, so distillation and curation cover the full
+  conversation with zero agent cooperation. Conversations are fingerprinted
+  from their first user message and mapped to one working session per agent, so
+  parallel chats don't interleave. Auth is the same `tsk_*` bearer key agents
+  use for MCP. Opt-in: set `TEAMSHARED_GATEWAY_ENABLED=true`,
+  `TEAMSHARED_GATEWAY_UPSTREAM_BASE_URL` (OpenAI-compatible, ending in `/v1`),
+  `TEAMSHARED_GATEWAY_UPSTREAM_API_KEY`, and optionally
+  `TEAMSHARED_GATEWAY_DEFAULT_MODEL`. `GET /gateway/v1/models` answers client
+  probes with the default model.
 
 - **Memory wiki curation**: a separate `curator` worker process (alongside the
   `distiller`) keeps the wiki readable. When the distiller writes new facts or

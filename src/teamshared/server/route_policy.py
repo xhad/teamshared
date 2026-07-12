@@ -54,6 +54,7 @@ _EXACT: dict[str, RouteClass] = {
 # Longest-prefix wins among these (order matters for overlaps).
 _PREFIX: tuple[tuple[str, RouteClass], ...] = (
     ("/mcp", RouteClass.MCP_BEARER),
+    ("/gateway/", RouteClass.MCP_BEARER),
     ("/v1", RouteClass.API_V1),
     ("/app", RouteClass.CONSOLE_SESSION),
     ("/login", RouteClass.CONSOLE_SESSION),

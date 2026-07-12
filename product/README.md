@@ -30,7 +30,7 @@ The graph was built from **internal product intent** (`prod-plan.md`,
 signals** (`company-brain-yc-rfs.md`, `gbrain-competitor-research.md`,
 `shared-brain-landscape-2026.md`, `palantir-foundry-ontology-research.md`,
 `headroom-research.md`, `screenpipe-research.md`, `mex-research.md`,
-`cognee-research.md`). Corpus health is still **thin** — there is no captured
+`cognee-research.md`, `ract-research.md`). Corpus health is still **thin** — there is no captured
 user research yet. The headline finding: the plan is detailed, but the core bets
 have **zero user evidence**. GBrain and Cognee are the primary Tier-1 memory
 competitors (`knowledge/gbrain-competitor-analysis.md`,
@@ -43,7 +43,10 @@ the main **adjacent** context-compression layer (`knowledge/headroom-architectur
 ontology is the architectural reference for a governed entity/action layer
 (`knowledge/palantir-ontology-analysis.md`); mex is the main **adjacent** repo-scoped
 markdown scaffold + drift CLI (`knowledge/mex-competitor-analysis.md` — git-local
-ROUTER/patterns, not a multi-tenant org brain). See `knowledge/assumption-audit.md`.
+ROUTER/patterns, not a multi-tenant org brain); RACT is the main **adjacent**
+CLI agentic coding harness with anti-rot verifiers (`knowledge/ract-competitor-analysis.md`
+— MCP consumer, competes with Cursor surface, complements TeamShared MCP). See
+`knowledge/assumption-audit.md`.
 
 ## How to move it forward
 

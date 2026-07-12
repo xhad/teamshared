@@ -352,6 +352,37 @@ class Settings(BaseSettings):
         description="Token budget for context assembly injected before LLM calls.",
     )
 
+    gateway_enabled: bool = Field(
+        default=False,
+        description=(
+            "Enable the OpenAI-compatible chat-completions gateway at "
+            "/gateway/v1/chat/completions. Harnesses that support a custom "
+            "base URL (e.g. OpenClaw) point their model calls here so every "
+            "request gets session append + compression + context enrichment "
+            "server-side before being proxied upstream."
+        ),
+    )
+    gateway_upstream_base_url: str | None = Field(
+        default=None,
+        description=(
+            "OpenAI-compatible base URL (ending in /v1) the gateway forwards "
+            "chat completions to, e.g. https://api.openai.com/v1 or an "
+            "OpenRouter/LiteLLM endpoint. Required when gateway_enabled."
+        ),
+    )
+    gateway_upstream_api_key: str | None = Field(
+        default=None,
+        description="Bearer key sent to the upstream provider by the gateway.",
+    )
+    gateway_default_model: str | None = Field(
+        default=None,
+        description="Upstream model used when a gateway request omits `model`.",
+    )
+    gateway_upstream_timeout_seconds: int = Field(
+        default=300,
+        description="Read timeout for upstream chat completions (streaming responses).",
+    )
+
     capture_enabled: bool = Field(
         default=True,
         description=(

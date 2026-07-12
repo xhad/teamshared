@@ -1,7 +1,7 @@
 {
   "meta": {
-    "generated": "2026-07-11T18:27:13Z",
-    "sourceCount": 13,
+    "generated": "2026-07-11T22:45:00Z",
+    "sourceCount": 14,
     "sourceTypes": [
       "research",
       "prd",
@@ -10,9 +10,11 @@
     ],
     "health": "developing",
     "notes": [
+      "Incremental graphify 2026-07-11: ingested ract-research.md (LucRoot/RACT agentic coding CLI).",
       "Full graphify re-run 2026-07-11: ingested cognee-research.md, mex-research.md, palantir-foundry-ontology-research.md (previously missing from graph).",
       "Skipped sources/README.md (workspace boilerplate) and sources/interview-template.md (empty template, not evidence).",
-      "Thirteen sources: five internal product-intent docs + eight external research artifacts. Still zero user-interview or support-ticket evidence.",
+      "Fourteen sources: five internal product-intent docs + nine external research artifacts. Still zero user-interview or support-ticket evidence.",
+      "RACT classified Tier-3 adjacent agentic coding harness (MCP consumer); competes with Cursor surface, complements TeamShared MCP provider.",
       "Internal sources (prod-plan.md, plan.md, memory-wiki-plan.md, teamshared-readme.md, teamshared-agents.md) lack YAML frontmatter; types inferred as prd/memo/doc.",
       "Cognee classified Tier-1 direct memory competitor alongside GBrain. mex Tier-3 adjacent. Palantir ontology = architectural reference only.",
       "consent-first capture removed from product (2026-06-19); memory-wiki-plan.md retains historical consent design."
@@ -1475,6 +1477,116 @@
       "label": "TeamShared governance (work queue, OKRs, approvals, capture) differentiates vs Cognee without graph parity",
       "risk": "If buyers pick memory on graph ontology depth or star count alone, Cognee wins without TeamShared needing governance features.",
       "provenance": []
+    },
+    {
+      "id": "comp-ract",
+      "type": "Competitor",
+      "label": "RACT (LucRoot/RACT) \u2014 CLI agentic coding harness + anti-rot verifiers (~3\u2605)",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "RACT's category: **model-agnostic, local-first agentic coding** \u2014 a terminal harness that turns intent into validated plans, executes through routed LLM providers, writes artifacts with a **Root Knot** continuity sentinel"
+        }
+      ]
+    },
+    {
+      "id": "feature-ract-root-knot",
+      "type": "Feature",
+      "label": "RACT Root Knot: _ROOT_KNOT sentinel halts loop on unsigned drift",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "If the recursion loop ever produces an artifact without the knot, the loop stops immediately rather than compounding unsigned work."
+        }
+      ]
+    },
+    {
+      "id": "feature-ract-anti-rot-cli",
+      "type": "Feature",
+      "label": "RACT anti-rot CLI: consolidate, novelty scan, auction, fence, whisper",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "RACT exposes the rot-fighting loop as first-class CLI verbs"
+        }
+      ]
+    },
+    {
+      "id": "feature-ract-signed-receipts",
+      "type": "Feature",
+      "label": "RACT signed run receipts (JSON export for CI and cross-model QA)",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "Receipts capture intent, model, steps, test results, quality score, cost, latency, and the final decision."
+        }
+      ]
+    },
+    {
+      "id": "feature-ract-mcp-consumer",
+      "type": "Feature",
+      "label": "RACT MCP consumer: mcp_servers in rootact.yaml, McpToolRegistry",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "RACT is an **MCP consumer**, not a memory server"
+        }
+      ]
+    },
+    {
+      "id": "pain-code-rot",
+      "type": "Pain",
+      "label": "AI-assisted code rot: duplication, dead code, undocumented load-bearing logic",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "AI-assisted code is already rotting codebases: more copy/paste, less refactoring, and a measurable decline in code movement."
+        }
+      ]
+    },
+    {
+      "id": "pain-unsigned-agent-code",
+      "type": "Pain",
+      "label": "Agent loop iterations compound unsigned or unverified code changes",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "unsigned drift breaks the loop instead of compounding"
+        }
+      ]
+    },
+    {
+      "id": "insight-ract-tier3-harness-adjacent",
+      "type": "Insight",
+      "label": "RACT is Tier-3 adjacent coding harness \u2014 not org memory competitor",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "**Tier 3 \u2014 adjacent agentic coding harness** (competes with Cursor/Claude Code *surface*, not GBrain/Cognee *memory budget*)"
+        }
+      ]
+    },
+    {
+      "id": "insight-ract-complements-teamshared-mcp",
+      "type": "Insight",
+      "label": "RACT harness + TeamShared MCP is complementary (consumer + provider)",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "TeamShared could be configured as an `mcp_servers` entry for org recall during RACT plan steps"
+        }
+      ]
+    },
+    {
+      "id": "insight-ract-competes-cursor-surface",
+      "type": "Insight",
+      "label": "RACT competes with Cursor harness surface where TeamShared plugin attaches",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "README positions directly against **Cursor, Claude Code, and Lovable** (IDE/hosted coding agents)"
+        }
+      ]
     }
   ],
   "edges": [
@@ -2347,6 +2459,78 @@
         {
           "source": "cognee-research.md",
           "quote": "From public docs \u2014 no equivalent surfaced for: Human work queue (`work_*`) with assignees and status workflow"
+        }
+      ]
+    },
+    {
+      "id": "e-ract-code-rot-pain",
+      "type": "addresses",
+      "from": "comp-ract",
+      "to": "pain-code-rot",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "defend against the four rot vectors that research identified \u2014 duplication, drift, dead code, and undocumented load-bearing logic"
+        }
+      ]
+    },
+    {
+      "id": "e-agents-code-rot",
+      "type": "experiences",
+      "from": "segment-agents",
+      "to": "pain-code-rot",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "AI-assisted code is already rotting codebases"
+        }
+      ]
+    },
+    {
+      "id": "e-ract-root-knot-unsigned",
+      "type": "addresses",
+      "from": "feature-ract-root-knot",
+      "to": "pain-unsigned-agent-code",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "If the recursion loop ever produces an artifact without the knot, the loop stops immediately"
+        }
+      ]
+    },
+    {
+      "id": "e-ract-mcp-consumer-supports",
+      "type": "supports",
+      "from": "feature-ract-mcp-consumer",
+      "to": "insight-mcp-is-de-facto",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "Each listed tool can be called from plan steps, letting RACT use filesystem, browser, database, or documentation servers that you already run locally."
+        }
+      ]
+    },
+    {
+      "id": "e-ract-complements-mcp",
+      "type": "supports",
+      "from": "insight-ract-complements-teamshared-mcp",
+      "to": "feature-mcp-native",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "TeamShared could be configured as an `mcp_servers` entry for org recall during RACT plan steps"
+        }
+      ]
+    },
+    {
+      "id": "e-ract-tier3-adjacent",
+      "type": "supports",
+      "from": "insight-ract-tier3-harness-adjacent",
+      "to": "insight-mex-tier3-adjacent",
+      "provenance": [
+        {
+          "source": "ract-research.md",
+          "quote": "Not Tier 1 company brain. Potential **complement**: RACT harness + TeamShared MCP for org recall across repos."
         }
       ]
     }

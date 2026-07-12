@@ -63,6 +63,12 @@ def validate_settings(settings: Settings) -> None:
             "when TEAMSHARED_LLM_PROVIDER=openrouter"
         )
 
+    if settings.gateway_enabled and not settings.gateway_upstream_base_url:
+        errors.append(
+            "TEAMSHARED_GATEWAY_UPSTREAM_BASE_URL is required when "
+            "TEAMSHARED_GATEWAY_ENABLED is true"
+        )
+
     if settings.dashboard_public_content:
         errors.append(
             "TEAMSHARED_DASHBOARD_PUBLIC_CONTENT must be false in production "

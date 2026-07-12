@@ -7,7 +7,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 from teamshared.memory.hybrid import reciprocal_rank_fusion
-from teamshared.memory.retrieval import SecureRetrieval, _recheck_scope, _rerank
+from teamshared.memory.retrieval import (
+    SecureRetrieval,
+    _normalize_fts_scores,
+    _recheck_scope,
+    _rerank,
+)
 from teamshared.memory.types import MemoryRecord
 from teamshared.memory.vectorstore import ScopeFilter
 
@@ -21,6 +26,29 @@ def test_rerank_orders_by_weighted_score() -> None:
     b = _rec("b", pillar="working", score=0.6)
     ranked = _rerank([b, a], k=10)
     assert ranked[0].id == "a"  # semantic weight > working weight
+
+
+def test_normalize_fts_scores_rescales_to_rrf_band() -> None:
+    """Raw ts_rank scores (~0.05-0.5) must not dwarf RRF scores (~1/60)."""
+    hits = [
+        _rec("s1", pillar="skill", score=0.42),
+        _rec("s2", pillar="skill", score=0.08),
+    ]
+    out = _normalize_fts_scores(hits)
+    assert out[0].score == 1.0 / 61
+    assert out[1].score == 1.0 / 62
+    assert out[0].metadata["fts_rank"] == 0.42
+
+
+def test_keyword_matched_semantic_hit_outranks_weak_fts_skill() -> None:
+    """The regression this guards: bulk-imported skills with modest lexical
+    rank crowding out an on-topic RRF-merged semantic/episodic hit."""
+    semantic = _rec("mem", pillar="episodic", score=1.0 / 61)  # top RRF hit
+    skills = _normalize_fts_scores(
+        [_rec(f"skill{i}", pillar="skill", score=0.08) for i in range(6)]
+    )
+    ranked = _rerank([*skills, semantic], k=5)
+    assert ranked[0].id == "mem"
 
 
 def test_rrf_merge_dedupes() -> None:

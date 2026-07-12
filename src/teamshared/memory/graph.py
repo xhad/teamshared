@@ -118,14 +118,22 @@ class GraphStore:
             )
             rows = [dict(record) async for record in result]
 
-        return [
-            MemoryRecord(
-                id=f"graph:{r['name']}",
-                pillar="semantic",
-                content=f"{name} --[{' -> '.join(r['predicates'])}]--> {r['name']}",
-                subject=r["name"],
-                metadata={"hops": r["hops"], "predicates": r["predicates"]},
-                score=1.0 / max(r["hops"], 1),
+        # Multiple paths reach the same entity; keep the shortest (rows are
+        # ordered by hops ascending) so each neighbor appears once.
+        seen: set[str] = set()
+        out: list[MemoryRecord] = []
+        for r in rows:
+            if r["name"] in seen:
+                continue
+            seen.add(r["name"])
+            out.append(
+                MemoryRecord(
+                    id=f"graph:{r['name']}",
+                    pillar="semantic",
+                    content=f"{name} --[{' -> '.join(r['predicates'])}]--> {r['name']}",
+                    subject=r["name"],
+                    metadata={"hops": r["hops"], "predicates": r["predicates"]},
+                    score=1.0 / max(r["hops"], 1),
+                )
             )
-            for r in rows
-        ]
+        return out
