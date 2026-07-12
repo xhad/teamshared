@@ -383,6 +383,9 @@ def doctor(
     ),
 ) -> None:
     """Check server dependencies and optional authenticated MCP connectivity."""
+    if write_smoke and not token:
+        raise typer.BadParameter("--write-smoke requires --token")
+
     from uuid import uuid4
 
     from fastmcp import Client
@@ -390,8 +393,6 @@ def doctor(
 
     settings = get_settings()
     base = (url or settings.public_url or f"http://{settings.host}:{settings.port}").rstrip("/")
-    if write_smoke and not token:
-        raise typer.BadParameter("--write-smoke requires --token")
 
     async def _run() -> bool:
         ok = True
