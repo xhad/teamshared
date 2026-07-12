@@ -186,6 +186,61 @@ async def test_session_ensure_does_not_reuse_foreign_session() -> None:
     assert out["session_id"] == "sess_mine"
 
 
+@pytest.mark.asyncio
+async def test_session_ensure_appends_user_turn() -> None:
+    facade, working, agent_state = _facade()
+    agent_state.get = AsyncMock(return_value=None)
+    agent_state.set = AsyncMock()
+    working.open_session = AsyncMock(return_value="sess_new")
+    working.get_metadata = AsyncMock(return_value=_open_meta())
+    working.append_turn = AsyncMock(return_value=1)
+    out = await facade.session_ensure(
+        _principal(),
+        state_id=STATE_ID,
+        repo=REPO,
+        topic="audit topic",
+        user="hello from user",
+    )
+    assert out["session_id"] == "sess_new"
+    assert out["turn_count"] == 1
+    working.append_turn.assert_awaited_once_with(ORG, "sess_new", "user", "hello from user")
+
+
+@pytest.mark.asyncio
+async def test_session_append_reopen_preserves_repo_from_stale_meta() -> None:
+    facade, working, agent_state = _facade()
+    working.get_metadata = AsyncMock(
+        return_value={"agent": AGENT, "closed_at": "now", "repo": REPO, "github": "x/y", "topic": "t"},
+    )
+    working.open_session = AsyncMock(return_value="sess_new")
+    working.append_turn = AsyncMock(side_effect=[ValueError("closed"), 1])
+    await facade.session_append(
+        _principal(), session_id="sess_closed", role="user", content="hi"
+    )
+    working.open_session.assert_awaited_once_with(
+        ORG, AGENT, topic="t", repo=REPO, github="x/y"
+    )
+
+
+@pytest.mark.asyncio
+async def test_session_append_reopen_updates_state_pointer() -> None:
+    facade, working, agent_state = _facade()
+    agent_state.set = AsyncMock()
+    working.get_metadata = AsyncMock(side_effect=KeyError("unknown"))
+    working.open_session = AsyncMock(return_value="sess_new")
+    working.append_turn = AsyncMock(return_value=1)
+    await facade.session_append(
+        _principal(),
+        session_id="sess_gone",
+        role="user",
+        content="hi",
+        state_id=STATE_ID,
+        repo=REPO,
+    )
+    stored = agent_state.set.await_args.args
+    assert stored[3] == {"session_id": "sess_new"}
+
+
 # --- session_commit -----------------------------------------------------------
 
 

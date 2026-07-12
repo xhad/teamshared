@@ -734,7 +734,16 @@ class MemoryFacade:
         return {"session_id": session_id, "agent": agent}
 
     async def session_append(
-        self, principal: Principal, *, session_id: str, role: str, content: str
+        self,
+        principal: Principal,
+        *,
+        session_id: str,
+        role: str,
+        content: str,
+        state_id: str | None = None,
+        repo: str | None = None,
+        github: str | None = None,
+        topic: str | None = None,
     ) -> dict[str, Any]:
         """Append a turn, self-healing when the session expired or was closed.
 
@@ -742,18 +751,43 @@ class MemoryFacade:
         already closed is replaced with a fresh session and the turn lands
         there; the response carries the replacement ``session_id`` and
         ``reopened: true`` so the caller can update its bookkeeping.
+        When ``state_id`` and ``repo`` are provided, the active-session pointer
+        is updated automatically on reopen. Repo/github/topic for the new
+        session are taken from the arguments first, then from the stale session
+        metadata when still available.
         Ownership violations still raise.
         """
+        org = str(principal.org_id)
+        stale_meta: dict[str, str] = {}
         try:
-            await self._require_session_owner(principal, session_id)
+            stale_meta = await self.working.get_metadata(principal.org_id, session_id)
+            owner = stale_meta.get("agent")
+            caller = principal.display or principal.attribution
+            if owner != caller:
+                raise PermissionError(
+                    f"session {session_id} belongs to {owner!r}, not {caller!r}"
+                )
             count = await self.working.append_turn(principal.org_id, session_id, role, content)
             return {"turn_count": count, "session_id": session_id}
         except PermissionError:
             raise
         except (KeyError, ValueError):
             agent = principal.display or principal.attribution
-            new_id = await self.working.open_session(principal.org_id, agent)
+            reopen_topic = topic or stale_meta.get("topic") or None
+            reopen_repo = repo or stale_meta.get("repo") or None
+            reopen_github = github or stale_meta.get("github") or None
+            new_id = await self.working.open_session(
+                principal.org_id,
+                agent,
+                topic=reopen_topic,
+                repo=reopen_repo or None,
+                github=reopen_github or None,
+            )
             count = await self.working.append_turn(principal.org_id, new_id, role, content)
+            if state_id and repo:
+                await self.agent_state.set(
+                    state_id, repo, _ACTIVE_SESSION_KEY, {"session_id": new_id}, org=org
+                )
             log.info(
                 "session_append_reopened",
                 stale_session_id=session_id,
@@ -773,6 +807,7 @@ class MemoryFacade:
         ttl: int | None = None,
         fresh: bool = False,
         agent_override: str | None = None,
+        user: str | None = None,
     ) -> dict[str, Any]:
         """One-call session bootstrap: recover the active session or open one.
 
@@ -781,7 +816,8 @@ class MemoryFacade:
         stored session when it is still open and owned by the caller, and
         otherwise closes it (queueing distillation) and opens a fresh session,
         updating the state pointer. ``fresh=True`` forces rotation (use on the
-        first turn of a new chat).
+        first turn of a new chat). When ``user`` is set, the user turn is
+        appended in the same call (replaces a separate ``session_append``).
         """
         caller_ctx = self._ctx(principal)
         writer = await self._write_principal(
@@ -803,19 +839,49 @@ class MemoryFacade:
             except KeyError:
                 pass
             if reusable and not fresh:
-                return {"session_id": existing, "agent": agent, "resumed": True}
-            try:
-                await self.working.close_session(principal.org_id, existing, distill=True)
-            except KeyError:
-                pass
+                out: dict[str, Any] = {
+                    "session_id": existing,
+                    "agent": agent,
+                    "resumed": True,
+                }
+            else:
+                try:
+                    await self.working.close_session(principal.org_id, existing, distill=True)
+                except KeyError:
+                    pass
+                session_id = await self.working.open_session(
+                    principal.org_id, agent, topic=topic, ttl=ttl, repo=repo, github=github
+                )
+                await self.agent_state.set(
+                    state_id, repo, _ACTIVE_SESSION_KEY, {"session_id": session_id}, org=org
+                )
+                out = {"session_id": session_id, "agent": agent, "resumed": False}
+        else:
+            session_id = await self.working.open_session(
+                principal.org_id, agent, topic=topic, ttl=ttl, repo=repo, github=github
+            )
+            await self.agent_state.set(
+                state_id, repo, _ACTIVE_SESSION_KEY, {"session_id": session_id}, org=org
+            )
+            out = {"session_id": session_id, "agent": agent, "resumed": False}
 
-        session_id = await self.working.open_session(
-            principal.org_id, agent, topic=topic, ttl=ttl, repo=repo, github=github
-        )
-        await self.agent_state.set(
-            state_id, repo, _ACTIVE_SESSION_KEY, {"session_id": session_id}, org=org
-        )
-        return {"session_id": session_id, "agent": agent, "resumed": False}
+        user_text = (user or "").strip()
+        if user_text:
+            appended = await self.session_append(
+                principal,
+                session_id=str(out["session_id"]),
+                role="user",
+                content=user_text,
+                state_id=state_id,
+                repo=repo,
+                github=github,
+                topic=topic,
+            )
+            out["session_id"] = appended["session_id"]
+            out["turn_count"] = appended.get("turn_count")
+            if appended.get("reopened"):
+                out["reopened"] = True
+        return out
 
     async def session_commit(
         self,
@@ -852,13 +918,15 @@ class MemoryFacade:
             )
 
         appended = await self.session_append(
-            principal, session_id=session_id, role="assistant", content=summary
+            principal,
+            session_id=session_id,
+            role="assistant",
+            content=summary,
+            state_id=state_id,
+            repo=repo,
+            github=github,
         )
         session_id = str(appended.get("session_id") or session_id)
-        if appended.get("reopened") and repo and state_id:
-            await self.agent_state.set(
-                state_id, repo, _ACTIVE_SESSION_KEY, {"session_id": session_id}, org=org
-            )
 
         memories: list[dict[str, Any]] = []
         for fact in facts or []:

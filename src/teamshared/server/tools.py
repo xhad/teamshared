@@ -722,6 +722,15 @@ def register_tools(mcp: Any) -> None:
                 ),
             ),
         ] = False,
+        user: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Substantive user request for this turn. When set, appended as the "
+                    "user turn in the same call (replaces a separate memory_session_append)."
+                ),
+            ),
+        ] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
         """One-call session bootstrap: recover the active session or open one.
@@ -745,6 +754,7 @@ def register_tools(mcp: Any) -> None:
             ttl=ttl,
             fresh=fresh,
             agent_override=agent,
+            user=user,
         )
 
     @mcp.tool()
@@ -752,18 +762,45 @@ def register_tools(mcp: Any) -> None:
         session_id: Annotated[str, Field(description="Session id from memory_session_open")],
         role: Annotated[SessionRole, Field(description="user, assistant, tool, or system")],
         content: Annotated[str, Field(description="Turn content")],
+        repo: Annotated[
+            str | None,
+            Field(
+                description=(
+                    "Workspace slug. When set with an active bearer token, reopen "
+                    "self-healing updates the conversation/active-session pointer."
+                ),
+            ),
+        ] = None,
+        github: Annotated[
+            str | None,
+            Field(description="GitHub owner/repo tag used when reopening a session"),
+        ] = None,
+        topic: Annotated[
+            str | None,
+            Field(description="Session topic used when reopening after expiry"),
+        ] = None,
     ) -> dict[str, Any]:
         """Append a turn to a working-memory session (self-healing).
 
         When ``session_id`` has expired or was closed, a fresh session is
         opened automatically and the turn lands there; the response then
-        carries the replacement ``session_id`` and ``reopened: true`` — update
-        your ``conversation/active-session`` state when you see it.
+        carries the replacement ``session_id`` and ``reopened: true``. Pass
+        ``repo`` (and optionally ``github`` / ``topic``) so reopen preserves
+        workspace scope and updates the state pointer without a manual
+        ``memory_state_set``.
         """
+        ident = current_agent()
         state = get_state()
         principal = await _principal()
         return await state.facade.session_append(
-            principal, session_id=session_id, role=role, content=content
+            principal,
+            session_id=session_id,
+            role=role,
+            content=content,
+            state_id=ident.state_id if ident else None,
+            repo=repo,
+            github=github,
+            topic=topic,
         )
 
     @mcp.tool()

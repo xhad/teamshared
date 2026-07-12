@@ -43,16 +43,27 @@ def _extract_payload(result: ToolResult) -> Any | None:
         return raw
 
 
-def _rebuild_result(original: ToolResult, body: Any) -> ToolResult:
+def _uses_wrap_result(original: ToolResult) -> bool:
+    """True when FastMCP wrapped the payload as ``{"result": ...}``."""
+    if isinstance(original.meta, dict) and original.meta.get("fastmcp", {}).get("wrap_result"):
+        return True
+    structured = original.structured_content
+    return isinstance(structured, dict) and set(structured.keys()) == {"result"}
+
+
+def _structured_body(original: ToolResult, body: Any) -> dict[str, Any]:
+    """Build MCP-compliant structured_content, preserving wrap-result shape."""
+    if _uses_wrap_result(original):
+        return {"result": body}
     if isinstance(body, dict):
+        return body
+    return {"output": body}
+
+
+def _rebuild_result(original: ToolResult, body: Any) -> ToolResult:
+    if isinstance(body, (dict, str)):
         return ToolResult(
-            structured_content=body,
-            meta=original.meta,
-            is_error=original.is_error,
-        )
-    if isinstance(body, str):
-        return ToolResult(
-            content=[mt.TextContent(type="text", text=body)],
+            structured_content=_structured_body(original, body),
             meta=original.meta,
             is_error=original.is_error,
         )
@@ -61,6 +72,15 @@ def _rebuild_result(original: ToolResult, body: Any) -> ToolResult:
         meta=original.meta,
         is_error=original.is_error,
     )
+
+
+def _ensure_structured(result: ToolResult, payload: Any) -> ToolResult:
+    """Backfill structured_content when the serializer only emitted text blocks."""
+    if result.structured_content is not None:
+        return result
+    if isinstance(payload, (dict, str)):
+        return _rebuild_result(result, payload)
+    return result
 
 
 class ToolOutputNormalizeMiddleware(Middleware):
@@ -105,10 +125,11 @@ class ToolOutputNormalizeMiddleware(Middleware):
             return result
 
         if not normalized.compressed and not normalized.cleaned:
-            return result
+            return _ensure_structured(result, payload)
 
         if normalized.compressed:
             METRICS.compress_requests.inc()
             METRICS.compress_chars_saved.inc(normalized.chars_saved)
 
-        return _rebuild_result(result, normalized.body)
+        rebuilt = _rebuild_result(result, normalized.body)
+        return _ensure_structured(rebuilt, normalized.body)
