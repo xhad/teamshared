@@ -988,5 +988,72 @@ def config_show() -> None:
     console.print(table)
 
 
+queue_app = typer.Typer(no_args_is_help=True, help="Inspect and manage Redis queues")
+app.add_typer(queue_app, name="queue")
+
+
+@queue_app.command("stats")
+def queue_stats() -> None:
+    """Print current distill/curate queue and dead-letter depths."""
+    from teamshared.memory.working import WorkingMemory
+
+    async def _run() -> None:
+        settings = get_settings()
+        wm = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl,
+                           job_signing_secret=settings.job_signing_secret)
+        await wm.connect()
+        try:
+            stats = await wm.queue_stats()
+        finally:
+            await wm.close()
+        table = Table(title="Queue stats")
+        table.add_column("queue")
+        table.add_column("depth", justify="right")
+        for k in sorted(stats):
+            table.add_row(k, str(stats[k]))
+        console.print(table)
+
+    asyncio.run(_run())
+
+
+@queue_app.command("clear-dead")
+def queue_clear_dead(
+    queue: str = typer.Argument(
+        "all", help="Which dead-letter queue to clear: 'distill', 'curate', or 'all'."
+    ),
+) -> None:
+    """Remove all entries from a dead-letter queue (distill/curate)."""
+    from teamshared.memory.working import (
+        CURATE_DEAD_LETTER_KEY,
+        DISTILL_DEAD_LETTER_KEY,
+        WorkingMemory,
+    )
+
+    valid = {"distill": DISTILL_DEAD_LETTER_KEY, "curate": CURATE_DEAD_LETTER_KEY}
+    if queue == "all":
+        keys = list(valid.values())
+    elif queue in valid:
+        keys = [valid[queue]]
+    else:
+        console.print(f"[red]Unknown queue '{queue}'. Use: distill, curate, or all.[/red]")
+        raise typer.Exit(code=1)
+
+    async def _run() -> None:
+        settings = get_settings()
+        wm = WorkingMemory(settings.redis_url, default_ttl=settings.session_ttl,
+                           job_signing_secret=settings.job_signing_secret)
+        await wm.connect()
+        try:
+            for key in keys:
+                depth = int(await wm.client.llen(key))
+                await wm.client.delete(key)
+                label = "distill" if "distill" in key else "curate"
+                console.print(f"[green]Cleared[/green] {label}: {depth} entries removed")
+        finally:
+            await wm.close()
+
+    asyncio.run(_run())
+
+
 if __name__ == "__main__":
     app()
