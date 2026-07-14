@@ -272,7 +272,7 @@ class MemoryFacade:
             actor_type=writer.type,
             actor_id=writer.id,
             resource_type="soul",
-            resource_id=str(writer.account_id),
+            target_id=str(writer.account_id),
             request_id=caller_ctx.request_id,
             payload={"token_est": row.get("token_est"), "version": row.get("version")},
         )

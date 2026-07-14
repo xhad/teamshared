@@ -157,6 +157,23 @@ async def test_soul_set_requires_account() -> None:
 
 
 @pytest.mark.asyncio
+async def test_soul_set_records_audit_with_target_id() -> None:
+    facade, soul = _facade()
+    out = await facade.soul_set(_principal(), body_md="# Soul\nname: Ada\n")
+    assert out["version"] == 2
+    soul.upsert.assert_awaited_once()
+    audit = facade.services.audit.record
+    audit.assert_awaited_once()
+    kwargs = audit.await_args.kwargs
+    # AuditLog.record() accepts `target_id`, not `resource_id` — passing the
+    # latter used to raise "unexpected keyword argument 'resource_id'".
+    assert "resource_id" not in kwargs
+    assert kwargs["action"] == "memory.soul_set"
+    assert kwargs["resource_type"] == "soul"
+    assert kwargs["target_id"] == str(ACCOUNT)
+
+
+@pytest.mark.asyncio
 async def test_remember_preference_absorbs_into_soul() -> None:
     facade, soul = _facade()
     out = await facade.remember(
