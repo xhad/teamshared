@@ -98,9 +98,13 @@ class ApiKeyStore:
             log.warning("api_key_hash_mismatch", prefix=prefix)
             return None
         account_id: UUID | None = None
+        # auth_touch_api_key is SECURITY DEFINER — safe in admin (no org GUC).
         async with self.db.admin() as conn:
             await conn.execute("SELECT auth_touch_api_key(%s)", (str(key_id),))
-            # Resolve the minting human → accounts.id for private soul lookup.
+        # account_id lookup touches RLS-protected tables (api_keys, users); use
+        # org-scoped context so the RLS policy resolves instead of failing on
+        # an unset/empty app.current_org_id GUC cast.
+        async with self.db.org(org_id) as conn:
             cur = await conn.execute(
                 "SELECT u.account_id FROM api_keys k "
                 "LEFT JOIN users u ON u.id = k.created_by AND u.org_id = k.org_id "
