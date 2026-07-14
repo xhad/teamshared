@@ -34,7 +34,7 @@ from teamshared.clients.agent_setup import canonical_install_script_url
 from teamshared.config import Settings
 from teamshared.identity.principal import Principal
 from teamshared.identity.provisioning import signup_org
-from teamshared.identity.rbac import Permissions
+from teamshared.identity.rbac import PermissionDenied, Permissions
 from teamshared.identity.sessions import issue_session, verify_session
 from teamshared.logging import get_logger
 from teamshared.memory.request_context import RequestContext
@@ -374,23 +374,31 @@ def register_console_routes(
             return form, _csrf_failed(request)
         return form, None
 
-    def _issue_session_cookie(
+    async def _issue_session_cookie(
         request: Request,
         resp: Response,
         *,
         org_id: UUID,
         user_id: UUID,
         email: str,
+        account_id: UUID | None = None,
     ) -> None:
         # Only reached behind a verified session / OTP, both of which require a
         # configured secret; assert narrows the Optional for the type checker.
         assert settings.session_secret
         ttl = settings.console_session_ttl
+        resolved_account = account_id
+        if resolved_account is None:
+            try:
+                resolved_account = await services.accounts.upsert(email)
+            except Exception as exc:
+                log.warning("session_account_resolve_failed", error=str(exc))
         token = issue_session(
             secret=settings.session_secret,
             org_id=org_id,
             user_id=user_id,
             email=email,
+            account_id=resolved_account,
             ttl_seconds=ttl,
         )
         resp.set_cookie(
@@ -529,7 +537,7 @@ def register_console_routes(
                 status_code=500,
             )
         resp = RedirectResponse("/app", status_code=303)
-        _issue_session_cookie(
+        await _issue_session_cookie(
             request, resp, org_id=org_id, user_id=user_id, email=email
         )
         log.info("console_login_ok", email=email, org_id=str(org_id))
@@ -660,6 +668,7 @@ def register_console_routes(
         if principal is None:
             return _redirect_login()
         ctx = await _shell(request, principal, "wiki")
+        ctx["flash"] = request.query_params.get("flash") or ""
         slug = str(request.path_params["slug"])
         subject: str | None = None
         groups: list[tuple[str, list[Any]]] = []
@@ -712,6 +721,91 @@ def register_console_routes(
             }
         )
         return _TEMPLATES.TemplateResponse(request, "wiki_topic.html", ctx)
+
+    async def wiki_edit(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "wiki")
+        slug = str(request.path_params["slug"])
+        body_md = ""
+        curated: dict[str, Any] | None = None
+        subject: str | None = None
+        note = ""
+        try:
+            curated = await services.wiki.get_page(principal.org_id, slug)
+            if curated:
+                body_md = curated.get("body_md") or ""
+            entity = await services.ontology.get_entity_by_slug(principal.org_id, slug)
+            if entity:
+                subject = str(entity.get("name") or slug)
+            else:
+                subjects = await services.vector_store.list_subjects(principal.org_id, limit=500)
+                slug_map = {slugify(s["subject"]): s["subject"] for s in subjects}
+                subject = slug_map.get(slug)
+            if subject is None:
+                subject = slug
+        except Exception as exc:
+            log.warning("wiki_edit_failed", error=str(exc))
+            note = f"Wiki unavailable: {exc}"
+        ctx.update(
+            {
+                "slug": slug,
+                "subject": subject,
+                "body_md": body_md,
+                "note": note,
+                "curated_version": curated.get("version") if curated else None,
+            }
+        )
+        return _TEMPLATES.TemplateResponse(request, "wiki_edit.html", ctx)
+
+    async def wiki_edit_save(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        slug = str(form.get("slug") or request.path_params.get("slug") or "").strip()
+        body_md = str(form.get("body_md") or "").strip()
+        if not slug:
+            return RedirectResponse("/app/wiki?flash=invalid", status_code=303)
+        try:
+            ctx = _ctx(principal)
+            existing = await services.wiki.get_page(principal.org_id, slug)
+            required_perm = Permissions.MEMORY_UPDATE if existing else Permissions.MEMORY_CREATE
+            await ctx.authorizer.require(principal, required_perm)
+
+            subject: str | None = None
+            entity = await services.ontology.get_entity_by_slug(principal.org_id, slug)
+            if entity:
+                subject = str(entity.get("name") or slug)
+            else:
+                subjects = await services.vector_store.list_subjects(principal.org_id, limit=500)
+                slug_map = {slugify(s["subject"]): s["subject"] for s in subjects}
+                subject = slug_map.get(slug)
+            if subject is None:
+                subject = slug
+
+            title = str(form.get("title") or subject or slug).strip()
+            sources: list[str] = []
+            if existing:
+                sources = [str(s) for s in (existing.get("sources") or [])]
+
+            await services.wiki.upsert_page(
+                principal.org_id,
+                slug=slug,
+                title=title,
+                body_md=body_md,
+                sources=sources,
+                updated_by=principal.display or str(principal.id),
+            )
+        except PermissionDenied:
+            return RedirectResponse(f"/app/wiki/topic/{slug}?flash=permission", status_code=303)
+        except Exception as exc:
+            log.warning("wiki_save_failed", error=str(exc))
+            return RedirectResponse(f"/app/wiki/topic/{slug}?flash=error", status_code=303)
+        return RedirectResponse(f"/app/wiki/topic/{slug}?flash=saved", status_code=303)
 
     async def entity_hub(request: Request) -> Response:
         principal = _session(request)
@@ -1679,12 +1773,13 @@ def register_console_routes(
                 accounts=services.accounts, org_slug=slug, org_name=name,
                 owner_email=principal.display,
             )
-            _issue_session_cookie(
+            await _issue_session_cookie(
                 request,
                 resp,
                 org_id=result.org_id,
                 user_id=result.owner_user_id,
                 email=principal.display,
+                account_id=principal.account_id,
             )
         except Exception as exc:
             log.warning("org_create_failed", error=str(exc))
@@ -1712,12 +1807,13 @@ def register_console_routes(
         if match is None:
             return RedirectResponse("/app/orgs", status_code=303)
         resp = RedirectResponse("/app", status_code=303)
-        _issue_session_cookie(
+        await _issue_session_cookie(
             request,
             resp,
             org_id=UUID(str(match["org_id"])),
             user_id=UUID(str(match["user_id"])),
             email=email,
+            account_id=principal.account_id,
         )
         return resp
 
@@ -1962,6 +2058,8 @@ def register_console_routes(
         Route("/app/wiki/timeline", wiki_timeline, methods=["GET"]),
         Route("/app/wiki/playbooks", wiki_playbooks, methods=["GET"]),
         Route("/app/wiki/topic/{slug}", wiki_topic, methods=["GET"]),
+        Route("/app/wiki/topic/{slug}/edit", wiki_edit, methods=["GET"]),
+        Route("/app/wiki/topic/{slug}/edit", wiki_edit_save, methods=["POST"]),
         Route("/app/wiki/entity/{slug}", entity_hub, methods=["GET"]),
         Route("/app/entity/{slug}", entity_hub, methods=["GET"]),
         Route("/app/playbooks", playbooks_page, methods=["GET"]),

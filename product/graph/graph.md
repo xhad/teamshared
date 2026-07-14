@@ -1,10 +1,10 @@
 # TeamShared — discovery graph
 
-> **CORPUS HEALTH: DEVELOPING.** 18 sources (doc, research tagged types) plus untagged internal docs. Shipped-state (2026-07-12) now anchors what-is-built; still **zero user-research evidence** — no interviews, tickets, or support threads.
+> **CORPUS HEALTH: DEVELOPING.** 20 sources (doc, research tagged types) plus untagged internal docs. Shipped-state (2026-07-12) now anchors what-is-built; still **zero user-research evidence** — no interviews, tickets, or support threads.
 
 
-Generated 2026-07-12. Sources: 18. Types: doc, research.
-Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
+Generated 2026-07-13. Sources: 20. Types: doc, research.
+Nodes: 185 · Edges: 113 · Assumptions surfaced: 19.
 
 ## Shipped product (from shipped-state-2026-07-12)
 
@@ -78,7 +78,7 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 | LLM calls during graph ingestion compound cost at scale | 1 |
 | Per-agent memory silos: one engineer's agent learns nothing from another's | 1 |
 
-## Features (69)
+## Features (74)
 
 | Feature | Distinct sources |
 |---|---|
@@ -124,6 +124,11 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 | Org/team/project/user/agent memory scopes | 1 |
 | Palantir action types: governed writes with validation, side effects, audit | 1 |
 | Palantir ontology: object types (nouns) + link types (relationships) + interfaces | 1 |
+| PromptQL artifacts: plain language → tables, charts, reports, dashboards | 1 |
+| PromptQL connectors: Postgres, Snowflake, BigQuery, Databricks, GitHub, Slack, Salesforce, GWorkspace | 1 |
+| PromptQL delegates coding tasks to Claude Code or Codex on user's machine | 1 |
+| PromptQL multiplayer AI: real-time thread with @-mentions and agent collaboration | 1 |
+| PromptQL shared context wiki: captures domain knowledge as the team works | 1 |
 | Public /memory status dashboard (no auth) *shipped* | 1 |
 | RACT MCP consumer: mcp_servers in rootact.yaml, McpToolRegistry | 1 |
 | RACT Root Knot: _ROOT_KNOT sentinel halts loop on unsigned drift | 1 |
@@ -158,7 +163,7 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 |---|---|
 | Evolve TeamShared from PoC to production for multi-tenant org customers | 1 |
 
-## Competitors (23)
+## Competitors (25)
 
 | Competitor | Distinct sources |
 |---|---|
@@ -175,7 +180,9 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 | NEXO Brain (wazionapps) — local, trust scoring + forgetting + metacognitive guard | 1 |
 | Neo4j Agent Memory Service — POLE+O entities + reasoning traces (55★) | 1 |
 | Neo4j context/knowledge graphs | 1 |
+| OpenClaw native memory (memory-core) — workspace markdown files + hybrid search | 1 |
 | Pinecone (vector DB) / pgvector category | 1 |
+| PromptQL — multiplayer AI over live data with shared context wiki | 1 |
 | RACT (LucRoot/RACT) — CLI agentic coding harness + anti-rot verifiers (~3★) | 1 |
 | Screenpipe (screenpipe/screenpipe) — ambient desktop capture + MCP, 19k★, YC S26 | 1 |
 | Zep / Graphiti — temporal knowledge graph (bi-temporal, 71% LongMemEval) | 1 |
@@ -186,7 +193,7 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 | multi-agent-memory (CMPSBL) — cross-machine fact/event store for OpenClaw/Claude Code/n8n mesh | 1 |
 | xChuCx/agent-memory — git-native markdown, branch-aware, federation | 1 |
 
-## Insights (26)
+## Insights (31)
 
 | Insight | Distinct sources |
 |---|---|
@@ -205,7 +212,12 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 | MCP is the de facto 'USB-C for memory' standard; all serious players expose memory through MCP | 1 |
 | Multiple rivals (multi-agent-memory, memnos, teamshared MemoryKind) independently converge on distinguishing facts from events | 1 |
 | No memory system wins on more than 3 of 8 dimensions; each leads on a distinct axis | 1 |
+| OpenClaw harness + TeamShared MCP is layered complement (local scratch + org brain) | 1 |
+| OpenClaw memory-wiki claims/evidence layer peers TeamShared curator wiki + ontology | 1 |
+| OpenClaw native memory is Tier-3 harness-adjacent personal memory — not multi-tenant org brain | 1 |
 | Palantir Foundry ontology is architectural reference, not a memory competitor | 1 |
+| PromptQL data-live permissions are a genuine connector moat TeamShared does not yet claim | 1 |
+| PromptQL is a data-first AI analyst, not a reusable agent-memory substrate | 1 |
 | Primary Tier-1 memory competitors in corpus: GBrain and Cognee *shipped* | 1 |
 | RACT competes with Cursor harness surface where TeamShared plugin attaches | 1 |
 | RACT harness + TeamShared MCP is complementary (consumer + provider) | 1 |
@@ -217,7 +229,11 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 | mex addresses repo hygiene; TeamShared addresses org recall — complementary axis | 1 |
 | mex is Tier-3 repo-scoped adjacent — not a multi-tenant org brain | 1 |
 
-## Assumptions (17)
+## Assumptions (19)
+
+### Solo OpenClaw users can stay on MEMORY.md without needing hosted org brain
+
+*Risk if wrong:* If teams never graduate from file memory to TeamShared MCP, OpenClaw distribution becomes a ceiling — GBrain or native memory-core wins by default.
 
 ### Bi-temporal fact validity is not needed for TeamShared's buyer (timestamp-only facts suffice)
 
@@ -259,6 +275,10 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 
 *Risk if wrong:* Pricing/GTM viability; GBrain is MIT/open-source, Mem0/Zep/Letta all monetize cloud tiers ($19/$25/$249). TeamShared willingness-to-pay unvalidated.
 
+### Teams evaluating shared-brain products may shortlist PromptQL alongside TeamShared
+
+*Risk if wrong:* If buyers conflate 'shared context wiki' with 'shared agent memory', PromptQL's data-live + BI artifact story could capture deals that TeamShared wants.
+
 ### SSO/SAML/SOC2 gate the deals worth chasing
 
 *Risk if wrong:* GBrain company-brain tutorial targets 10-50 person teams with OAuth — may win design partners before TeamShared enterprise phase.
@@ -291,15 +311,15 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 
 | Edge type | Count |
 |---|---|
-| assumes | 18 |
-| belongs-to | 1 |
+| assumes | 19 |
+| belongs-to | 6 |
 | blocks | 2 |
-| competes-with | 24 |
+| competes-with | 25 |
 | contradicts | 2 |
 | evidences | 2 |
 | experiences | 12 |
 | requests | 4 |
-| supports | 29 |
+| supports | 32 |
 
 ## Meta notes
 
@@ -310,5 +330,6 @@ Nodes: 165 · Edges: 94 · Assumptions surfaced: 17.
 - Untagged sources (no YAML type): clean-room-run-2026-07-11.md, design-partner-tracker.md, memory-wiki-plan.md, plan.md, prod-plan.md, teamshared-agents.md, teamshared-product.md, teamshared-readme.md.
 - shipped-state supersedes prod-plan.md for what-is-built; prod-plan remains roadmap/aspirational.
 - Six memory pillars + optional graph, context compression MCP, work queue + projects, skills vs playbooks, ontology console, OTP multi-tenant console (no /app/approvals), distiller/curator workers, optional gateway — all evidenced from shipped-state + readme + agents.
-- Primary Tier-1 competitors reaffirmed: GBrain, Cognee. Adjacent: Headroom, Screenpipe, mex, RACT.
+- Primary Tier-1 competitors reaffirmed: GBrain, Cognee. Adjacent: Headroom, Screenpipe, mex, RACT, OpenClaw native memory (harness-local file memory), PromptQL (multiplayer AI + shared wiki).
+- Graphify 2026-07-13: ingested promptql-research.md — PromptQL multiplayer AI + shared wiki; data-live connectors + per-user permissions; Tier-2 adjacent competitor in shared-brain category.
 - New assumptions from shipped-state gaps: approvals UI deferred, connectors not blocking, design-partner validation still needed, manual skills vs auto-mine.

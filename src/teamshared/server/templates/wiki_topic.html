@@ -10,9 +10,14 @@
     {% if entity %}
     &middot; <a href="/app/ontology">Ontology</a>
     {% endif %}
+    &middot; <a href="/app/wiki/topic/{{ slug }}/edit"><button type="button" class="ghost">Edit</button></a>
   </p>
   {% set active_tab = 'topics' %}
   {% include "_wiki_tabs.html" %}
+
+  {% if flash == 'saved' %}<div class="flash-ok">Wiki page saved as a new version.</div>{% endif %}
+  {% if flash == 'permission' %}<div class="unavailable">You do not have permission to edit this page.</div>{% endif %}
+  {% if flash == 'error' %}<div class="unavailable">Could not save the wiki page. Please try again.</div>{% endif %}
 
   {% if entity %}
   <div class="panel">

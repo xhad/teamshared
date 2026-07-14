@@ -351,6 +351,13 @@ class Settings(BaseSettings):
         default=1500,
         description="Token budget for context assembly injected before LLM calls.",
     )
+    soul_max_chars: int = Field(
+        default=2400,
+        description=(
+            "Hard character cap for each person's private soul profile "
+            "(≈600 tokens). Session-start soul blocks stay small and light."
+        ),
+    )
 
     gateway_enabled: bool = Field(
         default=False,

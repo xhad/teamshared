@@ -164,6 +164,43 @@ def token_reduction_pct(before: int, after: int) -> float:
     return round(100.0 * (before - after) / before, 2)
 
 
+def session_replay_tokens(checkpoints: list[Checkpoint], *, arm: str = "baseline") -> int:
+    """Sum context tokens across turns (model invoked after every turn)."""
+    if arm == "memory":
+        return sum(cp.memory_tokens for cp in checkpoints)
+    return sum(cp.baseline_tokens for cp in checkpoints)
+
+
+def estimate_input_usd(tokens: int, *, per_mtok: float | None = None) -> float:
+    """Rough input-token cost; override via TEAMSHARED_EVAL_USD_PER_MTOK."""
+    import os
+
+    rate = per_mtok
+    if rate is None:
+        raw = os.environ.get("TEAMSHARED_EVAL_USD_PER_MTOK", "3.0")
+        try:
+            rate = float(raw)
+        except ValueError:
+            rate = 3.0
+    return round(tokens / 1_000_000 * rate, 4)
+
+
+def session_cost_summary(report: ReplayReport) -> dict[str, Any]:
+    """Cumulative session cost if the LLM runs after every turn."""
+    baseline_session = session_replay_tokens(report.checkpoints, arm="baseline")
+    memory_session = session_replay_tokens(report.checkpoints, arm="memory")
+    return {
+        "baseline_session_tokens": baseline_session,
+        "memory_session_tokens": memory_session,
+        "session_token_reduction_pct": token_reduction_pct(
+            baseline_session, memory_session
+        ),
+        "baseline_est_input_usd": estimate_input_usd(baseline_session),
+        "memory_est_input_usd": estimate_input_usd(memory_session),
+        "memory_more_expensive": memory_session > baseline_session,
+    }
+
+
 def score_expect_groups(text: str, expect: list[list[str]]) -> tuple[bool, int, int]:
     lowered = text.lower()
     matched = sum(
@@ -495,6 +532,7 @@ def report_to_dict(
 ) -> dict[str, Any]:
     """JSON shape consumed by the comparison dashboard."""
     labels = turn_labels_from_fixture(fixture)
+    costs = session_cost_summary(report)
     return {
         "fixture": report.name,
         "fixture_path": fixture_path,
@@ -505,6 +543,7 @@ def report_to_dict(
         "baseline_final_tokens": report.baseline_final_tokens,
         "memory_final_tokens": report.memory_final_tokens,
         "token_reduction_pct": report.token_reduction_pct,
+        **costs,
         "recall_passed": report.recall_passed,
         "context_expect_passed": report.context_expect_passed,
         "checkpoints": [
@@ -558,6 +597,22 @@ def format_report_table(report: ReplayReport) -> str:
             f"({report.token_reduction_pct:.1f}% reduction)",
         ]
     )
+    costs = session_cost_summary(report)
+    lines.extend(
+        [
+            "",
+            f"**Session cumulative** (LLM called every turn): "
+            f"baseline {costs['baseline_session_tokens']:,} tok "
+            f"(${costs['baseline_est_input_usd']:.4f}) → "
+            f"memory {costs['memory_session_tokens']:,} tok "
+            f"(${costs['memory_est_input_usd']:.4f}) "
+            f"({costs['session_token_reduction_pct']:.1f}% reduction)",
+        ]
+    )
+    if costs["memory_more_expensive"]:
+        lines.append(
+            "**Warning:** teamshared costs *more* on cumulative session tokens."
+        )
     if report.recall_passed is not None:
         mark = "PASS" if report.recall_passed else "FAIL"
         lines.append(f"**Recall probe:** {mark}")

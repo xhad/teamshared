@@ -122,7 +122,13 @@ async def test_session_ensure_reuses_open_session_from_state() -> None:
     out = await facade.session_ensure(
         _principal(), state_id=STATE_ID, repo=REPO, topic="new topic"
     )
-    assert out == {"session_id": "sess_live", "agent": AGENT, "resumed": True}
+    assert out == {
+        "session_id": "sess_live",
+        "agent": AGENT,
+        "resumed": True,
+        "soul": None,
+        "soul_linked": False,
+    }
     working.open_session.assert_not_awaited()
 
 

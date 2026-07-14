@@ -161,8 +161,10 @@ See **[Context compression](docs/context-compression.md)** for how teamshared re
 | `memory_recall`             | Hybrid search — raw ranked records (`explain=true` for attribution) |
 | `memory_think`              | Synthesized answer with citations + gap analysis (GBrain `think` parity) |
 | `memory_remember`           | Write a fact / preference / event / note (`repo=` / `github=` scope tags) |
+| `memory_soul_get`           | Private compressed identity (soul) for this person in this org |
+| `memory_soul_set`           | Replace private soul (server caps length; keep short) |
 | `memory_assemble_context`   | One parallel, token-budgeted, cited context pack across all pillars + graph |
-| `memory_session_ensure`     | One-call bootstrap: recover the active session or rotate to a new one |
+| `memory_session_ensure`     | Bootstrap session; returns `soul` when the API key is account-linked |
 | `memory_session_open`       | Start a working-memory session (prefer `memory_session_ensure`) |
 | `memory_session_append`     | Append a turn (self-heals expired sessions)                  |
 | `memory_session_close`      | Close + enqueue for distillation                             |

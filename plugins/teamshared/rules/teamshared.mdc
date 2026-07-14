@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.8.0
+version: 1.9.0
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.8.0 -->
+<!-- teamshared-rule-version: 1.9.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.8.0`).
+This rule is versioned (`version` in the frontmatter above, currently `1.9.0`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
    versions), call the `version` tool with this rule's frontmatter `version`
-   (`1.8.0`) as `installed_rule_version`. Do not call `version` every turn.
+   (`1.9.0`) as `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
    `~/.cursor/rules/teamshared.mdc`; repo:
@@ -36,7 +36,10 @@ Run these in order on **every** turn (see **Session logging** for setup details)
 
 1. **`memory_session_ensure(repo=..., topic=..., fresh=<first turn>)`** — one
    call recovers the active session or rotates to a new one. Pass `fresh=true`
-   only on the first turn of a new chat; omit it mid-chat.
+   only on the first turn of a new chat; omit it mid-chat. When the response
+   includes a non-empty ``soul`` string, treat it as always-on identity context
+   for this person (private, org-scoped) — put it in your system/working
+   context for the rest of the chat.
 2. **`memory_session_append(session_id, "user", ...)`** — the substantive user
    request (not boilerplate system context). Appends self-heal: if the response
    has `reopened: true`, adopt the returned `session_id`.
@@ -191,6 +194,23 @@ finishing research docs or competitor analysis, store a **dense summary**
 paragraph beats hoping recall finds a long markdown file. Do **not** use
 `memory_remember` for skills or playbooks — use `memory_skill_set` /
 `memory_playbook_set`.
+
+### Soul (private person memory)
+
+Each human has a **soul** in each org: a tiny compressed identity block (name,
+role, style, likes/dislikes, choice patterns, dos/don'ts). It is **private to
+that person** and returned on every ``memory_session_ensure`` as ``soul`` when
+the API key is linked to their account (keys minted from the console while
+signed in).
+
+| Want | Tool |
+|---|---|
+| Read / refresh soul | Returned on `memory_session_ensure`; or `memory_soul_get` |
+| Rewrite soul | `memory_soul_set(body_md=...)` — keep short; server caps length |
+| Feed soul from prefs | `memory_remember(..., kind="preference")` absorbs into soul |
+
+Keep soul content dense and short (~one screen). Prefer structured markdown
+(`# Soul`, bullets under likes / dislikes / style / dos / donts / Notes).
 
 ### Skills vs playbooks
 
@@ -586,6 +606,7 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 | Clean Shell/Grep/Read output | `context_normalize` |
 | Expand compressed original | `context_retrieve` |
 | Store preference/fact/event/note | `memory_remember` |
+| Private person identity (soul) | `memory_soul_get` / `memory_soul_set` (also on `memory_session_ensure`) |
 | Start-of-chat session bootstrap | `memory_session_ensure` |
 | Log every chat + distillation | `memory_session_*` |
 | Client incremental state | `memory_state_get` / `memory_state_set` |

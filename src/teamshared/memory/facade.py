@@ -36,6 +36,7 @@ from teamshared.memory.ontology import OntologyError
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.skills import OrgSkillStore
+from teamshared.memory.soul import DEFAULT_SOUL_MAX_CHARS
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.think import synthesize
 from teamshared.memory.types import (
@@ -185,15 +186,135 @@ class MemoryFacade:
         ctx.request_id = caller_ctx.request_id
         pillar = "episodic" if kind == "event" else "semantic"
         tag_list = _with_scope_tags(tags, repo=repo, github=github)
+        if writer.account_id is not None:
+            acct_tag = f"account:{writer.account_id}"
+            if acct_tag not in tag_list:
+                tag_list = [*tag_list, acct_tag]
         result = await self.services.ingestion().ingest(
             ctx, content, kind=kind, pillar=pillar, scope="org",
             visibility="private", subject=subject, tags=tag_list, source="agent",
         )
-        return {
+        out = {
             "agent": writer.display or writer.attribution,
             "pillar": pillar,
             "memory_id": str(result.memory_id) if result.memory_id else None,
             "status": result.status,
+        }
+        # Preferences feed the private soul so session-start stays current.
+        if kind == "preference" and writer.account_id is not None:
+            try:
+                soul = await self.soul_absorb(writer, content)
+                out["soul_updated"] = True
+                out["soul_tokens"] = soul.get("token_est")
+            except Exception as exc:
+                log.warning("soul_absorb_failed", error=str(exc))
+                out["soul_updated"] = False
+        return out
+
+    async def soul_get(self, principal: Principal) -> dict[str, Any]:
+        """Return the caller's private soul for this org (empty if none)."""
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(principal, Permissions.MEMORY_READ)
+        account_id = principal.account_id
+        if account_id is None:
+            return {"body_md": "", "token_est": 0, "account_linked": False}
+        row = await self.services.soul.get(principal.org_id, account_id)
+        if row is None:
+            return {
+                "body_md": "",
+                "token_est": 0,
+                "account_linked": True,
+                "account_id": str(account_id),
+            }
+        return {
+            "body_md": row.get("body_md") or "",
+            "token_est": int(row.get("token_est") or 0),
+            "version": row.get("version"),
+            "updated_at": row.get("updated_at").isoformat()
+            if hasattr(row.get("updated_at"), "isoformat")
+            else row.get("updated_at"),
+            "account_linked": True,
+            "account_id": str(account_id),
+        }
+
+    async def soul_set(
+        self,
+        principal: Principal,
+        *,
+        body_md: str,
+        agent_override: str | None = None,
+    ) -> dict[str, Any]:
+        """Replace the caller's private soul (always compressed)."""
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="soul_set",
+            request_id=caller_ctx.request_id,
+        )
+        ctx = self._ctx(writer)
+        await ctx.authorizer.require(writer, Permissions.MEMORY_CREATE)
+        if writer.account_id is None:
+            raise PermissionError(
+                "soul requires a linked human account "
+                "(mint the API key from the console while signed in)"
+            )
+        max_chars = getattr(self.services.settings, "soul_max_chars", DEFAULT_SOUL_MAX_CHARS)
+        row = await self.services.soul.upsert(
+            writer.org_id,
+            writer.account_id,
+            body_md=body_md,
+            updated_by=writer.display or writer.attribution,
+            max_chars=max_chars,
+        )
+        await self.services.audit.record(
+            agent=writer.attribution,
+            action="memory.soul_set",
+            org_id=writer.org_id,
+            actor_type=writer.type,
+            actor_id=writer.id,
+            resource_type="soul",
+            resource_id=str(writer.account_id),
+            request_id=caller_ctx.request_id,
+            payload={"token_est": row.get("token_est"), "version": row.get("version")},
+        )
+        return {
+            "body_md": row.get("body_md") or "",
+            "token_est": int(row.get("token_est") or 0),
+            "version": row.get("version"),
+            "account_id": str(writer.account_id),
+        }
+
+    async def soul_absorb(
+        self,
+        principal: Principal,
+        observation: str,
+    ) -> dict[str, Any]:
+        """Fold one observation into the caller's private soul."""
+        if principal.account_id is None:
+            raise PermissionError("soul requires a linked human account")
+        max_chars = getattr(self.services.settings, "soul_max_chars", DEFAULT_SOUL_MAX_CHARS)
+        return await self.services.soul.absorb(
+            principal.org_id,
+            principal.account_id,
+            observation,
+            updated_by=principal.display or principal.attribution,
+            max_chars=max_chars,
+        )
+
+    async def _soul_payload(self, principal: Principal) -> dict[str, Any] | None:
+        """Compact soul fields for session_ensure / context_prepare, or None."""
+        if principal.account_id is None:
+            return None
+        try:
+            row = await self.services.soul.get(principal.org_id, principal.account_id)
+        except Exception as exc:
+            log.warning("soul_load_failed", error=str(exc))
+            return None
+        if row is None or not (row.get("body_md") or "").strip():
+            return {"body_md": "", "token_est": 0, "account_linked": True}
+        return {
+            "body_md": row["body_md"],
+            "token_est": int(row.get("token_est") or 0),
+            "account_linked": True,
         }
 
     async def recall(
@@ -897,6 +1018,14 @@ class MemoryFacade:
             out["turn_count"] = appended.get("turn_count")
             if appended.get("reopened"):
                 out["reopened"] = True
+        soul = await self._soul_payload(principal)
+        if soul is not None:
+            out["soul"] = soul.get("body_md") or ""
+            out["soul_tokens"] = soul.get("token_est") or 0
+            out["soul_linked"] = True
+        else:
+            out["soul"] = None
+            out["soul_linked"] = False
         return out
 
     async def session_commit(

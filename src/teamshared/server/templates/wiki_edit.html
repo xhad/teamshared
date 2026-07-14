@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}Edit {{ subject or slug }}{% endblock %}
+{% block content %}
+  <p class="sub"><a href="/app/wiki/topic/{{ slug }}">&larr; Topic</a></p>
+  <h1>{% if curated_version %}Edit{% else %}Create{% endif %} &ldquo;{{ subject or slug }}&rdquo;</h1>
+  {% if curated_version %}
+  <p class="sub">Currently v{{ curated_version }}. Saving stores a new version; older versions are kept.</p>
+  {% endif %}
+
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  <form method="post" action="/app/wiki/topic/{{ slug }}/edit" class="stack-form" style="margin-top:1rem" id="wiki-edit-form">
+    {{ cm.csrf_field() }}
+    <input type="hidden" name="slug" value="{{ slug }}" />
+    <div class="field">
+      <label for="wiki-title">Title</label>
+      <input id="wiki-title" name="title" value="{{ subject or slug }}" required />
+    </div>
+    <div class="field">
+      <label for="wiki-body">Body (Markdown)</label>
+      <textarea id="wiki-body" name="body_md" rows="24" class="mono"
+        placeholder="# {{ subject or slug }}&#10;&#10;Write the wiki article here in Markdown.">{{ body_md }}</textarea>
+    </div>
+    <div>
+      <button type="submit">{% if curated_version %}Save new version{% else %}Create page{% endif %}</button>
+      <a href="/app/wiki/topic/{{ slug }}"><button type="button" class="ghost">Cancel</button></a>
+    </div>
+  </form>
+{% endblock %}

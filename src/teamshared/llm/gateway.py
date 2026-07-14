@@ -19,6 +19,7 @@ from teamshared.metrics import METRICS
 log = get_logger(__name__)
 
 _CONTEXT_HEADER = "## TeamShared context\n\n"
+_SOUL_HEADER = "## TeamShared soul\n\n"
 
 
 @dataclass
@@ -49,7 +50,11 @@ def inject_context(messages: list[dict[str, Any]], rendered: str) -> list[dict[s
     """Prepend or append teamshared context pack into the system prompt."""
     if not rendered.strip():
         return messages
-    block = _CONTEXT_HEADER + rendered.rstrip() + "\n"
+    block = rendered if rendered.lstrip().startswith("## ") else (
+        _CONTEXT_HEADER + rendered.rstrip() + "\n"
+    )
+    if not block.endswith("\n"):
+        block += "\n"
     out = [dict(m) for m in messages]
     for i, msg in enumerate(out):
         if msg.get("role") == "system":
@@ -61,6 +66,10 @@ def inject_context(messages: list[dict[str, Any]], rendered: str) -> list[dict[s
             return out
     out.insert(0, {"role": "system", "content": block})
     return out
+
+
+def _soul_block(body_md: str) -> str:
+    return _SOUL_HEADER + body_md.rstrip() + "\n"
 
 
 async def resolve_session_id(
@@ -154,6 +163,11 @@ async def prepare_llm_messages(
 
     if enrich and user_text and settings.llm_prepare_enabled:
         try:
+            # Always-on private soul first (outside the task-relevance budget).
+            soul = await facade._soul_payload(principal)
+            if soul and (soul.get("body_md") or "").strip():
+                payload = inject_context(payload, _soul_block(str(soul["body_md"])))
+                enriched = True
             assembler = ContextAssembler(facade)
             budget = token_budget or settings.llm_prepare_context_token_budget
             context_pack = await assembler.assemble(

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Rule 1.9.0:** private per-person **soul** memory (org + account scoped).
+  Tiny compressed identity block returned on `memory_session_ensure` and
+  injected by `context_prepare` / the LLM gateway. Tools: `memory_soul_get`,
+  `memory_soul_set`. Preferences absorb into the soul. API keys must be minted
+  from the console while signed in so `created_by` links to the human account.
+  Migration: `034_soul.sql`.
+
 ## 0.5.0 — 2026-07-11
 
 - **Server 0.5.0:** `memory_session_ensure` and `context_commit` for one-call

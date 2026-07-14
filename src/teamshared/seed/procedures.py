@@ -69,9 +69,11 @@ in `memory_recall` if the query is relevant.""",
 1. Phrase as a preference: "User prefers ___ over ___."
 2. Call `memory_remember(content=<preference>, kind="preference",
    subject="user", tags=["preference"])`.
+3. Preferences also absorb into the person's private soul (returned on
+   `memory_session_ensure` as `soul`).
 
 Why: preferences are the most-recalled facts; tagging them lets the recall
-weighting push them up.""",
+weighting push them up, and the soul keeps a compressed always-on digest.""",
         ["ritual", "preferences"],
     ),
     (

@@ -29,6 +29,7 @@ from teamshared.memory.projects import ProjectStore
 from teamshared.memory.retrieval import SecureRetrieval
 from teamshared.memory.service import MemoryService
 from teamshared.memory.skills import OrgSkillStore
+from teamshared.memory.soul import SoulStore
 from teamshared.memory.strategic import OrgStrategicStore
 from teamshared.memory.vectorstore import VectorStore
 from teamshared.memory.wiki import WikiStore
@@ -53,6 +54,7 @@ class ProductionServices:
     work: WorkStore
     projects: ProjectStore
     wiki: WikiStore
+    soul: SoulStore
     ontology: OntologyStore
     audit: AuditLog
     memory_service: MemoryService
@@ -116,6 +118,7 @@ def make_services(settings: Settings) -> ProductionServices:
         work=WorkStore(tenant_db),
         projects=ProjectStore(tenant_db),
         wiki=WikiStore(tenant_db),
+        soul=SoulStore(tenant_db),
         ontology=ontology,
         audit=audit,
         memory_service=memory_service,

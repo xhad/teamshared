@@ -32,6 +32,8 @@ eval-conversation :; $(PYTHON) eval/conversation_replay.py eval/conversation_rep
 # Run bundled fixtures and open comparison dashboard (eval/conversation_replay/results/dashboard.html).
 eval-conversation-report :; $(PYTHON) eval/conversation_replay_report.py
 eval-conversation-report-http :; $(PYTHON) eval/conversation_replay_report.py --mode http
+# Session cumulative token cost: baseline vs teamshared (see eval/conversation_replay/README.md).
+eval-conversation-cost :; $(PYTHON) eval/conversation_replay/compare_cost.py eval/conversation_replay.example.yaml; $(PYTHON) eval/conversation_replay/compare_cost.py eval/conversation_replay.teamshared.yaml
 open-conversation-dashboard : eval-conversation-report
 	@open eval/conversation_replay/results/dashboard.html
 smoke-cross-agent :; $(PYTHON) scripts/smoke_cross_agent.py
@@ -43,4 +45,4 @@ lint :; $(PYTHON) -m ruff check src tests scripts eval
 typecheck :; $(PYTHON) -m mypy src
 check : lint typecheck test
 
-.PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed reembed token-mint invite-create health eval-agentic eval-conversation eval-conversation-report eval-conversation-report-http open-conversation-dashboard smoke-all smoke-cross-agent test test-integration lint typecheck check
+.PHONY: build build-bundled-ollama ollama-host down down-all migrate provision-app-role verify-rls seed reembed token-mint invite-create health eval-agentic eval-conversation eval-conversation-report eval-conversation-report-http eval-conversation-cost open-conversation-dashboard smoke-all smoke-cross-agent test test-integration lint typecheck check

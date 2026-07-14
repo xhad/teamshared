@@ -456,6 +456,46 @@ def register_tools(mcp: Any) -> None:
         )
 
     @mcp.tool()
+    async def memory_soul_get() -> dict[str, Any]:
+        """Return this person's private soul for the current org.
+
+        The soul is a tiny compressed identity block (who they are, style,
+        likes/dislikes, dos/don'ts). Empty when none yet or the API key is not
+        linked to a human account (mint keys from the console while signed in).
+        Also returned on ``memory_session_ensure`` as ``soul``.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.soul_get(principal)
+
+    @mcp.tool()
+    async def memory_soul_set(
+        body_md: Annotated[
+            str,
+            Field(
+                description=(
+                    "Compressed soul markdown (identity, role, style, likes, "
+                    "dislikes, dos/don'ts, patterns). Keep short; server caps length."
+                ),
+            ),
+        ],
+        agent: Annotated[
+            str | None,
+            Field(description="Override agent attribution label"),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Replace this person's private soul for the current org.
+
+        Prefer compact structured markdown. Preferences written via
+        ``memory_remember(kind=preference)`` also absorb into the soul.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.soul_set(
+            principal, body_md=body_md, agent_override=agent,
+        )
+
+    @mcp.tool()
     async def memory_recall(
         query: Annotated[str, Field(description="Natural-language query")],
         scope: Annotated[
@@ -740,7 +780,9 @@ def register_tools(mcp: Any) -> None:
         the ``conversation/active-session`` state pointer when it is still
         open and owned by the caller; otherwise closes it (distilling) and
         opens a fresh one, updating state. Returns ``{session_id, agent,
-        resumed}``.
+        resumed, soul, soul_linked}``. When the bearer is linked to a human
+        account, ``soul`` is their private compressed identity block for this
+        org (may be empty string if not yet written).
         """
         ident = require_current_agent()
         state = get_state()

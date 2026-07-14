@@ -17,6 +17,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
+from teamshared.identity.rbac import PermissionDenied
 from teamshared.server import console as console_mod
 from teamshared.server.console import register_console_routes
 from teamshared.server.state import clear_state, set_state
@@ -864,6 +865,131 @@ def test_wiki_playbooks_redirects_to_dedicated_section() -> None:
     resp = client.get("/app/wiki/playbooks")
     assert resp.status_code == 308
     assert resp.headers["location"] == "/app/playbooks"
+
+
+def test_wiki_edit_renders_for_existing_page() -> None:
+    client, services = _build()
+    services.vector_store.list_subjects = AsyncMock(
+        return_value=[{"subject": "teamshared infra", "count": 2,
+                       "updated_at": "2026-05-28T10:00:00"}]
+    )
+    services.wiki.get_page = AsyncMock(
+        return_value={"body_md": "# Infra\n\nProd runs on Spark.", "version": 2,
+                      "updated_at": "2026-05-28T11:00:00"}
+    )
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
+    _login(client)
+    resp = client.get("/app/wiki/topic/teamshared-infra/edit")
+    assert resp.status_code == 200
+    assert "Edit" in resp.text
+    assert "Prod runs on Spark" in resp.text
+    assert 'name="body_md"' in resp.text
+    assert "Save new version" in resp.text
+
+
+def test_wiki_edit_renders_create_form_for_missing_page() -> None:
+    client, services = _build()
+    services.vector_store.list_subjects = AsyncMock(return_value=[])
+    services.wiki.get_page = AsyncMock(return_value=None)
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
+    _login(client)
+    resp = client.get("/app/wiki/topic/new-topic/edit")
+    assert resp.status_code == 200
+    assert "Create" in resp.text
+    assert "Create page" in resp.text
+    assert 'name="body_md"' in resp.text
+
+
+def test_wiki_edit_save_creates_new_version() -> None:
+    client, services = _build()
+    services.vector_store.list_subjects = AsyncMock(
+        return_value=[{"subject": "teamshared infra", "count": 2,
+                       "updated_at": "2026-05-28T10:00:00"}]
+    )
+    services.wiki.get_page = AsyncMock(
+        return_value={"body_md": "old", "version": 1, "sources": ["m1"],
+                      "updated_at": "2026-05-28T10:00:00"}
+    )
+    services.wiki.upsert_page = AsyncMock(
+        return_value={"slug": "teamshared-infra", "version": 2}
+    )
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
+    _login(client)
+    resp = _app_post(
+        client,
+        "/app/wiki/topic/teamshared-infra/edit",
+        {"slug": "teamshared-infra", "title": "teamshared infra", "body_md": "# Infra\n\nUpdated."},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/wiki/topic/teamshared-infra?flash=saved"
+    services.wiki.upsert_page.assert_awaited_once()
+    assert services.wiki.upsert_page.await_args.kwargs["slug"] == "teamshared-infra"
+    assert services.wiki.upsert_page.await_args.kwargs["body_md"] == "# Infra\n\nUpdated."
+    assert services.wiki.upsert_page.await_args.kwargs["updated_by"] == "owner@example.com"
+
+
+def test_wiki_edit_save_creates_first_version() -> None:
+    client, services = _build()
+    services.vector_store.list_subjects = AsyncMock(return_value=[])
+    services.wiki.get_page = AsyncMock(return_value=None)
+    services.wiki.upsert_page = AsyncMock(
+        return_value={"slug": "new-topic", "version": 1}
+    )
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
+    _login(client)
+    resp = _app_post(
+        client,
+        "/app/wiki/topic/new-topic/edit",
+        {"slug": "new-topic", "title": "New Topic", "body_md": "# New Topic\n\nHello."},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/wiki/topic/new-topic?flash=saved"
+    services.wiki.upsert_page.assert_awaited_once()
+    assert services.wiki.upsert_page.await_args.kwargs["title"] == "New Topic"
+
+
+def test_wiki_edit_save_redirects_on_permission_denied() -> None:
+    client, services = _build()
+    services.vector_store.list_subjects = AsyncMock(return_value=[])
+    services.wiki.get_page = AsyncMock(return_value=None)
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
+    # Make the authorizer reject the write.
+    services.authorizer.return_value.require = AsyncMock(
+        side_effect=PermissionDenied("memory:create", SimpleNamespace(type="user", id=OWNER_ID, org_id=DEFAULT_ORG))
+    )
+    _login(client)
+    resp = _app_post(
+        client,
+        "/app/wiki/topic/new-topic/edit",
+        {"slug": "new-topic", "title": "New Topic", "body_md": "Hello."},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/wiki/topic/new-topic?flash=permission"
+
+
+def test_wiki_topic_shows_edit_button() -> None:
+    client, services = _build()
+    services.vector_store.list_subjects = AsyncMock(return_value=[])
+    services.vector_store.list_by_subject = AsyncMock(return_value=[])
+    services.wiki.get_page = AsyncMock(return_value=None)
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
+    _login(client)
+    resp = client.get("/app/wiki/topic/teamshared-infra")
+    assert resp.status_code == 200
+    assert "/app/wiki/topic/teamshared-infra/edit" in resp.text
+    assert "Edit" in resp.text
+
+
+def test_wiki_topic_shows_saved_flash() -> None:
+    client, services = _build()
+    services.vector_store.list_subjects = AsyncMock(return_value=[])
+    services.vector_store.list_by_subject = AsyncMock(return_value=[])
+    services.wiki.get_page = AsyncMock(return_value=None)
+    services.ontology.get_entity_by_slug = AsyncMock(return_value=None)
+    _login(client)
+    resp = client.get("/app/wiki/topic/teamshared-infra?flash=saved")
+    assert resp.status_code == 200
+    assert "Wiki page saved as a new version" in resp.text
 
 
 def test_entity_hub_renders(monkeypatch: pytest.MonkeyPatch) -> None:

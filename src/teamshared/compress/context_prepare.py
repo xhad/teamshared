@@ -12,6 +12,7 @@ from teamshared.memory.facade import MemoryFacade
 from teamshared.memory.working import WorkingMemory
 
 _CONTEXT_HEADER = "## TeamShared context\n\n"
+_SOUL_HEADER = "## TeamShared soul\n\n"
 
 
 def prompt_to_messages(prompt: str) -> list[dict[str, str]]:
@@ -22,6 +23,21 @@ def additional_context_from_pack(rendered: str | None) -> str | None:
     if not rendered or not rendered.strip():
         return None
     return _CONTEXT_HEADER + rendered.rstrip() + "\n"
+
+
+def additional_context_with_soul(
+    soul_md: str | None, rendered: str | None
+) -> str | None:
+    """Build always-on soul + optional task pack for prepare responses."""
+    parts: list[str] = []
+    if soul_md and soul_md.strip():
+        parts.append(_SOUL_HEADER + soul_md.rstrip() + "\n")
+    pack = additional_context_from_pack(rendered)
+    if pack:
+        parts.append(pack)
+    if not parts:
+        return None
+    return "\n".join(parts)
 
 
 async def run_context_prepare(
@@ -65,11 +81,20 @@ async def run_context_prepare(
         caller_agent=principal.display if principal.type == "agent" else None,
     )
 
+    soul_md: str | None = None
+    try:
+        soul = await facade._soul_payload(principal)
+        if soul and (soul.get("body_md") or "").strip():
+            soul_md = str(soul["body_md"])
+    except Exception:
+        soul_md = None
+
     rendered = prepared.context_pack.rendered if prepared.context_pack else None
     return {
         "messages": prepared.messages,
         "session_id": prepared.session_id,
-        "additional_context": additional_context_from_pack(rendered),
+        "additional_context": additional_context_with_soul(soul_md, rendered),
+        "soul": soul_md,
         "stats": {
             "session_appended": prepared.session_appended,
             "enriched": prepared.enriched,
@@ -77,5 +102,6 @@ async def run_context_prepare(
             "chars_saved": prepared.compress_stats.chars_saved,
             "original_chars": prepared.compress_stats.original_chars,
             "compressed_chars": prepared.compress_stats.compressed_chars,
+            "soul": bool(soul_md),
         },
     }

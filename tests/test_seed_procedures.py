@@ -26,6 +26,9 @@ def test_steps_reference_real_tools() -> None:
     known_tools = {
         "memory_recall",
         "memory_remember",
+        "memory_soul_get",
+        "memory_soul_set",
+        "memory_session_ensure",
         "memory_session_open",
         "memory_session_append",
         "memory_session_close",

@@ -30,13 +30,13 @@ codebase actually ships today (six memory pillars, context compression, work/pro
 ontology console, OTP multi-tenant console, curator/distiller workers). Use this
 as the source of truth for product messaging; `prod-plan.md` remains roadmap.
 
-The graph was last built from **18 sources**: six internal docs (including shipped
-state, README, AGENTS, PRODUCT) plus nine external research artifacts (YC RFS,
-GBrain, shared-brain-landscape-2026, Headroom, Screenpipe, mex, Palantir
-ontology, Cognee, RACT). Corpus health is **developing** — there is still **no
+The graph was last built from **20 sources**: six internal docs (including shipped
+state, README, AGENTS, PRODUCT) plus eleven external research artifacts (YC RFS,
+GBrain, shared-brain-landscape-2026, Headroom, Screenpipe, mex, OpenClaw memory,
+Palantir ontology, Cognee, RACT, PromptQL). Corpus health is **developing** — there is still **no
 captured user research** (interviews, tickets, support threads).
 
-**Graph stats:** 165 nodes · 94 edges · 17 assumptions surfaced.
+**Graph stats:** 185 nodes · 113 edges · 19 assumptions surfaced.
 
 **Headline finding:** The product is substantially built (clean-room engineering
 baseline passed 2026-07-11), but the core bets still have **zero user evidence**.
@@ -54,6 +54,8 @@ ontology, context compression) — not graph depth alone. See
 | Headroom (compression) | `knowledge/headroom-architecture-analysis.md` |
 | Screenpipe (desktop capture) | `knowledge/screenpipe-competitor-analysis.md` |
 | mex (repo scaffold) | `knowledge/mex-competitor-analysis.md` |
+| OpenClaw native memory (harness file memory) | `knowledge/openclaw-memory-analysis.md` |
+| PromptQL (multiplayer AI + shared wiki) | `knowledge/promptql-competitor-analysis.md` |
 | RACT (coding harness) | `knowledge/ract-competitor-analysis.md` |
 | Palantir ontology (reference) | `knowledge/palantir-ontology-analysis.md` |
 | Landscape | `knowledge/shared-brain-landscape-analysis.md` |

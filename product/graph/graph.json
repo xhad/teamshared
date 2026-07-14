@@ -1,7 +1,7 @@
 {
   "meta": {
     "generated": "2026-07-12",
-    "sourceCount": 18,
+    "sourceCount": 20,
     "sourceTypes": [
       "doc",
       "research"
@@ -15,7 +15,9 @@
       "Untagged sources (no YAML type): clean-room-run-2026-07-11.md, design-partner-tracker.md, memory-wiki-plan.md, plan.md, prod-plan.md, teamshared-agents.md, teamshared-product.md, teamshared-readme.md.",
       "shipped-state supersedes prod-plan.md for what-is-built; prod-plan remains roadmap/aspirational.",
       "Six memory pillars + optional graph, context compression MCP, work queue + projects, skills vs playbooks, ontology console, OTP multi-tenant console (no /app/approvals), distiller/curator workers, optional gateway \u2014 all evidenced from shipped-state + readme + agents.",
-      "Primary Tier-1 competitors reaffirmed: GBrain, Cognee. Adjacent: Headroom, Screenpipe, mex, RACT.",
+      "Primary Tier-1 competitors reaffirmed: GBrain, Cognee. Adjacent: Headroom, Screenpipe, mex, RACT, OpenClaw native memory (harness-local file memory).",
+      "Graphify 2026-07-12 (pass 2): ingested openclaw-memory-research.md \u2014 OpenClaw memory-core file model, dreaming, memory-wiki; Tier-3 harness-adjacent, complements TeamShared MCP on same harness.",
+      "Graphify 2026-07-13: ingested promptql-research.md \u2014 PromptQL multiplayer AI + shared wiki; data-live connectors + per-user permissions; Tier-2 adjacent competitor in shared-brain category.",
       "New assumptions from shipped-state gaps: approvals UI deferred, connectors not blocking, design-partner validation still needed, manual skills vs auto-mine."
     ]
   },
@@ -1487,6 +1489,123 @@
       ]
     },
     {
+      "id": "comp-openclaw-memory-core",
+      "type": "Competitor",
+      "label": "OpenClaw native memory (memory-core) \u2014 workspace markdown files + hybrid search",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "OpenClaw remembers things by writing plain Markdown files in your agent's workspace (default `~/.openclaw/workspace`). The model only remembers what gets saved to disk; there is no hidden state."
+        }
+      ]
+    },
+    {
+      "id": "feature-openclaw-memory-md-bootstrap",
+      "type": "Feature",
+      "label": "OpenClaw MEMORY.md: long-term bootstrap injected at session start",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "`MEMORY.md` \u2014 long-term memory. Durable facts, preferences, and decisions. Loaded at the start of a session."
+        }
+      ]
+    },
+    {
+      "id": "feature-openclaw-daily-notes",
+      "type": "Feature",
+      "label": "OpenClaw memory/YYYY-MM-DD.md: daily working notes indexed but not always injected",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "These are indexed for `memory_search` and `memory_get`, but are not injected into the bootstrap prompt on every turn."
+        }
+      ]
+    },
+    {
+      "id": "feature-openclaw-dreaming",
+      "type": "Feature",
+      "label": "OpenClaw dreaming: scored light\u2192REM\u2192deep promotion into MEMORY.md",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "Deep ranks candidates with weighted scoring and threshold gates (`minScore`, `minRecallCount`, `minUniqueQueries` must all pass)."
+        }
+      ]
+    },
+    {
+      "id": "feature-openclaw-memory-flush",
+      "type": "Feature",
+      "label": "OpenClaw memory flush: silent save turn before compaction summarizes conversation",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "Before compaction summarizes your conversation, OpenClaw runs a silent turn that reminds the agent to save important context to memory files."
+        }
+      ]
+    },
+    {
+      "id": "feature-openclaw-memory-wiki",
+      "type": "Feature",
+      "label": "OpenClaw memory-wiki: claims, evidence, contradiction dashboards beside active memory plugin",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "`memory-wiki` does not replace the active memory plugin. Recall, promotion, indexing, and dreaming stay owned by whichever memory backend is configured."
+        }
+      ]
+    },
+    {
+      "id": "feature-openclaw-hybrid-search",
+      "type": "Feature",
+      "label": "OpenClaw memory_search: vector + keyword hybrid (SQLite default; QMD/Honcho/LanceDB plugins)",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "When an embedding provider is configured, `memory_search` uses hybrid search: vector similarity (semantic meaning) combined with keyword matching"
+        }
+      ]
+    },
+    {
+      "id": "insight-openclaw-tier3-harness-memory",
+      "type": "Insight",
+      "label": "OpenClaw native memory is Tier-3 harness-adjacent personal memory \u2014 not multi-tenant org brain",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "Fits **Tier 3 \u2014 harness-native personal memory** alongside mex (repo scaffold) but richer (search, dreaming, memory-wiki). Not a multi-tenant org brain."
+        }
+      ]
+    },
+    {
+      "id": "insight-openclaw-complements-teamshared-mcp",
+      "type": "Insight",
+      "label": "OpenClaw harness + TeamShared MCP is layered complement (local scratch + org brain)",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "Native `memory-core` and external MCP memory can coexist: local scratch + org-wide durable brain \u2014 requires documented precedence to avoid duplicate facts."
+        }
+      ]
+    },
+    {
+      "id": "insight-openclaw-memory-wiki-peers-curator",
+      "type": "Insight",
+      "label": "OpenClaw memory-wiki claims/evidence layer peers TeamShared curator wiki + ontology",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "TeamShared peer: curator `wiki_pages` + ontology console + `memory_entity_view` \u2014 server-managed, org-scoped, not per-agent markdown vault."
+        }
+      ]
+    },
+    {
+      "id": "assumption-openclaw-file-memory-sufficient-for-teams",
+      "type": "Assumption",
+      "label": "Solo OpenClaw users can stay on MEMORY.md without needing hosted org brain",
+      "risk": "If teams never graduate from file memory to TeamShared MCP, OpenClaw distribution becomes a ceiling \u2014 GBrain or native memory-core wins by default.",
+      "provenance": []
+    },
+    {
       "id": "insight-palantir-ontology-reference",
       "type": "Insight",
       "label": "Palantir Foundry ontology is architectural reference, not a memory competitor",
@@ -1952,6 +2071,101 @@
       "label": "Manual skill/playbook authoring beats auto-trace mining for target buyers",
       "provenance": [],
       "risk": "Shipped-state lists auto-trace-to-skill mining (Hivemind-style) as not shipped; if buyers expect skills to compound automatically, manual authoring feels inferior."
+    },
+    {
+      "id": "comp-promptql",
+      "type": "Competitor",
+      "label": "PromptQL \u2014 multiplayer AI over live data with shared context wiki",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "PromptQL helps you build a multiplayer AI for your team that maintains a shared context wiki."
+        }
+      ]
+    },
+    {
+      "id": "feature-promptql-multiplayer-ai",
+      "type": "Feature",
+      "label": "PromptQL multiplayer AI: real-time thread with @-mentions and agent collaboration",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "PromptQL is multiplayer. Multiple people can join the same thread, @-mention each other and the agent, and collaborate in real time."
+        }
+      ]
+    },
+    {
+      "id": "feature-promptql-connectors",
+      "type": "Feature",
+      "label": "PromptQL connectors: Postgres, Snowflake, BigQuery, Databricks, GitHub, Slack, Salesforce, GWorkspace",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "Connect databases (Postgres, Snowflake, BigQuery, Databricks, and more) and SaaS integrations (GitHub, Slack, Salesforce, Google Workspace, and many others)."
+        }
+      ]
+    },
+    {
+      "id": "feature-promptql-artifacts",
+      "type": "Feature",
+      "label": "PromptQL artifacts: plain language \u2192 tables, charts, reports, dashboards",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "Ask in plain language and get back artifacts \u2014 tables, charts, reports, and interactive dashboards \u2014 that you can share and act on."
+        }
+      ]
+    },
+    {
+      "id": "feature-promptql-shared-wiki",
+      "type": "Feature",
+      "label": "PromptQL shared context wiki: captures domain knowledge as the team works",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "As your team works with PromptQL, the wiki captures domain knowledge, tribal context, and business definitions \u2014 so the agent gets smarter over time and every teammate benefits from shared context."
+        }
+      ]
+    },
+    {
+      "id": "feature-promptql-delegate-coding",
+      "type": "Feature",
+      "label": "PromptQL delegates coding tasks to Claude Code or Codex on user's machine",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "Connect coding agents like Claude Code or Codex running on your own machines. PromptQL can delegate code investigation, feature development, and browser testing tasks securely."
+        }
+      ]
+    },
+    {
+      "id": "insight-promptql-data-analyst-vs-memory-substrate",
+      "type": "Insight",
+      "label": "PromptQL is a data-first AI analyst, not a reusable agent-memory substrate",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "PromptQL and TeamShared both target shared institutional context for AI-assisted teams, but PromptQL is pitched as a data+BI multiplayer agent with a wiki side effect, whereas TeamShared is pitched as memory infrastructure for agents."
+        }
+      ]
+    },
+    {
+      "id": "insight-promptql-permission-data-layer",
+      "type": "Insight",
+      "label": "PromptQL enforces per-user permissions at the data layer (live-query, not memory scoping)",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "PromptQL queries data where it lives \u2014 no copying into a warehouse, no ETL pipelines to build \u2014 with per-user permissions enforced at the data layer."
+        }
+      ]
+    },
+    {
+      "id": "assumption-promptql-shared-brain-overlap",
+      "type": "Assumption",
+      "label": "Teams evaluating shared-brain products may shortlist PromptQL alongside TeamShared",
+      "provenance": [],
+      "risk": "If buyers conflate 'shared context wiki' with 'shared agent memory', PromptQL's data-live + BI artifact story could capture deals that TeamShared wants."
     }
   ],
   "edges": [
@@ -3092,6 +3306,234 @@
         {
           "source": "shipped-state-2026-07-12.md",
           "quote": "Context compression built into MCP (vs external Headroom proxy)"
+        }
+      ]
+    },
+    {
+      "id": "e-openclaw-cold-pain",
+      "type": "supports",
+      "from": "comp-openclaw-memory-core",
+      "to": "pain-cold-session-dump",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "Loaded at the start of a session."
+        }
+      ]
+    },
+    {
+      "id": "e-openclaw-stateless-pain",
+      "type": "supports",
+      "from": "comp-openclaw-memory-core",
+      "to": "pain-stateless-llm-calls",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "The model only remembers what gets saved to disk; there is no hidden state."
+        }
+      ]
+    },
+    {
+      "id": "e-openclaw-tier3-adjacent",
+      "type": "supports",
+      "from": "insight-openclaw-tier3-harness-memory",
+      "to": "insight-mex-tier3-adjacent",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "Fits **Tier 3 \u2014 harness-native personal memory** alongside mex (repo scaffold)"
+        }
+      ]
+    },
+    {
+      "id": "e-openclaw-complement-mcp",
+      "type": "supports",
+      "from": "insight-openclaw-complements-teamshared-mcp",
+      "to": "feature-mcp-native",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "TeamShared wires in via `install.sh` (`openclaw` agent type)"
+        }
+      ]
+    },
+    {
+      "id": "e-openclaw-wiki-peers-insight",
+      "type": "supports",
+      "from": "feature-openclaw-memory-wiki",
+      "to": "insight-openclaw-memory-wiki-peers-curator",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "Adds compiled wiki vault with structured claims, evidence, contradiction/stale dashboards"
+        }
+      ]
+    },
+    {
+      "id": "e-openclaw-wiki-curator",
+      "type": "supports",
+      "from": "insight-openclaw-memory-wiki-peers-curator",
+      "to": "feature-curator",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "TeamShared peer: curator `wiki_pages` + ontology console"
+        }
+      ]
+    },
+    {
+      "id": "e-openclaw-dreaming-distiller",
+      "type": "supports",
+      "from": "feature-openclaw-dreaming",
+      "to": "feature-distiller-worker",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "TeamShared: distiller worker (session \u2192 durable pillars) + curator (subject \u2192 wiki)."
+        }
+      ]
+    },
+    {
+      "id": "e-openclaw-power-user",
+      "type": "experiences",
+      "from": "segment-power-user-operators",
+      "to": "comp-openclaw-memory-core",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "OpenClaw is the **harness** (sessions, compaction, heartbeat, plugins). GBrain is positioned as the production brain behind OpenClaw/Hermes"
+        }
+      ]
+    },
+    {
+      "id": "a-openclaw-solo-memory",
+      "type": "assumes",
+      "from": "comp-openclaw-memory-core",
+      "to": "assumption-openclaw-file-memory-sufficient-for-teams",
+      "provenance": [
+        {
+          "source": "openclaw-memory-research.md",
+          "quote": "Not a multi-tenant org brain."
+        }
+      ]
+    },
+    {
+      "id": "e-promptql-belongs-to-multiplayer",
+      "type": "belongs-to",
+      "from": "feature-promptql-multiplayer-ai",
+      "to": "comp-promptql",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "PromptQL is multiplayer. Multiple people can join the same thread, @-mention each other and the agent, and collaborate in real time."
+        }
+      ]
+    },
+    {
+      "id": "e-promptql-belongs-to-connectors",
+      "type": "belongs-to",
+      "from": "feature-promptql-connectors",
+      "to": "comp-promptql",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "Connect databases (Postgres, Snowflake, BigQuery, Databricks, and more) and SaaS integrations (GitHub, Slack, Salesforce, Google Workspace, and many others)."
+        }
+      ]
+    },
+    {
+      "id": "e-promptql-belongs-to-artifacts",
+      "type": "belongs-to",
+      "from": "feature-promptql-artifacts",
+      "to": "comp-promptql",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "Ask in plain language and get back artifacts \u2014 tables, charts, reports, and interactive dashboards \u2014 that you can share and act on."
+        }
+      ]
+    },
+    {
+      "id": "e-promptql-belongs-to-wiki",
+      "type": "belongs-to",
+      "from": "feature-promptql-shared-wiki",
+      "to": "comp-promptql",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "As your team works with PromptQL, the wiki captures domain knowledge, tribal context, and business definitions \u2014 so the agent gets smarter over time and every teammate benefits from shared context."
+        }
+      ]
+    },
+    {
+      "id": "e-promptql-belongs-to-delegate",
+      "type": "belongs-to",
+      "from": "feature-promptql-delegate-coding",
+      "to": "comp-promptql",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "Connect coding agents like Claude Code or Codex running on your own machines. PromptQL can delegate code investigation, feature development, and browser testing tasks securely."
+        }
+      ]
+    },
+    {
+      "id": "e-promptql-competes-shared-brain",
+      "type": "competes-with",
+      "from": "comp-promptql",
+      "to": "segment-shared-brain-buyers",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "PromptQL helps you build a multiplayer AI for your team that maintains a shared context wiki."
+        }
+      ]
+    },
+    {
+      "id": "e-promptql-supports-shared-context-need",
+      "type": "supports",
+      "from": "comp-promptql",
+      "to": "need-shared-context",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "The context that makes AI accurate is captured into a shared wiki as you work."
+        }
+      ]
+    },
+    {
+      "id": "e-promptql-insight-data-analyst",
+      "type": "supports",
+      "from": "insight-promptql-data-analyst-vs-memory-substrate",
+      "to": "comp-promptql",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "PromptQL is pitched as a data+BI multiplayer agent with a wiki side effect, whereas TeamShared is pitched as memory infrastructure for agents."
+        }
+      ]
+    },
+    {
+      "id": "e-promptql-insight-permission-data-layer",
+      "type": "supports",
+      "from": "insight-promptql-permission-data-layer",
+      "to": "feature-promptql-connectors",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "PromptQL queries data where it lives \u2014 no copying into a warehouse, no ETL pipelines to build \u2014 with per-user permissions enforced at the data layer."
+        }
+      ]
+    },
+    {
+      "id": "a-promptql-shared-brain-overlap",
+      "type": "assumes",
+      "from": "comp-promptql",
+      "to": "assumption-promptql-shared-brain-overlap",
+      "provenance": [
+        {
+          "source": "promptql-research.md",
+          "quote": "PromptQL and TeamShared both target shared institutional context for AI-assisted teams."
         }
       ]
     }

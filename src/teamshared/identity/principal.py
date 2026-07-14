@@ -26,6 +26,9 @@ class Principal:
     api_key_id: UUID | None = None
     display: str | None = None
     roles: tuple[str, ...] = field(default=())
+    # Global human identity when known (console JWT or API key minted by a user).
+    # Keys soul_profiles; never confuse with harness display labels like "cursor".
+    account_id: UUID | None = None
 
     @property
     def attribution(self) -> str:

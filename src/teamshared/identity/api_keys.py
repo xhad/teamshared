@@ -97,8 +97,19 @@ class ApiKeyStore:
         if not verify_secret(token, key_hash):
             log.warning("api_key_hash_mismatch", prefix=prefix)
             return None
+        account_id: UUID | None = None
         async with self.db.admin() as conn:
             await conn.execute("SELECT auth_touch_api_key(%s)", (str(key_id),))
+            # Resolve the minting human → accounts.id for private soul lookup.
+            cur = await conn.execute(
+                "SELECT u.account_id FROM api_keys k "
+                "LEFT JOIN users u ON u.id = k.created_by AND u.org_id = k.org_id "
+                "WHERE k.id = %s",
+                (str(key_id),),
+            )
+            acct_row = await cur.fetchone()
+            if acct_row and acct_row[0] is not None:
+                account_id = acct_row[0]
         return Principal(
             org_id=org_id,
             type=ptype,
@@ -106,6 +117,7 @@ class ApiKeyStore:
             scopes=tuple(scopes or ()),
             api_key_id=key_id,
             display=label,
+            account_id=account_id,
         )
 
     async def revoke(self, org_id: UUID, key_id: UUID) -> bool:

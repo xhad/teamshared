@@ -26,6 +26,7 @@ def issue_session(
     org_id: UUID,
     user_id: UUID,
     email: str | None = None,
+    account_id: UUID | None = None,
     ttl_seconds: int = 3600,
 ) -> str:
     now = datetime.now(UTC)
@@ -39,6 +40,8 @@ def issue_session(
     if email:
         # The global account email: stable across orgs, drives the org switcher.
         payload["email"] = email
+    if account_id is not None:
+        payload["aid"] = str(account_id)
     return jwt.encode(payload, secret, algorithm=_ALG)
 
 
@@ -54,11 +57,16 @@ def _verify(token: str, *, secret: str, expected_typ: str) -> Principal | None:
     if payload.get("typ") != expected_typ:
         return None
     try:
+        account_id = None
+        raw_aid = payload.get("aid")
+        if raw_aid:
+            account_id = UUID(str(raw_aid))
         return Principal(
             org_id=UUID(payload["org"]),
             type="user",
             id=UUID(payload["sub"]),
             display=payload.get("email"),
+            account_id=account_id,
         )
     except (KeyError, ValueError):
         return None

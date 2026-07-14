@@ -1,0 +1,61 @@
+# Customize this fixture to replay *your* Cursor chat as a cost A/B test.
+#
+# 1. Copy a real session into `turns:` below (user / assistant / tool blocks).
+# 2. Set repo + github to match your workspace (see teamshared.mdc slug rules).
+# 3. Run cost comparison:
+#
+#    # Offline (compression only — no server):
+#    python eval/conversation_replay/compare_cost.py eval/conversation_replay/cursor-session.yaml
+#
+#    # Full stack (compression + memory enrichment + recall probe):
+#    export TEAMSHARED_EVAL_URL=https://teamshared.com/mcp/
+#    export TEAMSHARED_EVAL_TOKEN=tsk_...   # from /app/keys
+#    python eval/conversation_replay/compare_cost.py --http eval/conversation_replay/cursor-session.yaml
+#
+#    # Optional: ask Cursor SDK to answer the last user message both ways:
+#    export CURSOR_API_KEY=cursor_...
+#    python eval/conversation_replay/compare_cost.py --http --agent eval/conversation_replay/cursor-session.yaml
+#
+# Tool turns: use `generate:` for synthetic fat output (grep_json_500, memory_recall_fat)
+# or paste real tool output under `output: |`.
+
+name: cursor-session-template
+
+repo: Users-chad-code-teamshared
+github: xhad/teamshared
+
+description: >-
+  Template multi-turn Cursor session. Replace turns with your transcript.
+  Measures whether teamshared compression + enrichment costs less than raw history.
+
+# Optional: checked on the memory arm's enriched context (http mode).
+context_expect_any:
+  - "teamshared"
+
+# Optional: live recall probe (http mode).
+recall:
+  query: teamshared memory pillars context compression
+  expect_any:
+    - "semantic"
+    - "working"
+
+turns:
+  - user: >-
+      Help me understand whether teamshared saves tokens on long agent sessions
+      with fat Shell/Grep output. What should I measure?
+  - assistant: I'll recall team notes, then check the eval harness in this repo.
+  - tool:
+      name: Shell
+      generate: grep_json_300
+  - tool:
+      name: MCP:memory_recall
+      generate: memory_recall_fat
+  - assistant: >-
+      Compare baseline cumulative context vs teamshared compress/full arms using
+      eval/conversation_replay/compare_cost.py on a YAML transcript of your session.
+  - user: >-
+      Follow-up: when does teamshared cost *more* than baseline?
+  - assistant: Early turns before large tool payloads — enrichment adds context upfront.
+  - tool:
+      name: Shell
+      generate: grep_json_500

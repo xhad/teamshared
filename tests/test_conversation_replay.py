@@ -13,6 +13,7 @@ from eval.conversation_replay_lib import (
     replay_engine,
     report_to_dict,
     score_expect_any,
+    session_cost_summary,
     token_count_messages,
     token_reduction_pct,
     turn_labels_from_fixture,
@@ -178,3 +179,20 @@ async def test_report_to_dict_includes_labels() -> None:
     assert len(data["checkpoints"]) == 2
     assert data["checkpoints"][1]["label"].startswith("tool Shell")
     assert data["passed"] is True
+    assert data["baseline_session_tokens"] >= data["baseline_final_tokens"]
+    assert "memory_est_input_usd" in data
+
+
+def test_session_cost_summary() -> None:
+    from eval.conversation_replay_lib import Checkpoint, ReplayReport
+
+    report = ReplayReport(name="x", mode="engine", turn_count=2)
+    report.checkpoints = [
+        Checkpoint(turn=1, baseline_tokens=100, memory_tokens=80),
+        Checkpoint(turn=2, baseline_tokens=500, memory_tokens=200),
+    ]
+    costs = session_cost_summary(report)
+    assert costs["baseline_session_tokens"] == 600
+    assert costs["memory_session_tokens"] == 280
+    assert costs["session_token_reduction_pct"] == 53.33
+    assert not costs["memory_more_expensive"]
