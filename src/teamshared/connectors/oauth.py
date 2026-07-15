@@ -84,7 +84,9 @@ def build_authorize_url(
         params = {
             "client_id": client_id,
             "redirect_uri": redirect_uri,
-            "scope": ",".join(SLACK_SCOPES),
+            # User scopes only — we act on behalf of the user, not as a bot.
+            # Requesting bot scopes (the ``scope`` param) requires a bot user
+            # to be configured in the Slack app, which we don't need.
             "user_scope": ",".join(SLACK_SCOPES),
             "state": state,
         }
