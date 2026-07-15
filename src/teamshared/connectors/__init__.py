@@ -8,16 +8,31 @@ in the approval queue by default). OAuth tokens are encrypted at rest by
 """
 
 from teamshared.connectors.base import Connector, SourceDoc, SyncResult
+from teamshared.connectors.oauth import (
+    GMAIL_SCOPES,
+    SLACK_SCOPES,
+    build_authorize_url,
+    exchange_code,
+    refresh_access_token,
+    revoke_token,
+)
 from teamshared.connectors.registry import CONNECTOR_KINDS, build_connector
 from teamshared.connectors.service import ConnectorService
-from teamshared.connectors.vault import TokenVault
+from teamshared.connectors.vault import TokenBundle, TokenVault
 
 __all__ = [
     "CONNECTOR_KINDS",
+    "GMAIL_SCOPES",
+    "SLACK_SCOPES",
     "Connector",
     "ConnectorService",
     "SourceDoc",
     "SyncResult",
+    "TokenBundle",
     "TokenVault",
+    "build_authorize_url",
     "build_connector",
+    "exchange_code",
+    "refresh_access_token",
+    "revoke_token",
 ]

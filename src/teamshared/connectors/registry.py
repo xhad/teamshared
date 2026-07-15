@@ -6,11 +6,13 @@ from typing import Any
 
 from teamshared.connectors.adapters import (
     GitHubConnector,
+    GmailConnector,
     GoogleDriveConnector,
     LinearConnector,
     MCPConnector,
     NotionConnector,
     SlackConnector,
+    TelegramConnector,
 )
 from teamshared.connectors.base import Connector
 
@@ -21,6 +23,8 @@ _REGISTRY: dict[str, type[Connector]] = {
     GoogleDriveConnector.kind: GoogleDriveConnector,
     LinearConnector.kind: LinearConnector,
     MCPConnector.kind: MCPConnector,
+    GmailConnector.kind: GmailConnector,
+    TelegramConnector.kind: TelegramConnector,
 }
 
 CONNECTOR_KINDS = tuple(_REGISTRY)

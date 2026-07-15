@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#1C1C1E"/>
+
+  <!-- Heads at triangle vertices: Top=Green(256,96) BR=Purple(396,338) BL=Blue(116,338) -->
+  <!-- Borromean z-order: green-tail, purple(head+tail), blue(head+tail), green-head -->
+
+  <!-- 1. Green tail: Top -> BR (goes under Purple head) -->
+  <line x1="256" y1="96" x2="396" y2="338" stroke="#7CC242" stroke-width="44" stroke-linecap="round"/>
+
+  <!-- 2. Purple head + tail: BR -> BL (tail goes under Blue head) -->
+  <line x1="396" y1="338" x2="116" y2="338" stroke="#9B59D9" stroke-width="44" stroke-linecap="round"/>
+  <circle cx="396" cy="338" r="52" fill="#9B59D9"/>
+
+  <!-- 3. Blue head + tail: BL -> Top (tail goes under Green head) -->
+  <line x1="116" y1="338" x2="256" y2="96" stroke="#4A9EF5" stroke-width="44" stroke-linecap="round"/>
+  <circle cx="116" cy="338" r="52" fill="#4A9EF5"/>
+
+  <!-- 4. Green head on top (covers Blue tail end) -->
+  <circle cx="256" cy="96" r="52" fill="#7CC242"/>
+
+  <!-- Keyhole holes in each head -->
+  <circle cx="256" cy="96" r="20" fill="#1C1C1E"/>
+  <circle cx="396" cy="338" r="20" fill="#1C1C1E"/>
+  <circle cx="116" cy="338" r="20" fill="#1C1C1E"/>
+</svg>

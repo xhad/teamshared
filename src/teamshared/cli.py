@@ -334,6 +334,14 @@ def curator() -> None:
     curator_main()
 
 
+@app.command(name="integrations-sync")
+def integrations_sync() -> None:
+    """Run the Gmail/Slack integrations sync worker (long-running)."""
+    from teamshared.distill.integrations_worker import main as sync_main
+
+    sync_main()
+
+
 @app.command(name="worker-health")
 def worker_health(
     component: str = typer.Argument(

@@ -1,0 +1,20 @@
+# Railway service config for the teamshared integrations sync worker.
+#
+# Apply by setting "Custom config file path" to /infra/railway.integrations-sync.toml
+# in the Railway service Settings → Source panel. See infra/railway.example.md
+# for the full deploy walkthrough.
+#
+# Like the distiller/curator, this service has no public domain, no port, and no
+# HTTP healthcheck — it polls connected Gmail/Slack connectors and syncs new
+# messages into each org's shared brain via the ingestion pipeline.
+
+"$schema" = "https://railway.com/railway.schema.json"
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "infra/Dockerfile"
+
+[deploy]
+startCommand = "teamshared integrations-sync"
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 10

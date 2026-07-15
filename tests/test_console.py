@@ -1432,3 +1432,149 @@ def test_people_add_member_redirects() -> None:
 # Consent UI (removed 2026-06-19) — capture is now gated only by
 # settings.capture_enabled; no consent_grants table or /app/consent surface.
 # --------------------------------------------------------------------------- #
+
+
+# --------------------------------------------------------------------------- #
+# Connections page (/app/connections) — Gmail/Slack OAuth integrations.
+# --------------------------------------------------------------------------- #
+
+
+def test_connections_page_lists_connections() -> None:
+    client, services = _build()
+    services.connectors = MagicMock()
+    services.connectors.list_connectors = AsyncMock(
+        return_value=[
+            {
+                "id": "c-1", "kind": "gmail", "name": "gmail-owner",
+                "status": "connected", "account_id": "acct-1",
+                "created_at": "2026-07-15T00:00:00",
+            }
+        ]
+    )
+    services.settings = SimpleNamespace(
+        gmail_client_id="cid", gmail_client_secret="sec", gmail_redirect_uri="https://app/cb",
+        slack_client_id="cid", slack_client_secret="sec", slack_redirect_uri="https://app/cb",
+    )
+    _login(client)
+    resp = client.get("/app/connections")
+    assert resp.status_code == 200
+    assert "Connections" in resp.text
+    assert "gmail-owner" in resp.text
+    assert "Connect Gmail" in resp.text
+    assert "Connect Slack" in resp.text
+
+
+def test_connections_page_shows_unconfigured_hint() -> None:
+    client, services = _build()
+    services.connectors = MagicMock()
+    services.connectors.list_connectors = AsyncMock(return_value=[])
+    services.settings = SimpleNamespace(
+        gmail_client_id=None, gmail_client_secret=None, gmail_redirect_uri=None,
+        slack_client_id=None, slack_client_secret=None, slack_redirect_uri=None,
+    )
+    _login(client)
+    resp = client.get("/app/connections")
+    assert resp.status_code == 200
+    assert "not configured" in resp.text
+
+
+def test_connections_sync_redirects() -> None:
+    client, services = _build()
+    services.connectors = MagicMock()
+    services.connectors.sync = AsyncMock(return_value=None)
+    services.settings = SimpleNamespace(
+        gmail_client_id="cid", gmail_client_secret="sec", gmail_redirect_uri="https://app/cb",
+        slack_client_id="cid", slack_client_secret="sec", slack_redirect_uri="https://app/cb",
+    )
+    _login(client)
+    cid = uuid.uuid4()
+    resp = _app_post(client, f"/app/connections/{cid}/sync")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/connections?status=synced"
+    services.connectors.sync.assert_awaited_once()
+
+
+def test_connections_disconnect_redirects() -> None:
+    client, services = _build()
+    services.connectors = MagicMock()
+    services.connectors.delete = AsyncMock(return_value=None)
+    services.settings = SimpleNamespace(
+        gmail_client_id="cid", gmail_client_secret="sec", gmail_redirect_uri="https://app/cb",
+        slack_client_id="cid", slack_client_secret="sec", slack_redirect_uri="https://app/cb",
+    )
+    _login(client)
+    cid = uuid.uuid4()
+    resp = _app_post(client, f"/app/connections/{cid}/disconnect")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/connections?status=disconnected"
+    services.connectors.delete.assert_awaited_once()
+
+
+def test_connections_sync_without_csrf_rejected() -> None:
+    client, services = _build()
+    services.connectors = MagicMock()
+    services.connectors.sync = AsyncMock(return_value=None)
+    services.settings = SimpleNamespace(
+        gmail_client_id="cid", gmail_client_secret="sec", gmail_redirect_uri="https://app/cb",
+        slack_client_id="cid", slack_client_secret="sec", slack_redirect_uri="https://app/cb",
+    )
+    _login(client)
+    client.cookies.pop("ts_csrf", None)
+    cid = uuid.uuid4()
+    # No csrf_token in the payload and no csrf cookie.
+    resp = client.post(f"/app/connections/{cid}/sync", data={})
+    assert resp.status_code == 403
+    services.connectors.sync.assert_not_awaited()
+
+
+def test_connections_connect_telegram_redirects() -> None:
+    client, services = _build()
+    services.connectors = MagicMock()
+    services.connectors.create_token_connection = AsyncMock(return_value=uuid.uuid4())
+    services.settings = SimpleNamespace(
+        gmail_client_id="cid", gmail_client_secret="sec", gmail_redirect_uri="https://app/cb",
+        slack_client_id="cid", slack_client_secret="sec", slack_redirect_uri="https://app/cb",
+    )
+    _login(client)
+    resp = _app_post(client, "/app/connections/connect", {
+        "kind": "telegram", "name": "tg-bot", "token": "123456:ABC-DEF",
+    })
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/connections?status=connected&kind=telegram"
+    services.connectors.create_token_connection.assert_awaited_once()
+    call = services.connectors.create_token_connection.await_args
+    assert call.kwargs["kind"] == "telegram"
+    assert call.kwargs["token"] == "123456:ABC-DEF"
+
+
+def test_connections_connect_rejects_non_telegram() -> None:
+    client, services = _build()
+    services.connectors = MagicMock()
+    services.connectors.create_token_connection = AsyncMock(return_value=uuid.uuid4())
+    services.settings = SimpleNamespace(
+        gmail_client_id="cid", gmail_client_secret="sec", gmail_redirect_uri="https://app/cb",
+        slack_client_id="cid", slack_client_secret="sec", slack_redirect_uri="https://app/cb",
+    )
+    _login(client)
+    resp = _app_post(client, "/app/connections/connect", {
+        "kind": "gmail", "name": "x", "token": "fake",
+    })
+    assert resp.status_code == 303
+    assert "reason=bad_params" in resp.headers["location"]
+    services.connectors.create_token_connection.assert_not_awaited()
+
+
+def test_connections_page_shows_telegram_form() -> None:
+    client, services = _build()
+    services.connectors = MagicMock()
+    services.connectors.list_connectors = AsyncMock(return_value=[])
+    services.settings = SimpleNamespace(
+        gmail_client_id="cid", gmail_client_secret="sec", gmail_redirect_uri="https://app/cb",
+        slack_client_id="cid", slack_client_secret="sec", slack_redirect_uri="https://app/cb",
+    )
+    _login(client)
+    resp = client.get("/app/connections")
+    assert resp.status_code == 200
+    assert "Connect Telegram" in resp.text
+    assert "@BotFather" in resp.text
+

@@ -56,9 +56,19 @@ def _curate_count_key(org_id: UUID | str, subject: str) -> str:
 # keyed by email, single-use, with a wrong-attempt cap.
 _OTP_PREFIX = "auth:otp:login:"
 
+# OAuth state nonces (CSRF protection for the Gmail/Slack OAuth redirect flow).
+# Short-TTL, single-use, keyed by the opaque state token. Stores a JSON blob of
+# {account_id, org_id, kind, redirect_uri} so the callback can recover context
+# without trusting the browser.
+_OAUTH_STATE_PREFIX = "auth:oauth:state:"
+
 
 def _otp_key(email: str) -> str:
     return f"{_OTP_PREFIX}{email.strip().lower()}"
+
+
+def _oauth_state_key(state: str) -> str:
+    return f"{_OAUTH_STATE_PREFIX}{state}"
 
 
 def _hash_otp(code: str) -> str:
@@ -194,6 +204,26 @@ class WorkingMemory:
         # Wrong code: burn an attempt but keep the existing TTL.
         await self.client.hincrby(key, "attempts", 1)
         return False
+
+    # --- OAuth state (CSRF nonce for Gmail/Slack redirect flow) -----------
+
+    async def set_oauth_state(self, state: str, payload: dict[str, Any], *, ttl: int = 600) -> None:
+        """Store a short-lived, single-use OAuth state nonce.
+
+        ``payload`` carries the context the callback needs to recover
+        (account_id, org_id, kind, redirect_uri). Single-use: popped on read.
+        """
+        await self.client.set(_oauth_state_key(state), json.dumps(payload), ex=ttl)
+
+    async def pop_oauth_state(self, state: str) -> dict[str, Any] | None:
+        """Consume and return the OAuth state payload, or None if missing/expired."""
+        raw = await self.client.getdel(_oauth_state_key(state))
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw)
+        except (TypeError, ValueError):
+            return None
 
     async def open_session(
         self,

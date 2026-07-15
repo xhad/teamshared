@@ -737,3 +737,134 @@ async def test_memory_state_get_and_set(
         state.facade.state_set.assert_awaited_once()
     finally:
         _current_agent.reset(token)
+
+
+# --------------------------------------------------------------------------- #
+# Gmail + Slack integration tools (integration_list/search/read/send).
+# --------------------------------------------------------------------------- #
+
+
+async def test_integration_list_delegates_to_connectors(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    state.services.connectors = MagicMock()
+    state.services.connectors.list_connectors = AsyncMock(
+        return_value=[
+            {"id": "c-1", "kind": "gmail", "name": "gmail-owner",
+             "status": "connected", "account_id": "acct-1"}
+        ]
+    )
+    data = await _call(mcp, "integration_list")
+    assert data["integrations"][0]["kind"] == "gmail"
+    state.services.connectors.list_connectors.assert_awaited_once()
+
+
+async def test_integration_search_delegates_to_connectors(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    cid = uuid.uuid4()
+    state.services.connectors = MagicMock()
+    state.services.connectors.list_connectors = AsyncMock(
+        return_value=[{"id": str(cid), "kind": "gmail", "status": "connected"}]
+    )
+    state.services.connectors.search = AsyncMock(
+        return_value=[{"id": "m1", "subject": "hello"}]
+    )
+    data = await _call(mcp, "integration_search", kind="gmail", query="hello", k=5)
+    assert data["kind"] == "gmail"
+    assert data["hits"][0]["subject"] == "hello"
+    state.services.connectors.search.assert_awaited_once()
+    # max_results passed through as k.
+    assert state.services.connectors.search.await_args.kwargs["max_results"] == 5
+
+
+async def test_integration_search_errors_when_not_connected(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    state.services.connectors = MagicMock()
+    state.services.connectors.list_connectors = AsyncMock(return_value=[])
+    with pytest.raises(Exception, match="no connected 'slack' integration"):
+        await _call(mcp, "integration_search", kind="slack", query="x")
+
+
+async def test_integration_send_gmail_delegates_to_connectors(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    cid = uuid.uuid4()
+    state.services.connectors = MagicMock()
+    state.services.connectors.list_connectors = AsyncMock(
+        return_value=[{"id": str(cid), "kind": "gmail", "status": "connected"}]
+    )
+    state.services.connectors.send = AsyncMock(
+        return_value={"sent": True, "id": "msg-1"}
+    )
+    data = await _call(
+        mcp, "integration_send", kind="gmail", to="x@y.test",
+        subject="hi", body="hello",
+    )
+    assert data["sent"] is True
+    state.services.connectors.send.assert_awaited_once()
+    assert state.services.connectors.send.await_args.kwargs["to"] == "x@y.test"
+
+
+async def test_integration_send_slack_delegates_to_connectors(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    cid = uuid.uuid4()
+    state.services.connectors = MagicMock()
+    state.services.connectors.list_connectors = AsyncMock(
+        return_value=[{"id": str(cid), "kind": "slack", "status": "connected"}]
+    )
+    state.services.connectors.send = AsyncMock(
+        return_value={"sent": True, "ts": "1700000000.1"}
+    )
+    data = await _call(
+        mcp, "integration_send", kind="slack", body="ping",
+        channel="C123", thread_ts="1699999999.0",
+    )
+    assert data["sent"] is True
+    assert state.services.connectors.send.await_args.kwargs["channel"] == "C123"
+    assert state.services.connectors.send.await_args.kwargs["thread_ts"] == "1699999999.0"
+
+
+async def test_integration_send_telegram_delegates_to_connectors(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    cid = uuid.uuid4()
+    state.services.connectors = MagicMock()
+    state.services.connectors.list_connectors = AsyncMock(
+        return_value=[{"id": str(cid), "kind": "telegram", "status": "connected"}]
+    )
+    state.services.connectors.send = AsyncMock(
+        return_value={"sent": True, "message_id": 999}
+    )
+    data = await _call(
+        mcp, "integration_send", kind="telegram", body="hello", to="-100123",
+    )
+    assert data["sent"] is True
+    state.services.connectors.send.assert_awaited_once()
+    assert state.services.connectors.send.await_args.kwargs["to"] == "-100123"
+
+
+async def test_integration_search_telegram_delegates_to_connectors(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    cid = uuid.uuid4()
+    state.services.connectors = MagicMock()
+    state.services.connectors.list_connectors = AsyncMock(
+        return_value=[{"id": str(cid), "kind": "telegram", "status": "connected"}]
+    )
+    state.services.connectors.search = AsyncMock(
+        return_value=[{"id": "telegram:1", "text": "hello", "chat_id": -100123}]
+    )
+    data = await _call(mcp, "integration_search", kind="telegram", query="hello", k=5)
+    assert data["kind"] == "telegram"
+    assert data["hits"][0]["chat_id"] == -100123
+    state.services.connectors.search.assert_awaited_once()

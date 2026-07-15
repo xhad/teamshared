@@ -139,6 +139,7 @@ def make_services(settings: Settings) -> ProductionServices:
                 ontology=ontology,
             ),
             audit=audit,
+            settings=settings,
         ),
         admin=AdminService(
             tenant_db, roles, audit, export_max_items=settings.export_max_items

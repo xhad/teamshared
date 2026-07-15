@@ -130,6 +130,7 @@ NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
             ("/app/people", "People", "people"),
             ("/app/orgs", "Organizations", "orgs"),
             ("/app/keys", "API Keys", "keys"),
+            ("/app/connections", "Connections", "connections"),
             ("/app/ontology", "Ontology", "ontology"),
             ("/app/audit", "Audit", "audit"),
             ("/app/settings", "Settings", "settings"),
@@ -2037,6 +2038,96 @@ def register_console_routes(
     # --- consent (removed 2026-06-19) — capture is now gated only by
     #     settings.capture_enabled; no per-agent consent grants. ---------
 
+    async def connections_page(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "connections")
+        connections: list[dict[str, Any]] = []
+        note = ""
+        try:
+            rctx = _ctx(principal)
+            connections = await services.connectors.list_connectors(rctx)
+        except Exception as exc:
+            log.warning("connections_page_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        flash = request.query_params.get("status") or request.query_params.get("flash") or ""
+        kind = request.query_params.get("kind") or ""
+        reason = request.query_params.get("reason") or ""
+        ctx.update({
+            "connections": connections,
+            "note": note,
+            "flash": flash,
+            "kind": kind,
+            "reason": reason,
+            "gmail_configured": bool(
+                services.settings.gmail_client_id
+                and services.settings.gmail_client_secret
+                and services.settings.gmail_redirect_uri
+            ),
+            "slack_configured": bool(
+                services.settings.slack_client_id
+                and services.settings.slack_client_secret
+                and services.settings.slack_redirect_uri
+            ),
+            "telegram_configured": True,
+        })
+        return _TEMPLATES.TemplateResponse(request, "connections.html", ctx)
+
+    async def connections_connect(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        kind = str(form.get("kind") or "").strip().lower()
+        token = str(form.get("token") or "").strip()
+        name = str(form.get("name") or "").strip() or f"{kind}-connection"
+        if kind != "telegram" or not token:
+            return RedirectResponse("/app/connections?status=error&reason=bad_params", status_code=303)
+        try:
+            rctx = _ctx(principal)
+            await services.connectors.create_token_connection(
+                rctx, kind=kind, name=name, config={}, token=token,
+            )
+        except Exception as exc:
+            log.warning("connections_connect_failed", error=str(exc))
+            return RedirectResponse("/app/connections?status=error&reason=store_failed", status_code=303)
+        return RedirectResponse(f"/app/connections?status=connected&kind={kind}", status_code=303)
+
+    async def connections_sync(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        connector_id = str(request.path_params["connector_id"])
+        try:
+            rctx = _ctx(principal)
+            await services.connectors.sync(rctx, UUID(connector_id))
+        except Exception as exc:
+            log.warning("connections_sync_failed", error=str(exc))
+            return RedirectResponse("/app/connections?status=error", status_code=303)
+        return RedirectResponse("/app/connections?status=synced", status_code=303)
+
+    async def connections_disconnect(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        connector_id = str(request.path_params["connector_id"])
+        try:
+            rctx = _ctx(principal)
+            await services.connectors.delete(rctx, UUID(connector_id))
+        except Exception as exc:
+            log.warning("connections_disconnect_failed", error=str(exc))
+            return RedirectResponse("/app/connections?status=error", status_code=303)
+        return RedirectResponse("/app/connections?status=disconnected", status_code=303)
+
     def _placeholder(active: str, title: str) -> Any:
         async def handler(request: Request) -> Response:
             principal = _session(request)
@@ -2101,6 +2192,10 @@ def register_console_routes(
         Route("/app/settings", settings_page, methods=["GET"]),
         Route("/app/settings/export", settings_export, methods=["GET"]),
         Route("/app/settings/purge", settings_purge, methods=["POST"]),
+        Route("/app/connections", connections_page, methods=["GET"]),
+        Route("/app/connections/connect", connections_connect, methods=["POST"]),
+        Route("/app/connections/{connector_id}/sync", connections_sync, methods=["POST"]),
+        Route("/app/connections/{connector_id}/disconnect", connections_disconnect, methods=["POST"]),
     ]
     for path, (active, title) in _PLACEHOLDERS.items():
         routes.append(Route(path, _placeholder(active, title), methods=["GET"]))

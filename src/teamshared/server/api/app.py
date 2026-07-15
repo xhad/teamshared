@@ -24,6 +24,7 @@ from teamshared.identity.rbac import Permissions
 from teamshared.memory.request_context import RequestContext
 from teamshared.memory.types import TimeRange
 from teamshared.server.api.errors import ApiError, error_response, map_exception
+from teamshared.server.api.integrations import integration_routes
 from teamshared.server.api.middleware import (
     IdempotencyMiddleware,
     PrincipalAuthMiddleware,
@@ -32,7 +33,7 @@ from teamshared.server.api.middleware import (
 from teamshared.server.rate_limit import enforce_admin_export, enforce_admin_purge
 from teamshared.server.services import ProductionServices
 
-_PUBLIC = frozenset({"/v1/healthz", "/v1/orgs"})
+_PUBLIC = frozenset({"/v1/healthz", "/v1/orgs", "/v1/integrations/oauth/start", "/v1/integrations/oauth/callback"})
 
 
 def _ctx(request: Request, services: ProductionServices) -> RequestContext:
@@ -394,6 +395,7 @@ def build_api_app(
         Route("/v1/admin/export", export_org, methods=["GET"]),
         Route("/v1/admin/users/{user_id}/memory", purge_user, methods=["DELETE"]),
     ]
+    routes.extend(integration_routes(services))
 
     middleware = [
         Middleware(

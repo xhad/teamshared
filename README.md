@@ -218,6 +218,35 @@ See **[Context compression](docs/context-compression.md)** for how teamshared re
 | `memory_state_get`          | Read token+repo scoped JSON state (client bookkeeping)         |
 | `memory_state_set`          | Write token+repo scoped JSON state                           |
 | `memory_forget`             | Soft-delete a semantic/episodic memory                       |
+| `integration_list`          | List the org's connected Gmail/Slack/Telegram integrations   |
+| `integration_search`        | Live-search Gmail/Slack/Telegram (raw hits, not memory recall) |
+| `integration_read`          | Fetch one message/thread (also ingests it for future recall) |
+| `integration_send`          | Send an email, Slack, or Telegram message (audited + episodic) |
+
+## Integrations
+
+teamshared can connect a user's Gmail, Slack, and Telegram accounts so agents
+can search, read, and send through teamshared. Connections are **per-human**
+(account-scoped) but ingested messages land in the **org shared brain**.
+
+- **Connect**: sign into the console at `/app/connections`.
+  - **Gmail / Slack** use OAuth — click *Connect Gmail* / *Connect Slack*; the
+    OAuth redirect stores encrypted tokens (AES-GCM via `TokenVault`); access
+    tokens are auto-refreshed.
+  - **Telegram** uses a bot token from `@BotFather` — paste it into the
+    *Connect Telegram* form. Bot tokens are static (no refresh cycle) and stored
+    encrypted like OAuth tokens.
+- **Ingestion**: the `integrations-sync` worker polls connected accounts on a
+  configurable interval (`TEAMSHARED_INTEGRATIONS_SYNC_INTERVAL_SECONDS`,
+  default 300s) and imports new messages as `source='connector'` semantic memory.
+- **Bidirectional**: `integration_send` posts/emails/messages using the personal
+  credential; every outgoing action is audited and logged as an episodic event.
+- **Configuration**: set `TEAMSHARED_GMAIL_CLIENT_ID` / `_SECRET` /
+  `_REDIRECT_URI` and `TEAMSHARED_SLACK_CLIENT_ID` / `_SECRET` /
+  `_REDIRECT_URI` (see `.env.example`). The redirect URI must match what is
+  registered with Google/Slack (default: `https://<host>/v1/integrations/oauth/callback`).
+  Telegram requires no server-side OAuth config — each connection supplies its own
+  bot token.
 
 ## Team console (web UI)
 

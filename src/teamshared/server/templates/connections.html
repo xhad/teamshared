@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}Connections{% endblock %}
+{% block content %}
+  <h1>Connections</h1>
+  <p class="sub">Connect your Gmail, Slack, and Telegram accounts so agents can search, read, and send through teamshared. Connections are per-person; ingested messages land in the org shared brain.</p>
+
+  {% if flash == 'connected' %}<div class="flash-ok">{{ kind | default('Account') }} connected.</div>{% endif %}
+  {% if flash == 'disconnected' %}<div class="flash-ok">Connection removed.</div>{% endif %}
+  {% if flash == 'synced' %}<div class="flash-ok">Sync started.</div>{% endif %}
+  {% if flash == 'error' %}<div class="unavailable">Something went wrong ({{ reason | default('try again') }}).</div>{% endif %}
+  {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+  <div class="panel" style="margin-top:1rem">
+    <h2>Connect a new account</h2>
+    <p class="sub">Gmail and Slack use OAuth (you'll be redirected to the provider). Telegram uses a bot token from <code>@BotFather</code>. Tokens are encrypted at rest and auto-refreshed (OAuth kinds).</p>
+    <div class="inline-form" style="gap:0.75rem">
+      <a class="btn" href="/v1/integrations/oauth/start?kind=gmail">Connect Gmail</a>
+      <a class="btn" href="/v1/integrations/oauth/start?kind=slack">Connect Slack</a>
+    </div>
+    {% if not gmail_configured %}
+      <p class="muted" style="margin-top:0.5rem">Gmail OAuth is not configured on this server (set <code>TEAMSHARED_GMAIL_*</code>).</p>
+    {% endif %}
+    {% if not slack_configured %}
+      <p class="muted" style="margin-top:0.5rem">Slack OAuth is not configured on this server (set <code>TEAMSHARED_SLACK_*</code>).</p>
+    {% endif %}
+
+    <form method="post" action="/app/connections/connect" style="margin-top:1rem; max-width:32rem">
+      {{ cm.csrf_field() }}
+      <input type="hidden" name="kind" value="telegram">
+      <div class="form-row">
+        <label for="tg-name">Telegram connection name</label>
+        <input id="tg-name" name="name" type="text" placeholder="telegram-bot" value="telegram-bot">
+      </div>
+      <div class="form-row">
+        <label for="tg-token">Bot token (from @BotFather)</label>
+        <input id="tg-token" name="token" type="password" placeholder="123456789:ABC-DEF..." required>
+      </div>
+      <button type="submit" class="btn">Connect Telegram</button>
+    </form>
+  </div>
+
+  <div class="panel" style="margin-top:1rem">
+    <h2>Connected accounts</h2>
+    {% if connections %}
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>Name</th><th>Owner</th><th>Status</th>
+        <th>Created</th><th></th></tr></thead>
+      <tbody>
+        {% for c in connections %}
+        <tr>
+          <td><span class="status-pill {{ c.kind }}">{{ c.kind }}</span></td>
+          <td>{{ c.name }}</td>
+          <td>{{ c.account_id or '—' }}</td>
+          <td><span class="status-pill {{ 'active' if c.status == 'connected' else 'revoked' }}">{{ c.status }}</span></td>
+          <td>{{ c.created_at }}</td>
+          <td class="actions">
+            <form method="post" action="/app/connections/{{ c.id }}/sync" style="display:inline">
+              {{ cm.csrf_field() }}
+              <button type="submit">Sync</button>
+            </form>
+            <form method="post" action="/app/connections/{{ c.id }}/disconnect" style="display:inline">
+              {{ cm.csrf_field() }}
+              <button type="submit" class="danger">Disconnect</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}<p class="muted">No connections yet. Connect Gmail, Slack, or Telegram above.</p>{% endif %}
+  </div>
+{% endblock %}

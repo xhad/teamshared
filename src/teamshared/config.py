@@ -206,6 +206,56 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Gmail / Google OAuth integration ---------------------------------
+    gmail_client_id: str | None = Field(
+        default=None,
+        description="Google OAuth client id for the Gmail integration.",
+    )
+    gmail_client_secret: str | None = Field(
+        default=None,
+        description="Google OAuth client secret for the Gmail integration.",
+    )
+    gmail_redirect_uri: str | None = Field(
+        default=None,
+        description=(
+            "OAuth redirect URI registered with Google for the Gmail "
+            "integration, e.g. https://teamshared.com/v1/integrations/oauth/callback."
+        ),
+    )
+
+    # --- Slack OAuth integration -----------------------------------------
+    slack_client_id: str | None = Field(
+        default=None,
+        description="Slack OAuth client id for the Slack integration.",
+    )
+    slack_client_secret: str | None = Field(
+        default=None,
+        description="Slack OAuth client secret for the Slack integration.",
+    )
+    slack_redirect_uri: str | None = Field(
+        default=None,
+        description=(
+            "OAuth redirect URI registered with Slack for the Slack "
+            "integration, e.g. https://teamshared.com/v1/integrations/oauth/callback."
+        ),
+    )
+    slack_signing_secret: str | None = Field(
+        default=None,
+        description=(
+            "Slack signing secret for verifying Slack Events API webhooks "
+            "(future work; not required for v1 poll-based ingestion)."
+        ),
+    )
+
+    # --- Integrations sync worker ----------------------------------------
+    integrations_sync_interval_seconds: int = Field(
+        default=300,
+        description=(
+            "How often the integrations-sync worker polls each connected "
+            "Gmail/Slack/Telegram connector for new messages."
+        ),
+    )
+
     pg_host: str = "localhost"
     pg_port: int = 5432
     pg_user: str = "teamshared"

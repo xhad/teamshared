@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Annotated, Any, cast
+from uuid import UUID
 
 from pydantic import Field
 
@@ -34,6 +35,7 @@ from teamshared.compress.factory import ccr_store_from_working
 from teamshared.compress.tool_output import normalize_tool_output
 from teamshared.identity.principal import Principal
 from teamshared.logging import get_logger
+from teamshared.memory.request_context import RequestContext
 from teamshared.memory.types import (
     DEFAULT_RECALL_SCOPES,
     AssigneeType,
@@ -79,6 +81,28 @@ def _caller_agent() -> str | None:
         return ident.agent
     principal = current_principal()
     return principal.display if principal else None
+
+
+def _integration_ctx(principal: Principal) -> RequestContext:
+    """Build a RequestContext for an integration tool call."""
+    from teamshared.server.state import get_state as _get_state
+
+    services = _get_state().services
+    return RequestContext(
+        principal=principal, db=services.tenant_db, authorizer=services.authorizer(),
+    )
+
+
+async def _resolve_integration(state: Any, principal: Principal, kind: str) -> UUID:
+    """Find the (first) connected connector of ``kind`` for the caller's org."""
+    ctx = _integration_ctx(principal)
+    items = await state.services.connectors.list_connectors(ctx)
+    matches = [i for i in items if i.get("kind") == kind and i.get("status") == "connected"]
+    if not matches:
+        raise ValueError(
+            f"no connected {kind!r} integration for this org; connect one at /app/connections"
+        )
+    return UUID(matches[0]["id"])
 
 
 def register_tools(mcp: Any) -> None:
@@ -2005,6 +2029,140 @@ def register_tools(mcp: Any) -> None:
         principal = await _principal()
         return await state.facade.state_set(
             principal, state_id=ident.state_id, repo=repo, key=key, value=value
+        )
+
+    # --- Gmail + Slack integrations ---------------------------------------
+
+    @mcp.tool()
+    async def integration_list() -> dict[str, Any]:
+        """List the caller's org's connected Gmail/Slack/Telegram integrations.
+
+        Returns each connection's id, kind, name, status, and owning account.
+        Use this to discover which integration a ``integration_search`` /
+        ``integration_send`` call should target.
+        """
+        state = get_state()
+        principal = await _principal()
+        ctx = _integration_ctx(principal)
+        items = await state.services.connectors.list_connectors(ctx)
+        return {"integrations": items}
+
+    @mcp.tool()
+    async def integration_search(
+        kind: Annotated[str, Field(description="Integration kind: 'gmail', 'slack', or 'telegram'")],
+        query: Annotated[str, Field(description="Search query (Gmail search syntax, Slack/Telegram text filter)")],
+        k: Annotated[int, Field(ge=1, le=50, description="Max results")] = 10,
+    ) -> dict[str, Any]:
+        """Live-search the connected Gmail/Slack/Telegram account (not memory recall).
+
+        Returns raw hits from the provider (message id, snippet, from/subject for
+        Gmail; text + channel for Slack; text + chat_id for Telegram). Reads do
+        not ingest; use ``integration_read`` to fetch + persist a message for
+        future recall.
+        """
+        state = get_state()
+        principal = await _principal()
+        ctx = _integration_ctx(principal)
+        connector_id = await _resolve_integration(state, principal, kind)
+        hits = await state.services.connectors.search(
+            ctx, connector_id, query=query, max_results=k,
+        )
+        return {"kind": kind, "query": query, "hits": hits}
+
+    @mcp.tool()
+    async def integration_read(
+        kind: Annotated[str, Field(description="Integration kind: 'gmail', 'slack', or 'telegram'")],
+        message_id: Annotated[
+            str,
+            Field(description="Message id (Gmail), 'channel:ts' (Slack), or 'chat_id:message_id' (Telegram) to fetch"),
+        ],
+    ) -> dict[str, Any]:
+        """Fetch one message/thread from the connected Gmail/Slack/Telegram account.
+
+        Also ingests the message body as a semantic memory (source='connector')
+        so it is recallable from the shared brain in future turns.
+        """
+        state = get_state()
+        principal = await _principal()
+        ctx = _integration_ctx(principal)
+        connector_id = await _resolve_integration(state, principal, kind)
+        bundle = await state.services.connectors.refresh_if_needed(ctx, connector_id)
+        if bundle is None:
+            raise ValueError("integration has no stored credential")
+        conn = await state.services.connectors.get_connector(ctx, connector_id)
+        if conn is None:
+            raise ValueError("connector not found")
+        from teamshared.connectors.adapters import GmailConnector, SlackConnector, TelegramConnector
+        from teamshared.connectors.registry import build_connector
+
+        adapter = build_connector(conn["kind"], conn["config"])
+        if isinstance(adapter, GmailConnector):
+            msg = await adapter.get_message(bundle.access_token, message_id)
+            content = (
+                f"From: {msg.get('from','')}\nSubject: {msg.get('subject','')}\n\n{msg.get('body','')}"
+            )
+            await state.services.ingestion().ingest(
+                ctx, content, kind="note", scope="org", visibility="shared",
+                subject=msg.get("subject") or "gmail message",
+                source="connector",
+                source_ref={"connector_id": str(connector_id), "external_id": message_id},
+            )
+            return {"kind": "gmail", "message": msg}
+        if isinstance(adapter, SlackConnector):
+            channel, ts = message_id.split(":", 1) if ":" in message_id else (message_id, "")
+            replies = await adapter.list_thread_replies(bundle.access_token, channel, ts) if ts else []
+            return {"kind": "slack", "channel": channel, "thread": replies}
+        if isinstance(adapter, TelegramConnector):
+            msg = await adapter.get_message(bundle.access_token, message_id)
+            content = msg.get("text", "")
+            if content:
+                await state.services.ingestion().ingest(
+                    ctx, content, kind="note", scope="org", visibility="shared",
+                    subject=f"telegram message {message_id}",
+                    source="connector",
+                    source_ref={"connector_id": str(connector_id), "external_id": message_id},
+                )
+            return {"kind": "telegram", "message": msg}
+        raise ValueError(f"read not supported for kind {kind!r}")
+
+    @mcp.tool()
+    async def integration_send(
+        kind: Annotated[str, Field(description="Integration kind: 'gmail', 'slack', or 'telegram'")],
+        body: Annotated[str, Field(description="Message body / text to send")],
+        to: Annotated[
+            str | None,
+            Field(description="Recipient email (gmail) or Telegram chat_id (telegram)"),
+        ] = None,
+        subject: Annotated[
+            str | None,
+            Field(description="Email subject (gmail only)"),
+        ] = None,
+        channel: Annotated[
+            str | None,
+            Field(description="Slack channel name/id (slack) or Telegram chat_id (telegram); defaults to connector config"),
+        ] = None,
+        thread_id: Annotated[
+            str | None,
+            Field(description="Gmail threadId to reply in (gmail) or Telegram forum topic id (telegram)"),
+        ] = None,
+        thread_ts: Annotated[
+            str | None,
+            Field(description="Slack parent message ts to reply in thread (slack only)"),
+        ] = None,
+    ) -> dict[str, Any]:
+        """Send an email (gmail), post a Slack message, or send a Telegram message via the connected account.
+
+        Bidirectional: the outgoing action is audited and logged as an episodic
+        timeline event ("sent email to X" / "posted in #channel" / "sent Telegram
+        message to chat Y").
+        """
+        state = get_state()
+        principal = await _principal()
+        ctx = _integration_ctx(principal)
+        connector_id = await _resolve_integration(state, principal, kind)
+        return await state.services.connectors.send(
+            ctx, connector_id, kind=kind, to=to, subject=subject, body=body,
+            channel=channel, thread_id=thread_id, thread_ts=thread_ts,
         )
 
 

@@ -208,6 +208,42 @@ services:
       retries: 3
       start_period: 20s
 
+  integrations-sync:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      TEAMSHARED_PG_HOST: postgres
+      TEAMSHARED_PG_PORT: 5432
+      TEAMSHARED_PG_USER: ${TEAMSHARED_PG_USER:-teamshared}
+      TEAMSHARED_PG_PASSWORD: ${TEAMSHARED_PG_PASSWORD:-teamshared}
+      TEAMSHARED_PG_DB: ${TEAMSHARED_PG_DB:-teamshared}
+      TEAMSHARED_PG_APP_USER: ${TEAMSHARED_PG_APP_USER:-}
+      TEAMSHARED_PG_APP_PASSWORD: ${TEAMSHARED_PG_APP_PASSWORD:-}
+      TEAMSHARED_REDIS_URL: redis://redis:6379/0
+      TEAMSHARED_CONNECTOR_ENCRYPTION_KEY: ${TEAMSHARED_CONNECTOR_ENCRYPTION_KEY:-}
+      TEAMSHARED_GMAIL_CLIENT_ID: ${TEAMSHARED_GMAIL_CLIENT_ID:-}
+      TEAMSHARED_GMAIL_CLIENT_SECRET: ${TEAMSHARED_GMAIL_CLIENT_SECRET:-}
+      TEAMSHARED_SLACK_CLIENT_ID: ${TEAMSHARED_SLACK_CLIENT_ID:-}
+      TEAMSHARED_SLACK_CLIENT_SECRET: ${TEAMSHARED_SLACK_CLIENT_SECRET:-}
+      TEAMSHARED_INTEGRATIONS_SYNC_INTERVAL_SECONDS: ${TEAMSHARED_INTEGRATIONS_SYNC_INTERVAL_SECONDS:-300}
+    volumes:
+      - teamshareddata:/data
+    command: ["teamshared", "integrations-sync"]
+    healthcheck:
+      test: ["CMD", "teamshared", "worker-health", "integrations-sync"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
   # Relationship graph (always on). Use a password >= 8 chars; Neo4j 5 rejects
   # the factory default "neo4j".
   neo4j:

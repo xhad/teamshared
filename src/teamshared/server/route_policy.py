@@ -22,6 +22,7 @@ class RouteClass(StrEnum):
     CONSOLE_SESSION = "console_session"
     API_V1 = "api_v1"
     MCP_BEARER = "mcp_bearer"
+    OAUTH_CALLBACK = "oauth_callback"
 
     def skips_outer_bearer(self) -> bool:
         """Whether :class:`~teamshared.auth.BearerAuthMiddleware` should not gate this class."""
@@ -49,6 +50,8 @@ _EXACT: dict[str, RouteClass] = {
     "/compress/retrieve": RouteClass.MCP_BEARER,
     "/llm/prepare": RouteClass.MCP_BEARER,
     "/tools/normalize": RouteClass.MCP_BEARER,
+    "/v1/integrations/oauth/start": RouteClass.OAUTH_CALLBACK,
+    "/v1/integrations/oauth/callback": RouteClass.OAUTH_CALLBACK,
 }
 
 # Longest-prefix wins among these (order matters for overlaps).
