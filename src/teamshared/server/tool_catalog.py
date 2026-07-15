@@ -16,7 +16,7 @@ _CATALOG: list[dict[str, Any]] = [
      "summary": "Liveness + dependency probe", "example": {}},
     {"name": "version", "tier": "core", "group": "ops",
      "summary": "Server + memory-rule version check",
-     "example": {"installed_rule_version": "1.9.0"}},
+     "example": {"installed_rule_version": "1.10.0"}},
     {"name": "context_compress", "tier": "core", "group": "ops",
      "summary": "Shrink tool outputs/logs before sending a prompt to an LLM",
      "example": {"messages": [{"role": "user", "content": "summarize"}, {"role": "tool", "content": "[...]"}]}},
@@ -181,6 +181,19 @@ _CATALOG: list[dict[str, Any]] = [
      "summary": "Mark done/cancelled", "example": {"work_id": "<uuid>", "work_status": "done"}},
     {"name": "work_comment_add", "tier": "core", "group": "work",
      "summary": "Add progress comment", "example": {"work_id": "<uuid>", "body": "PR opened"}},
+    # --- integrations (Gmail / Slack) ---
+    {"name": "integration_list", "tier": "core", "group": "integrations",
+     "summary": "List connected Gmail/Slack accounts",
+     "example": {}},
+    {"name": "integration_search", "tier": "core", "group": "integrations",
+     "summary": "Live-search a connected inbox/channel (not memory recall)",
+     "example": {"kind": "slack", "query": "deploy", "k": 10}},
+    {"name": "integration_read", "tier": "core", "group": "integrations",
+     "summary": "Fetch one message/thread; may ingest for future recall",
+     "example": {"kind": "gmail", "message_id": "<id>"}},
+    {"name": "integration_send", "tier": "core", "group": "integrations",
+     "summary": "Send email / Slack (user-requested only)",
+     "example": {"kind": "slack", "channel": "#general", "body": "shipped v0.5"}},
 ]
 
 _TOOL_RECIPE_HELP = {
@@ -202,9 +215,10 @@ def list_tools(
 ) -> dict[str, Any]:
     """Return grouped tool metadata for MCP discovery."""
     groups = {"memory", "skills", "playbooks", "graph", "strategic", "work",
-              "ops", "projects"}
+              "ops", "projects", "integrations"}
     if scope == "memory":
-        groups = {"memory", "skills", "playbooks", "graph", "strategic", "ops"}
+        groups = {"memory", "skills", "playbooks", "graph", "strategic", "ops",
+                  "integrations"}
     elif scope == "work":
         groups = {"work", "projects"}
 
@@ -220,8 +234,8 @@ def list_tools(
         "tool_recipe_shapes": _TOOL_RECIPE_HELP,
         "groups": by_group,
         "tiers": {
-            "core": "Every session: recall, remember, sessions, skill/playbook read+write, work",
+            "core": "Every session: recall, remember, sessions, skill/playbook, work, integrations",
             "extended": "Graph, strategic, forget, state, debugging",
-            "human": "Human-gated console actions",
+            "human": "Human-gated console actions (e.g. OAuth connect at /app/connections)",
         },
     }

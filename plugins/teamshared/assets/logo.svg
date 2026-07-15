@@ -1,6 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="teamshared">
-  <rect width="128" height="128" rx="28" fill="#18181b"/>
-  <circle cx="64" cy="52" r="22" fill="none" stroke="#fafafa" stroke-width="6"/>
-  <circle cx="64" cy="52" r="8" fill="#fafafa"/>
-  <path d="M32 96c8-16 24-24 32-24s24 8 32 24" fill="none" stroke="#a1a1aa" stroke-width="6" stroke-linecap="round"/>
+  <rect width="128" height="128" rx="28" fill="#1C1C1E"/>
+
+  <!-- Heads at triangle vertices: Top=Green(64,24) BR=Purple(99,84.5) BL=Blue(29,84.5) -->
+  <!-- Borromean z-order: green-tail, purple(head+tail), blue(head+tail), green-head -->
+
+  <line x1="64" y1="24" x2="99" y2="84.5" stroke="#7CC242" stroke-width="11" stroke-linecap="round"/>
+
+  <line x1="99" y1="84.5" x2="29" y2="84.5" stroke="#9B59D9" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="99" cy="84.5" r="13" fill="#9B59D9"/>
+
+  <line x1="29" y1="84.5" x2="64" y2="24" stroke="#4A9EF5" stroke-width="11" stroke-linecap="round"/>
+  <circle cx="29" cy="84.5" r="13" fill="#4A9EF5"/>
+
+  <circle cx="64" cy="24" r="13" fill="#7CC242"/>
+
+  <circle cx="64" cy="24" r="5" fill="#1C1C1E"/>
+  <circle cx="99" cy="84.5" r="5" fill="#1C1C1E"/>
+  <circle cx="29" cy="84.5" r="5" fill="#1C1C1E"/>
 </svg>

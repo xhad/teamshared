@@ -2035,7 +2035,7 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def integration_list() -> dict[str, Any]:
-        """List the caller's org's connected Gmail/Slack/Telegram integrations.
+        """List the caller's org's connected Gmail/Slack integrations.
 
         Returns each connection's id, kind, name, status, and owning account.
         Use this to discover which integration a ``integration_search`` /
@@ -2049,16 +2049,15 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def integration_search(
-        kind: Annotated[str, Field(description="Integration kind: 'gmail', 'slack', or 'telegram'")],
-        query: Annotated[str, Field(description="Search query (Gmail search syntax, Slack/Telegram text filter)")],
+        kind: Annotated[str, Field(description="Integration kind: 'gmail' or 'slack'")],
+        query: Annotated[str, Field(description="Search query (Gmail search syntax, Slack text filter)")],
         k: Annotated[int, Field(ge=1, le=50, description="Max results")] = 10,
     ) -> dict[str, Any]:
-        """Live-search the connected Gmail/Slack/Telegram account (not memory recall).
+        """Live-search the connected Gmail/Slack account (not memory recall).
 
         Returns raw hits from the provider (message id, snippet, from/subject for
-        Gmail; text + channel for Slack; text + chat_id for Telegram). Reads do
-        not ingest; use ``integration_read`` to fetch + persist a message for
-        future recall.
+        Gmail; text + channel for Slack). Reads do not ingest; use
+        ``integration_read`` to fetch + persist a message for future recall.
         """
         state = get_state()
         principal = await _principal()
@@ -2071,13 +2070,13 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def integration_read(
-        kind: Annotated[str, Field(description="Integration kind: 'gmail', 'slack', or 'telegram'")],
+        kind: Annotated[str, Field(description="Integration kind: 'gmail' or 'slack'")],
         message_id: Annotated[
             str,
-            Field(description="Message id (Gmail), 'channel:ts' (Slack), or 'chat_id:message_id' (Telegram) to fetch"),
+            Field(description="Message id (Gmail) or 'channel:ts' (Slack) to fetch"),
         ],
     ) -> dict[str, Any]:
-        """Fetch one message/thread from the connected Gmail/Slack/Telegram account.
+        """Fetch one message/thread from the connected Gmail/Slack account.
 
         Also ingests the message body as a semantic memory (source='connector')
         so it is recallable from the shared brain in future turns.
@@ -2092,7 +2091,7 @@ def register_tools(mcp: Any) -> None:
         conn = await state.services.connectors.get_connector(ctx, connector_id)
         if conn is None:
             raise ValueError("connector not found")
-        from teamshared.connectors.adapters import GmailConnector, SlackConnector, TelegramConnector
+        from teamshared.connectors.adapters import GmailConnector, SlackConnector
         from teamshared.connectors.registry import build_connector
 
         adapter = build_connector(conn["kind"], conn["config"])
@@ -2112,26 +2111,15 @@ def register_tools(mcp: Any) -> None:
             channel, ts = message_id.split(":", 1) if ":" in message_id else (message_id, "")
             replies = await adapter.list_thread_replies(bundle.access_token, channel, ts) if ts else []
             return {"kind": "slack", "channel": channel, "thread": replies}
-        if isinstance(adapter, TelegramConnector):
-            msg = await adapter.get_message(bundle.access_token, message_id)
-            content = msg.get("text", "")
-            if content:
-                await state.services.ingestion().ingest(
-                    ctx, content, kind="note", scope="org", visibility="shared",
-                    subject=f"telegram message {message_id}",
-                    source="connector",
-                    source_ref={"connector_id": str(connector_id), "external_id": message_id},
-                )
-            return {"kind": "telegram", "message": msg}
         raise ValueError(f"read not supported for kind {kind!r}")
 
     @mcp.tool()
     async def integration_send(
-        kind: Annotated[str, Field(description="Integration kind: 'gmail', 'slack', or 'telegram'")],
+        kind: Annotated[str, Field(description="Integration kind: 'gmail' or 'slack'")],
         body: Annotated[str, Field(description="Message body / text to send")],
         to: Annotated[
             str | None,
-            Field(description="Recipient email (gmail) or Telegram chat_id (telegram)"),
+            Field(description="Recipient email (gmail only)"),
         ] = None,
         subject: Annotated[
             str | None,
@@ -2139,22 +2127,21 @@ def register_tools(mcp: Any) -> None:
         ] = None,
         channel: Annotated[
             str | None,
-            Field(description="Slack channel name/id (slack) or Telegram chat_id (telegram); defaults to connector config"),
+            Field(description="Slack channel name/id (slack only); defaults to connector config"),
         ] = None,
         thread_id: Annotated[
             str | None,
-            Field(description="Gmail threadId to reply in (gmail) or Telegram forum topic id (telegram)"),
+            Field(description="Gmail threadId to reply in (gmail only)"),
         ] = None,
         thread_ts: Annotated[
             str | None,
             Field(description="Slack parent message ts to reply in thread (slack only)"),
         ] = None,
     ) -> dict[str, Any]:
-        """Send an email (gmail), post a Slack message, or send a Telegram message via the connected account.
+        """Send an email (gmail) or post a Slack message via the connected account.
 
         Bidirectional: the outgoing action is audited and logged as an episodic
-        timeline event ("sent email to X" / "posted in #channel" / "sent Telegram
-        message to chat Y").
+        timeline event ("sent email to X" / "posted in #channel").
         """
         state = get_state()
         principal = await _principal()

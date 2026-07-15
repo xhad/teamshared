@@ -12,7 +12,6 @@ from teamshared.connectors.adapters import (
     MCPConnector,
     NotionConnector,
     SlackConnector,
-    TelegramConnector,
 )
 from teamshared.connectors.base import Connector
 
@@ -24,7 +23,6 @@ _REGISTRY: dict[str, type[Connector]] = {
     LinearConnector.kind: LinearConnector,
     MCPConnector.kind: MCPConnector,
     GmailConnector.kind: GmailConnector,
-    TelegramConnector.kind: TelegramConnector,
 }
 
 CONNECTOR_KINDS = tuple(_REGISTRY)

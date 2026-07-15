@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.9.0
+version: 1.10.0
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.9.0 -->
+<!-- teamshared-rule-version: 1.10.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.9.0`).
+This rule is versioned (`version` in the frontmatter above, currently `1.10.0`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
    versions), call the `version` tool with this rule's frontmatter `version`
-   (`1.9.0`) as `installed_rule_version`. Do not call `version` every turn.
+   (`1.10.0`) as `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
    `~/.cursor/rules/teamshared.mdc`; repo:
@@ -117,14 +117,38 @@ memory_recall(
 | Raw hits to cite | `memory_recall` |
 | Prose answer + gaps | `memory_think` after step 1–2 found durable hits |
 | One budgeted pack | `memory_assemble_context(task=...)` |
+| Live Gmail / Slack | `integration_list` → `integration_search` / `integration_read` (not recall) |
 
 **Quality check:** with `explain=true`, prefer hits where
 `metadata.matched_keyword` is true. If top hits are `[tool]` working turns,
-retry excluding working: use durable scope only.
+retry excluding working: use durable scope only. Connector-synced content has
+`source: connector` — that is ingested mail/chat, not live provider search.
 
 **Avoid:** `memory_think` as the first and only call on entity/competitor/code
 questions — it inherits default durable recall but still depends on query
-wording; keyword-anchored `memory_recall` first is more reliable.
+wording; keyword-anchored `memory_recall` first is more reliable. Do **not**
+treat empty `memory_recall` for Slack/email as "no messages" until you have
+tried `integration_list` / `integration_search` when the user wants the live
+inbox.
+
+### Integrations (Gmail / Slack)
+
+Connected accounts are **human-setup** in the console (`/app/connections`);
+agents use MCP once a connection exists. Ingested messages land in the org
+shared brain as `source: connector` (background `integrations-sync` worker).
+Live search/read/send hits the provider API — that is **not** the same as
+`memory_recall`.
+
+| Want | Tool |
+|---|---|
+| See what’s connected | `integration_list` |
+| Live search inbox/channel | `integration_search(kind=..., query=...)` |
+| Fetch one message (+ ingest for recall) | `integration_read(kind=..., message_id=...)` |
+| Send email / Slack | `integration_send` — **only when the user asks to send** |
+
+Kinds: `gmail`, `slack`. If `integration_list` is empty, tell the user to
+connect under `/app/connections` — do not invent messages. Slack
+`message_id` is `channel:ts`.
 
 ### Assemble context
 
@@ -320,8 +344,9 @@ these are human/browser actions, not MCP tools:
   playbooks rendered as a browsable, human-readable knowledge base.
 - **Work** (`/app/work`): org-wide task queue; assign to people or agents.
 - **Manage:** agents, **API keys** (`tsk_…`, the bearer token MCP/agents use),
-  and people (add a teammate by email). Automatic capture is controlled by the
-  deployment's capture setting.
+  people (add a teammate by email), and **Connections** (`/app/connections`) for
+  Gmail / Slack OAuth. Automatic capture is controlled by the deployment's
+  capture setting.
 
 A fresh self-serve org starts empty and isolated; joining the shared team brain
 is an admin action (People → add member). The public, no-auth status page is at
@@ -591,6 +616,30 @@ Use for structured facts vector recall would obscure (e.g. `alice` → `works_on
 Soft-delete a semantic/episodic memory by `memory_id` (from a prior recall).
 Requires `reason` for audit. **Only when the user explicitly asks.**
 
+### `integration_list` / `integration_search` / `integration_read` / `integration_send`
+
+Live Gmail and Slack via connected accounts. Prefer these for inbox/channel
+questions; use `memory_recall` for already-ingested `source: connector`
+memories.
+
+| Tool | When |
+|---|---|
+| `integration_list` | Discover connected kinds/status before search/send |
+| `integration_search` | `kind` + `query` — live provider hits (not memory) |
+| `integration_read` | Fetch one message; Gmail also ingests into memory |
+| `integration_send` | Outgoing email/Slack — user must request the send |
+
+| Param | Use |
+|---|---|
+| `kind` | `gmail` \| `slack` |
+| `query` | Gmail search syntax, or plaintext filter for Slack |
+| `message_id` | Gmail id, or Slack `channel:ts` |
+| `to` / `subject` | Gmail recipient / subject |
+| `channel` / `thread_ts` | Slack post / thread reply |
+| `body` | Outgoing text (required for send) |
+
+Connecting accounts is a human console action (`/app/connections`), not an MCP tool.
+
 ## Quick chooser
 
 | Need | Tool |
@@ -621,6 +670,10 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 | Task progress notes | `work_comment_add` / `work_comment_list` |
 | Structured relationships | `memory_graph_*` |
 | Remove a bad memory | `memory_forget` (user-requested only) |
+| List connected Gmail/Slack | `integration_list` |
+| Live search mail/chat | `integration_search` |
+| Fetch + ingest one message | `integration_read` |
+| Send email / Slack | `integration_send` (user-requested only) |
 
 ## Never
 
@@ -633,3 +686,6 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 - Don't re-call `context_normalize` on teamshared MCP outputs (middleware handles them).
 - Don't probe `TEAMSHARED_*` env vars in shell — call `health`.
 - Don't append `[tool]` turns for teamshared MCP calls (pollutes working recall).
+- Don't call `integration_send` unless the user explicitly asks to send/post/email.
+- Don't treat empty recall as "no Slack/email" without checking `integration_list` /
+  `integration_search` when the user wants the live inbox.

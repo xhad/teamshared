@@ -32,10 +32,8 @@ from teamshared.server.services import ProductionServices
 log = get_logger(__name__)
 
 _COOKIE = "ts_session"
-# Kinds that use the OAuth redirect flow (gmail/slack) vs. static-token entry (telegram).
 _OAUTH_KINDS = ("gmail", "slack")
-_TOKEN_KINDS = ("telegram",)
-_SUPPORTED_KINDS = (*_OAUTH_KINDS, *_TOKEN_KINDS)
+_SUPPORTED_KINDS = _OAUTH_KINDS
 
 
 def _client_creds(services: ProductionServices, kind: str) -> tuple[str, str, str]:
@@ -160,8 +158,7 @@ def integration_routes(services: ProductionServices) -> list[Route]:
     async def disconnect_integration(request: Request) -> JSONResponse:
         ctx = _ctx(request.state.principal, services)
         connector_id = UUID(request.path_params["connector_id"])
-        # Best-effort revoke at the provider before deleting the row (OAuth kinds only;
-        # Telegram bot tokens are revoked via @BotFather, not an HTTP endpoint).
+        # Best-effort revoke at the provider before deleting the row.
         try:
             conn = await services.connectors.get_connector(ctx, connector_id)
             if conn is not None and conn.get("kind") in _OAUTH_KINDS:
@@ -182,48 +179,9 @@ def integration_routes(services: ProductionServices) -> list[Route]:
              "imported": report.imported, "next_cursor": report.next_cursor}
         )
 
-    async def connect_integration(request: Request) -> JSONResponse:
-        """Create a token-based integration connection (e.g. Telegram bot token).
-
-        Body: ``{"kind": "telegram", "name": "...", "token": "<bot token>"}``.
-        Unlike the OAuth start/callback flow, this is a single bearer-authed POST
-        — the caller supplies the static token directly.
-        """
-        ctx = _ctx(request.state.principal, services)
-        await ctx.authorizer.require(ctx.principal, Permissions.CONNECTOR_MANAGE)
-        try:
-            payload = await request.json()
-        except Exception:  # noqa: BLE001
-            return JSONResponse({"error": {"code": "bad_request", "message": "invalid JSON body"}}, status_code=400)
-        kind = str(payload.get("kind") or "").strip().lower()
-        if kind not in _TOKEN_KINDS:
-            return JSONResponse(
-                {"error": {"code": "bad_request",
-                           "message": f"kind must be one of the token-based kinds {_TOKEN_KINDS}"}},
-                status_code=400,
-            )
-        name = str(payload.get("name") or "").strip() or f"{kind}-connection"
-        token = str(payload.get("token") or "").strip()
-        if not token:
-            return JSONResponse({"error": {"code": "bad_request", "message": "token is required"}}, status_code=400)
-        config: dict[str, Any] = {}
-        try:
-            build_connector(kind, config)
-        except ValueError:
-            config = {}
-        try:
-            connector_id = await services.connectors.create_token_connection(
-                ctx, kind=kind, name=name, config=config, token=token,
-            )
-        except Exception as exc:  # noqa: BLE001
-            log.error("token_connection_store_failed", kind=kind, error=str(exc))
-            return JSONResponse({"error": {"code": "store_failed", "message": str(exc)}}, status_code=502)
-        return JSONResponse({"connector_id": str(connector_id), "kind": kind, "status": "connected"}, status_code=201)
-
     return [
         Route("/integrations/oauth/start", oauth_start, methods=["GET"]),
         Route("/integrations/oauth/callback", oauth_callback, methods=["GET"]),
-        Route("/integrations/connect", connect_integration, methods=["POST"]),
         Route("/integrations", list_integrations, methods=["GET"]),
         Route("/integrations/{connector_id}", disconnect_integration, methods=["DELETE"]),
         Route("/integrations/{connector_id}/sync", sync_integration, methods=["POST"]),

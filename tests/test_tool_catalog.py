@@ -25,6 +25,10 @@ def test_catalog_groups_memory_tools() -> None:
     assert "memory_playbook_get" in names
     assert "memory_playbook_set" in names
     assert "memory_tools_catalog" in names
+    assert "integration_list" in names
+    assert "integration_search" in names
+    assert "integration_read" in names
+    assert "integration_send" in names
 
 
 def test_catalog_includes_tool_recipe_shapes() -> None:

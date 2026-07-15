@@ -26,7 +26,7 @@ from teamshared.server.services import ProductionServices, make_services
 log = get_logger(__name__)
 
 COMPONENT = "integrations-sync"
-_INTEGRATION_KINDS = ("gmail", "slack", "telegram")
+_INTEGRATION_KINDS = ("gmail", "slack")
 
 
 class IntegrationsWorker:

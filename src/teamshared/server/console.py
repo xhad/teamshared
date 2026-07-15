@@ -2070,31 +2070,8 @@ def register_console_routes(
                 and services.settings.slack_client_secret
                 and services.settings.slack_redirect_uri
             ),
-            "telegram_configured": True,
         })
         return _TEMPLATES.TemplateResponse(request, "connections.html", ctx)
-
-    async def connections_connect(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        form, deny = await _verified_form(request)
-        if deny:
-            return deny
-        kind = str(form.get("kind") or "").strip().lower()
-        token = str(form.get("token") or "").strip()
-        name = str(form.get("name") or "").strip() or f"{kind}-connection"
-        if kind != "telegram" or not token:
-            return RedirectResponse("/app/connections?status=error&reason=bad_params", status_code=303)
-        try:
-            rctx = _ctx(principal)
-            await services.connectors.create_token_connection(
-                rctx, kind=kind, name=name, config={}, token=token,
-            )
-        except Exception as exc:
-            log.warning("connections_connect_failed", error=str(exc))
-            return RedirectResponse("/app/connections?status=error&reason=store_failed", status_code=303)
-        return RedirectResponse(f"/app/connections?status=connected&kind={kind}", status_code=303)
 
     async def connections_sync(request: Request) -> Response:
         principal = _session(request)
@@ -2193,7 +2170,6 @@ def register_console_routes(
         Route("/app/settings/export", settings_export, methods=["GET"]),
         Route("/app/settings/purge", settings_purge, methods=["POST"]),
         Route("/app/connections", connections_page, methods=["GET"]),
-        Route("/app/connections/connect", connections_connect, methods=["POST"]),
         Route("/app/connections/{connector_id}/sync", connections_sync, methods=["POST"]),
         Route("/app/connections/{connector_id}/disconnect", connections_disconnect, methods=["POST"]),
     ]

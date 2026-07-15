@@ -157,46 +157,6 @@ class ConnectorService:
         )
         return connector_id
 
-    async def create_token_connection(
-        self,
-        ctx: RequestContext,
-        *,
-        kind: str,
-        name: str,
-        config: dict[str, Any],
-        token: str,
-    ) -> UUID:
-        """Create an account-scoped connector from a static token (e.g. Telegram bot token).
-
-        Token-based integrations have no OAuth refresh cycle; the token is stored
-        as a ``TokenBundle`` with only ``access_token`` set (no refresh/expiry).
-        """
-        await ctx.authorizer.require(ctx.principal, Permissions.CONNECTOR_MANAGE)
-        build_connector(kind, config)  # validate kind early
-        account_id = ctx.principal.account_id
-        async with self.db.org(ctx.org_id) as conn:
-            cur = await conn.execute(
-                "INSERT INTO connectors (org_id, kind, name, config, created_by, account_id) "
-                "VALUES (%s,%s,%s,%s::jsonb,%s,%s) RETURNING id",
-                (
-                    str(ctx.org_id), kind, name, json.dumps(config),
-                    str(ctx.principal.id),
-                    str(account_id) if account_id else None,
-                ),
-            )
-            row = await cur.fetchone()
-        assert row is not None
-        connector_id: UUID = row[0]
-        bundle = TokenBundle(access_token=token)
-        await self.store_token_bundle(ctx, connector_id, bundle)
-        await self.audit.record(
-            agent=ctx.principal.attribution, action="connector.token_connect", org_id=ctx.org_id,
-            actor_type=ctx.principal.type, actor_id=ctx.principal.id, resource_type="connector",
-            target_id=str(connector_id), request_id=ctx.request_id,
-            after={"kind": kind, "name": name, "account_id": str(account_id) if account_id else None},
-        )
-        return connector_id
-
     async def list_connectors(self, ctx: RequestContext) -> list[dict[str, Any]]:
         await ctx.authorizer.require(ctx.principal, Permissions.CONNECTOR_MANAGE)
         async with self.db.org(ctx.org_id) as conn:
@@ -265,12 +225,11 @@ class ConnectorService:
         if conn is None:
             return None
         kind = conn["kind"]
-        if kind not in ("gmail", "slack", "telegram"):
+        if kind not in ("gmail", "slack"):
             # Non-OAuth connectors have nothing to refresh.
             return await self.get_token_bundle(ctx, connector_id)
         bundle = await self.get_token_bundle(ctx, connector_id)
         if bundle is None or not bundle.refresh_token:
-            # Telegram bot tokens have no refresh token — return as-is.
             return bundle
         if not bundle.is_expired():
             return bundle
@@ -308,8 +267,6 @@ class ConnectorService:
                 for d in result.documents
                 if ql in d.content.lower()
             ][:max_results]
-        if conn["kind"] == "telegram":
-            return await adapter.list_messages(bundle.access_token, query, max_results=max_results)
         raise ValueError(f"search not supported for kind {conn['kind']!r}")
 
     async def send(
@@ -349,14 +306,6 @@ class ConnectorService:
             result = await adapter.post_message(
                 bundle.access_token, target_channel, body, thread_ts=thread_ts,
             )
-        elif ckind == "telegram":
-            # Telegram: 'to' or 'channel' is the chat_id (numeric string).
-            chat_id = to or channel or conn["config"].get("chat_id")
-            if not chat_id:
-                raise ValueError("telegram send requires 'to' (chat_id)")
-            result = await adapter.post_message(
-                bundle.access_token, str(chat_id), body, thread_ts=thread_id or thread_ts,
-            )
         else:
             raise ValueError(f"send not supported for kind {ckind!r}")
 
@@ -386,8 +335,6 @@ class ConnectorService:
             return f"Sent email to {to or '?'} — subject: {subject or '(no subject)'} — {preview}"
         if kind == "slack":
             return f"Posted in #{channel or '?'} — {preview}"
-        if kind == "telegram":
-            return f"Sent Telegram message to chat {to or channel or '?'} — {preview}"
         return f"Sent via {kind}: {preview}"
 
     async def delete(self, ctx: RequestContext, connector_id: UUID) -> bool:
@@ -422,10 +369,9 @@ class ConnectorService:
             srow = await cur.fetchone()
             cursor = srow[0] if srow else None
 
-        # OAuth connectors (gmail/slack) refresh their access token lazily; telegram
-        # bot tokens are static (stored as a bundle with no refresh); legacy
-        # connectors keep the single-token decrypt path.
-        if kind in ("gmail", "slack", "telegram"):
+        # OAuth connectors (gmail/slack) refresh their access token lazily;
+        # legacy connectors keep the single-token decrypt path.
+        if kind in ("gmail", "slack"):
             bundle = await self.refresh_if_needed(ctx, connector_id)
             token = bundle.access_token if bundle else ""
         else:

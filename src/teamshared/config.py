@@ -252,7 +252,7 @@ class Settings(BaseSettings):
         default=300,
         description=(
             "How often the integrations-sync worker polls each connected "
-            "Gmail/Slack/Telegram connector for new messages."
+            "Gmail/Slack connector for new messages."
         ),
     )
 

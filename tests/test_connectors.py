@@ -29,7 +29,7 @@ def test_vault_dev_key_roundtrip() -> None:
 
 
 def test_registry_knows_all_kinds() -> None:
-    for kind in ("slack", "github", "notion", "gdrive", "linear", "mcp", "gmail", "telegram"):
+    for kind in ("slack", "github", "notion", "gdrive", "linear", "mcp", "gmail"):
         assert kind in CONNECTOR_KINDS
     assert build_connector("github", {"repo": "a/b"}).kind == "github"
 
