@@ -85,10 +85,16 @@ async def test_end_to_end_signup_ingest_search() -> None:
     settings = get_settings()
     services = await build_services(settings)
     api = build_api_app(services, admin_secret="test-admin")
+    # Mount at /v1 like production so route paths (defined without the /v1
+    # prefix inside the api sub-app) resolve correctly.
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+
+    mounted = Starlette(routes=[Mount("/v1", app=api)])
     # Drive the ASGI app in *this* event loop (not the sync TestClient, which
     # runs on a separate loop/thread and would strand the async pool created by
     # build_services, deadlocking on connection checkout).
-    transport = httpx.ASGITransport(app=api)
+    transport = httpx.ASGITransport(app=mounted)
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             slug = f"e2e-{uuid.uuid4().hex[:8]}"

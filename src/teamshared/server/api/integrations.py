@@ -221,10 +221,10 @@ def integration_routes(services: ProductionServices) -> list[Route]:
         return JSONResponse({"connector_id": str(connector_id), "kind": kind, "status": "connected"}, status_code=201)
 
     return [
-        Route("/v1/integrations/oauth/start", oauth_start, methods=["GET"]),
-        Route("/v1/integrations/oauth/callback", oauth_callback, methods=["GET"]),
-        Route("/v1/integrations/connect", connect_integration, methods=["POST"]),
-        Route("/v1/integrations", list_integrations, methods=["GET"]),
-        Route("/v1/integrations/{connector_id}", disconnect_integration, methods=["DELETE"]),
-        Route("/v1/integrations/{connector_id}/sync", sync_integration, methods=["POST"]),
+        Route("/integrations/oauth/start", oauth_start, methods=["GET"]),
+        Route("/integrations/oauth/callback", oauth_callback, methods=["GET"]),
+        Route("/integrations/connect", connect_integration, methods=["POST"]),
+        Route("/integrations", list_integrations, methods=["GET"]),
+        Route("/integrations/{connector_id}", disconnect_integration, methods=["DELETE"]),
+        Route("/integrations/{connector_id}/sync", sync_integration, methods=["POST"]),
     ]

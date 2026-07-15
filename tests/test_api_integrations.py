@@ -64,15 +64,20 @@ def _services(*, configured: bool = True) -> MagicMock:
 def _app(services: MagicMock, *, principal: Principal | None = _principal()) -> Starlette:
     from starlette.middleware import Middleware
     from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.routing import Mount
 
     class _InjectPrincipal(BaseHTTPMiddleware):
         async def dispatch(self, request, call_next):
             request.state.principal = principal
             return await call_next(request)
 
-    routes = integration_routes(services)
-    middleware = [Middleware(_InjectPrincipal)] if principal is not None else []
-    return Starlette(routes=routes, middleware=middleware)
+    # Mount integration routes at /v1 like production so the route paths
+    # (defined without the /v1 prefix inside the sub-app) resolve correctly.
+    sub = Starlette(
+        routes=integration_routes(services),
+        middleware=([Middleware(_InjectPrincipal)] if principal is not None else []),
+    )
+    return Starlette(routes=[Mount("/v1", app=sub)])
 
 
 def _session_cookie() -> str:
