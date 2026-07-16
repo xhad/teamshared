@@ -1119,6 +1119,7 @@ def test_playbook_save_requires_name_and_skills() -> None:
 # --------------------------------------------------------------------------- #
 def test_skills_page_lists_and_sanitizes() -> None:
     client, services = _build()
+    services.skills.count_skills = AsyncMock(return_value=1)
     services.skills.list_skills = AsyncMock(
         return_value=[
             {"name": "ship-pr", "version": 2, "description": "How to ship",
@@ -1138,7 +1139,50 @@ def test_skills_page_lists_and_sanitizes() -> None:
     assert "/app/playbooks/new" in resp.text
     assert "Use in playbook" in resp.text
     assert "skill=ship-pr" in resp.text
-    assert 'id="sk-filter"' in resp.text
+    assert 'name="q"' in resp.text
+    services.skills.list_skills.assert_awaited()
+    assert services.skills.list_skills.await_args.kwargs["limit"] == 10
+    assert services.skills.list_skills.await_args.kwargs["offset"] == 0
+
+
+def test_skills_page_paginates() -> None:
+    client, services = _build()
+    services.skills.count_skills = AsyncMock(return_value=25)
+    services.skills.list_skills = AsyncMock(
+        return_value=[
+            {"name": f"skill-{i}", "version": 1, "description": None,
+             "tags": [], "created_by": "cursor",
+             "created_at": "2026-05-28T10:00:00", "body_md": "body"}
+            for i in range(10)
+        ]
+    )
+    _login(client)
+    resp = client.get("/app/skills", params={"page": "2"})
+    assert resp.status_code == 200
+    assert "Page 2 of 3" in resp.text
+    assert "/app/skills?page=1" in resp.text
+    assert "/app/skills?page=3" in resp.text
+    services.skills.list_skills.assert_awaited()
+    assert services.skills.list_skills.await_args.kwargs["offset"] == 10
+    assert services.skills.count_skills.await_args.kwargs.get("query") is None
+
+
+def test_skills_page_search_passes_query() -> None:
+    client, services = _build()
+    services.skills.count_skills = AsyncMock(return_value=1)
+    services.skills.list_skills = AsyncMock(
+        return_value=[
+            {"name": "ship-pr", "version": 1, "description": "How to ship",
+             "tags": ["git"], "created_by": "cursor",
+             "created_at": "2026-05-28T10:00:00", "body_md": "body"}
+        ]
+    )
+    _login(client)
+    resp = client.get("/app/skills", params={"q": "ship", "page": "1"})
+    assert resp.status_code == 200
+    assert 'value="ship"' in resp.text
+    assert services.skills.list_skills.await_args.kwargs["query"] == "ship"
+    assert services.skills.count_skills.await_args.kwargs["query"] == "ship"
 
 
 def test_skill_new_form_renders() -> None:

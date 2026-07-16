@@ -18,18 +18,18 @@
   {% if flash == 'error' %}<div class="unavailable">Could not save the skill. Please try again.</div>{% endif %}
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
-  {% if skills %}
-  <div class="catalog-search">
+  {% if skills or q %}
+  <form class="catalog-search" method="get" action="/app/skills" role="search">
     <span class="icon" aria-hidden="true">&#128269;</span>
-    <input type="search" id="sk-filter" placeholder="Search skills by name, description, tags, or body&hellip;"
-      autocomplete="off" aria-label="Search skills" data-catalog-filter data-catalog-list="#sk-list"
-      data-catalog-card=".catalog-card" data-catalog-empty="#sk-empty" data-catalog-count="#sk-count" />
-    <span class="count" id="sk-count"></span>
-  </div>
+    <input type="search" name="q" value="{{ q }}" placeholder="Search skills by name, description, tags, or body&hellip;"
+      autocomplete="off" aria-label="Search skills" />
+    {% if total %}<span class="count" id="sk-count">{{ total }}</span>{% endif %}
+  </form>
 
+  {% if skills %}
   <div id="sk-list">
   {% for s in skills %}
-  <div class="catalog-card panel" data-search="{{ s.search }}">
+  <div class="catalog-card panel catalog-card-compact">
     <div class="head">
       <h3>{{ s.name }}</h3>
       <span class="ver">v{{ s.version }}</span>
@@ -45,7 +45,31 @@
   </div>
   {% endfor %}
   </div>
-  <p class="muted catalog-empty" id="sk-empty">No skills match your search.</p>
+
+  {% if total_pages > 1 %}
+  <nav class="pager" aria-label="Skills pages">
+    {% if has_prev %}
+    <a class="pager-link" href="/app/skills?page={{ page - 1 }}{% if q %}&amp;q={{ q | urlencode }}{% endif %}">Previous</a>
+    {% else %}
+    <span class="pager-link disabled">Previous</span>
+    {% endif %}
+    <span class="pager-status">Page {{ page }} of {{ total_pages }}
+      <span class="muted">({{ total }} skill{{ 's' if total != 1 else '' }})</span>
+    </span>
+    {% if has_next %}
+    <a class="pager-link" href="/app/skills?page={{ page + 1 }}{% if q %}&amp;q={{ q | urlencode }}{% endif %}">Next</a>
+    {% else %}
+    <span class="pager-link disabled">Next</span>
+    {% endif %}
+  </nav>
+  {% elif total %}
+  <p class="muted pager-status-solo">{{ total }} skill{{ 's' if total != 1 else '' }}</p>
+  {% endif %}
+
+  {% else %}
+  <p class="muted">No skills match “{{ q }}”.</p>
+  {% endif %}
+
   {% elif not note %}
   <div class="empty-state panel">
     <h3>No skills yet</h3>

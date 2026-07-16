@@ -1057,8 +1057,28 @@ def register_console_routes(
         ctx = await _shell(request, principal, "skills")
         skills: list[dict[str, Any]] = []
         note = ""
+        page_size = 10
         try:
-            rows = await services.skills.list_skills(principal.org_id, limit=200)
+            page = max(1, int(request.query_params.get("page") or "1"))
+        except ValueError:
+            page = 1
+        q = (request.query_params.get("q") or "").strip()
+        total = 0
+        total_pages = 1
+        try:
+            total = await services.skills.count_skills(
+                principal.org_id, query=q or None
+            )
+            total_pages = max(1, (total + page_size - 1) // page_size)
+            if page > total_pages:
+                page = total_pages
+            offset = (page - 1) * page_size
+            rows = await services.skills.list_skills(
+                principal.org_id,
+                query=q or None,
+                limit=page_size,
+                offset=offset,
+            )
             skills = [
                 {
                     "name": s["name"], "version": s["version"],
@@ -1079,7 +1099,18 @@ def register_console_routes(
             log.warning("skills_page_failed", error=str(exc))
             note = f"Skills unavailable: {exc}"
         flash = request.query_params.get("flash") or ""
-        ctx.update({"skills": skills, "note": note, "flash": flash})
+        ctx.update({
+            "skills": skills,
+            "note": note,
+            "flash": flash,
+            "q": q,
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": total_pages,
+            "has_prev": page > 1,
+            "has_next": page < total_pages,
+        })
         return _TEMPLATES.TemplateResponse(request, "skills.html", ctx)
 
     async def skill_new(request: Request) -> Response:

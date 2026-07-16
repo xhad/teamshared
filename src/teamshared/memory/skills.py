@@ -93,25 +93,62 @@ class OrgSkillStore:
         return dict(zip(fields, row, strict=False))
 
     async def list_skills(
-        self, org_id: UUID, *, tag: str | None = None, limit: int = 100, offset: int = 0
+        self,
+        org_id: UUID,
+        *,
+        tag: str | None = None,
+        query: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
+        where, params = self._list_filters(tag=tag, query=query)
         async with self.db.org(org_id) as conn:
-            if tag:
-                cur = await conn.execute(
-                    f"SELECT DISTINCT ON (name) {self._SELECT}, status FROM skills "
-                    f"WHERE status = 'active' AND %s = ANY(tags) "
-                    f"ORDER BY name, version DESC LIMIT %s OFFSET %s",
-                    (tag, limit, offset),
-                )
-            else:
-                cur = await conn.execute(
-                    f"SELECT DISTINCT ON (name) {self._SELECT}, status FROM skills "
-                    f"WHERE status = 'active' ORDER BY name, version DESC LIMIT %s OFFSET %s",
-                    (limit, offset),
-                )
+            cur = await conn.execute(
+                f"SELECT DISTINCT ON (name) {self._SELECT}, status FROM skills "
+                f"WHERE {where} "
+                f"ORDER BY name, version DESC LIMIT %s OFFSET %s",
+                (*params, limit, offset),
+            )
             rows = await cur.fetchall()
         fields = (*self._FIELDS, "status")
         return [dict(zip(fields, r, strict=False)) for r in rows]
+
+    async def count_skills(
+        self,
+        org_id: UUID,
+        *,
+        tag: str | None = None,
+        query: str | None = None,
+    ) -> int:
+        where, params = self._list_filters(tag=tag, query=query)
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                f"SELECT COUNT(DISTINCT name) FROM skills WHERE {where}",
+                params,
+            )
+            row = await cur.fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    @staticmethod
+    def _list_filters(
+        *, tag: str | None = None, query: str | None = None
+    ) -> tuple[str, tuple[Any, ...]]:
+        clauses = ["status = 'active'"]
+        params: list[Any] = []
+        if tag:
+            clauses.append("%s = ANY(tags)")
+            params.append(tag)
+        q = (query or "").strip()
+        if q:
+            like = f"%{q}%"
+            clauses.append(
+                "(name ILIKE %s OR coalesce(description, '') ILIKE %s "
+                "OR coalesce(body_md, '') ILIKE %s "
+                "OR EXISTS (SELECT 1 FROM unnest(coalesce(tags, ARRAY[]::text[])) t "
+                "WHERE t ILIKE %s))"
+            )
+            params.extend([like, like, like, like])
+        return " AND ".join(clauses), tuple(params)
 
     async def forget_by_name(self, org_id: UUID, name: str) -> int:
         """Soft-delete every active version of a skill name. Returns rows updated."""
