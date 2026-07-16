@@ -2285,7 +2285,10 @@ def register_tools(mcp: Any) -> None:
     async def file_get(
         file_id: Annotated[str, Field(description="File UUID")],
     ) -> dict[str, Any]:
-        """Fetch a shared file with its latest version content."""
+        """Fetch a shared file with its latest version content.
+
+        Includes ``public_url`` (the ``/s/{slug}`` link) when the file is published.
+        """
         state = get_state()
         principal = await _principal()
         return await state.facade.file_get(principal, file_id=file_id)
@@ -2293,21 +2296,28 @@ def register_tools(mcp: Any) -> None:
     @mcp.tool()
     async def file_list(
         limit: Annotated[int, Field(ge=1, le=200)] = 100,
+        query: Annotated[str | None, Field(description="Optional case-insensitive title substring to filter by, e.g. 'yield vault'")] = None,
     ) -> dict[str, Any]:
-        """List all active shared files in the caller's org, newest update first."""
+        """List active shared files in the caller's org, newest update first.
+
+        Each file includes ``public_url`` (the ``/s/{slug}`` link, or ``/s/{share_token}``
+        if no slug) when published, plus ``slug`` and ``share_token``. Use ``query`` to
+        find a file by title without listing everything — e.g. ``file_list(query="yield vault")``.
+        """
         state = get_state()
         principal = await _principal()
-        return await state.facade.file_list(principal, limit=limit)
+        return await state.facade.file_list(principal, limit=limit, query=query)
 
     @mcp.tool()
     async def file_publish(
         file_id: Annotated[str, Field(description="File UUID to publish")],
     ) -> dict[str, Any]:
-        """Publish a shared file: generate the public share token and URL.
+        """Publish a shared file: generate the public share token + slug and URL.
 
-        Idempotent: returns the existing token if already published. The latest
+        Idempotent: returns the existing token/slug if already published. The latest
         rendered HTML is eagerly pushed to the Railway bucket. The public URL is
-        ``/s/{share_token}``.
+        ``/s/{slug}`` (human-readable, from the title) with ``/s/{share_token}`` as a
+        fallback; both are returned in the response.
         """
         state = get_state()
         principal = await _principal()

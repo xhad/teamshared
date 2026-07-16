@@ -222,3 +222,25 @@ async def test_file_publish_mirrors_markdown_as_sanitized_html() -> None:
     assert "<iframe>" not in body
     assert "javascript:" not in body
     assert "<h1>" in body or "<h1" in body
+
+
+def test_serialize_file_adds_public_url_from_slug() -> None:
+    from teamshared.memory.facade import _serialize_file
+
+    published = {
+        "id": "f1", "title": "T", "visibility": "published",
+        "slug": "my-tool", "share_token": "11111111-1111-1111-1111-111111111111",
+    }
+    assert _serialize_file(published)["public_url"] == "/s/my-tool"
+
+    # Falls back to share_token when no slug.
+    published_no_slug = dict(published)
+    published_no_slug["slug"] = None
+    assert _serialize_file(published_no_slug)["public_url"] == "/s/11111111-1111-1111-1111-111111111111"
+
+    # Private files have no public URL.
+    private = dict(published)
+    private["visibility"] = "private"
+    assert _serialize_file(private)["public_url"] is None
+
+    assert _serialize_file(None) == {}

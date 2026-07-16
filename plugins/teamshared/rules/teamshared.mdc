@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.11.3
+version: 1.11.4
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.11.3 -->
+<!-- teamshared-rule-version: 1.11.4 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -155,10 +155,12 @@ user to connect under `/app/connections` — do not invent messages. Slack
 Shared files are versioned documents authored from agent chat (`file_create` /
 `file_update`) or the console (`/app/files`). Each update creates a new
 immutable version row; the latest version is the live content. Files default
-to **private**. `file_publish` stamps a `share_token` and serves the file at
-`/s/{share_token}` (no-auth, sanitized through the allowlist). `file_archive`
-retains full history but excludes the file from active lists and the public
-route. Rendered HTML is mirrored eagerly to an S3-compatible bucket when
+to **private**. `file_publish` stamps a `share_token` UUID **and generates a
+human-readable `slug`** from the title (collision-safe: appends `-2`, `-3`, …).
+The public URL is `/s/{slug}` (e.g. `/s/sapien-yield-vault-modeller`); the UUID
+`/s/{share_token}` URL still works as a fallback. `file_archive` retains full
+history but excludes the file from active lists and the public route. Rendered
+HTML is mirrored eagerly to an S3-compatible bucket when
 `TEAMSHARED_OBJECT_STORAGE_*` is configured (Postgres stays canonical).
 
 When the user says **"share this file"** (or "share this") for a local file on
@@ -166,28 +168,33 @@ their machine, use `file_upload_request` (with `publish=true`) — it mints a
 one-time grant and returns a self-deleting uploader script. For inline content
 (small enough to pass through chat), use `file_create` then `file_publish`.
 
+**Finding an already-shared file's URL:** call
+`file_list(query="<title fragment>")` — it filters by case-insensitive title
+substring and each returned file includes a ready-to-use `public_url` (the
+`/s/{slug}` link) when published. Do not list the whole org and grep; pass
+`query`. `file_get(file_id)` also returns `public_url`.
+
 | Want | Tool |
 |---|---|
 | Create a shared file | `file_create(title, content, content_format='markdown')` |
 | Upload a large local file into a shared file | `file_upload_request(title, content_format='auto', filename?, publish?)` → one-time script |
 | Append a new version | `file_update(file_id, content, content_format?)` |
 | Fetch a shared file (latest version) | `file_get(file_id)` |
-| List active shared files in the org | `file_list(limit=100)` |
-| Publish / get the public URL | `file_publish(file_id)` → `share_token`, `/s/{token}` |
+| List / search active shared files | `file_list(limit=100, query?)` → each file has `public_url`, `slug`, `share_token` |
+| Publish / get the public URL | `file_publish(file_id)` → `slug`, `share_token`, `public_url` (`/s/{slug}`) |
 | Revoke public access | `file_unpublish(file_id)` |
 | Archive (retain history) | `file_archive(file_id)` |
 
 `content_format` is `'markdown'` (rendered through the allowlist sanitizer) or
-`'html'`. **Important:** the `/s/{token}` route always sanitizes HTML through
-the allowlist (strips `<script>`, `<canvas>`, `<input>`, `<style>`, …) so
-agent-authored HTML can never run JS on the no-auth public page. For interactive
-HTML tools (charts, sliders, simulations) the sanitizer would break the page, so
-`file_publish` mirrors the **raw, unsanitized** HTML to the S3 bucket and returns
-`public_url_direct` — share **that** CDN link for interactive content, not
-`/s/{token}`. The `/s/{token}` page shows a sanitized preview plus an
-"Open interactive version" link to `public_url_direct` when a bucket is
-configured. `public_url_direct` is only present when
-`TEAMSHARED_OBJECT_STORAGE_*` (incl. `object_storage_public_base_url`) is set.
+`'html'`. **Interactive HTML tools** (charts, sliders, simulations) render
+fully on the `/s/{slug}` page inside a **sandboxed `srcdoc` iframe**
+(`sandbox="allow-scripts"` — scripts run in an opaque origin with no access to
+teamshared cookies/parent, so agent-authored HTML can't XSS the host page).
+No bucket is needed for the iframe to work. When a bucket mirror *is*
+configured (`TEAMSHARED_OBJECT_STORAGE_*` incl. `object_storage_public_base_url`),
+`file_publish` also mirrors the raw HTML and returns `public_url_direct` — a
+standalone CDN link useful for fullscreen / sharing a direct link; the `/s/{slug}`
+page shows it as an "Open interactive version" link below the iframe.
 
 **Uploading large local files:** `file_create` takes inline content, which
 breaks for big HTML/Markdown blobs passed through chat JSON. For a file on the
@@ -694,16 +701,17 @@ Connecting accounts is a human console action (`/app/connections`), not an MCP t
 Versioned HTML/Markdown shared files stored canonically in Postgres (append-only
 `shared_file_versions`) and mirrored eagerly to an S3-compatible bucket on
 publish/update when `TEAMSHARED_OBJECT_STORAGE_*` is configured. Files default
-private; `file_publish` generates the public `/s/{share_token}` URL.
+private; `file_publish` generates a human-readable `slug` (from the title) and
+the public `/s/{slug}` URL (UUID `/s/{share_token}` still works as fallback).
 
 | Tool | When |
 |---|---|
 | `file_create` | New shared file (version 1, private) — inline content (small) |
 | `file_upload_request` | Get a one-time local uploader script for a large local file → `POST /v1/files/upload` creates the shared file |
 | `file_update` | Append a new version (version = prior max + 1); old versions immutable |
-| `file_get` | Fetch a shared file with its latest version content |
-| `file_list` | Active shared files in the caller's org, newest update first |
-| `file_publish` | Stamp `share_token`, flip to published, mirror to bucket; idempotent |
+| `file_get` | Fetch a shared file with its latest version content (includes `public_url`) |
+| `file_list` | Active shared files in the caller's org, newest update first; `query` filters by title substring; each row includes `public_url`, `slug`, `share_token` |
+| `file_publish` | Stamp `share_token` + `slug`, flip to published, mirror to bucket; idempotent; returns `public_url` |
 | `file_unpublish` | Visibility back to private (token retained for audit; bucket cleaned) |
 | `file_archive` | Exclude from active lists + public route; retain full history for audit |
 
@@ -760,6 +768,7 @@ public but gated by that token (no bearer required).
 | Send email / Slack / Discord | `integration_send` (user-requested only) |
 | Create / update a versioned shared file | `file_create` / `file_update` |
 | Upload a large local file into a shared file | `file_upload_request` |
+| Find a shared file's public URL | `file_list(query="<title>")` → `public_url` |
 | Publish a shared file (public URL) | `file_publish` |
 | Archive a shared file (retain history) | `file_archive` |
 

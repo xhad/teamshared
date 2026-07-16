@@ -2440,11 +2440,13 @@ class MemoryFacade:
         return _serialize_file(row) if row else None
 
     async def file_list(
-        self, principal: Principal, *, limit: int = 100
+        self, principal: Principal, *, limit: int = 100, query: str | None = None
     ) -> dict[str, Any]:
         ctx = self._ctx(principal)
         await ctx.authorizer.require(principal, Permissions.MEMORY_READ)
-        rows = await self.services.shared_files.list_plans(principal.org_id, limit=limit)
+        rows = await self.services.shared_files.list_plans(
+            principal.org_id, limit=limit, query=query
+        )
         return {"count": len(rows), "files": [_serialize_file(r) for r in rows]}
 
     async def file_publish(
@@ -2574,7 +2576,16 @@ def _serialize_file(value: dict[str, Any] | None) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, val in value.items():
         out[key] = _serialize_value(val)
+    out["public_url"] = _file_public_url(value)
     return out
+
+
+def _file_public_url(row: dict[str, Any]) -> str | None:
+    """Construct the public /s/{handle} URL for a published file, else None."""
+    if not row or row.get("visibility") != "published":
+        return None
+    handle = row.get("slug") or row.get("share_token")
+    return f"/s/{handle}" if handle else None
 
 
 def _serialize_work(value: dict[str, Any] | None) -> dict[str, Any]:

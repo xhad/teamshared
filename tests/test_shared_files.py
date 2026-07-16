@@ -219,6 +219,22 @@ def test_archive_marks_archived() -> None:
     assert "status = 'archived'" in conn.calls[0][0]
 
 
+def test_list_plans_with_query_filters_by_title_ilike() -> None:
+    file_id = uuid.uuid4()
+    token = uuid.uuid4()
+    conn = _Conn([
+        _Cur(many=[(file_id, ORG, "Yield Vault Modeller", "html", "published", token,
+                    1, "active", "agent", NOW, NOW, "yield-vault-modeller")]),
+    ])
+    store = SharedFileStore(_DB(conn))  # type: ignore[arg-type]
+    rows = asyncio.run(store.list_plans(ORG, query="yield vault"))
+    assert len(rows) == 1
+    assert rows[0]["slug"] == "yield-vault-modeller"
+    sql, params = conn.calls[0]
+    assert "ILIKE" in sql
+    assert params[0] == "%yield vault%"
+
+
 def test_archive_missing_returns_false() -> None:
     conn = _Conn([_Cur(rowcount=0)])
     store = SharedFileStore(_DB(conn))  # type: ignore[arg-type]

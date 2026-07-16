@@ -188,15 +188,26 @@ class SharedFileStore:
         return file
 
     async def list_plans(
-        self, org_id: UUID, *, limit: int = 100
+        self, org_id: UUID, *, limit: int = 100, query: str | None = None
     ) -> list[dict[str, Any]]:
-        """All active shared files in the org, newest update first."""
+        """All active shared files in the org, newest update first.
+
+        If ``query`` is given, filter by case-insensitive title substring.
+        """
         async with self.db.org(org_id) as conn:
-            cur = await conn.execute(
-                f"SELECT {_FILE_SELECT} FROM shared_files WHERE status = 'active' "
-                f"ORDER BY updated_at DESC LIMIT %s",
-                (limit,),
-            )
+            if query:
+                cur = await conn.execute(
+                    f"SELECT {_FILE_SELECT} FROM shared_files "
+                    f"WHERE status = 'active' AND title ILIKE %s "
+                    f"ORDER BY updated_at DESC LIMIT %s",
+                    (f"%{query}%", limit),
+                )
+            else:
+                cur = await conn.execute(
+                    f"SELECT {_FILE_SELECT} FROM shared_files WHERE status = 'active' "
+                    f"ORDER BY updated_at DESC LIMIT %s",
+                    (limit,),
+                )
             rows = await cur.fetchall()
         return [_file_row(r) for r in rows]
 
