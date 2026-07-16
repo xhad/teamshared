@@ -24,6 +24,7 @@ from teamshared.memory.audit import AuditLog
 from teamshared.memory.embeddings import Embedder, build_embedder
 from teamshared.memory.hnsw_cache import HnswCache
 from teamshared.memory.ontology import OntologyStore
+from teamshared.memory.plans import PlanStore
 from teamshared.memory.procedural import OrgProceduralStore
 from teamshared.memory.projects import ProjectStore
 from teamshared.memory.retrieval import SecureRetrieval
@@ -35,6 +36,7 @@ from teamshared.memory.vectorstore import VectorStore
 from teamshared.memory.wiki import WikiStore
 from teamshared.memory.work import WorkStore
 from teamshared.memory.working import WorkingMemory
+from teamshared.storage.bucket import PlanPublisher, build_plan_publisher
 from teamshared.tenancy.context import TenantDb
 from teamshared.tenancy.repository import TenancyRepository
 
@@ -53,6 +55,7 @@ class ProductionServices:
     strategic: OrgStrategicStore
     work: WorkStore
     projects: ProjectStore
+    plans: PlanStore
     wiki: WikiStore
     soul: SoulStore
     ontology: OntologyStore
@@ -64,6 +67,7 @@ class ProductionServices:
     tenancy: TenancyRepository
     connectors: ConnectorService
     admin: AdminService
+    plan_publisher: PlanPublisher | None = None
     graph: Any = None  # GraphStore | PostgresGraphStore | None — set at app startup
 
     def authorizer(self) -> Authorizer:
@@ -117,6 +121,7 @@ def make_services(settings: Settings) -> ProductionServices:
         strategic=OrgStrategicStore(tenant_db),
         work=WorkStore(tenant_db),
         projects=ProjectStore(tenant_db),
+        plans=PlanStore(tenant_db),
         wiki=WikiStore(tenant_db),
         soul=SoulStore(tenant_db),
         ontology=ontology,
@@ -144,6 +149,7 @@ def make_services(settings: Settings) -> ProductionServices:
         admin=AdminService(
             tenant_db, roles, audit, export_max_items=settings.export_max_items
         ),
+        plan_publisher=build_plan_publisher(settings),
     )
     return services
 

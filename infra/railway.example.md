@@ -217,3 +217,27 @@ A subsequent `memory_remember` settles it.
   on Railway's Hobby plan runs around $5–20/mo depending on Mem0 churn.
   Embedding API calls dominate once you have a few teammates writing
   daily.
+
+## 6. Public plan bucket (optional)
+
+Versioned plans are stored canonically in Postgres and served at
+`/plan/{share_token}` from Postgres alone. To mirror the rendered HTML to an
+S3-compatible bucket (Railway bucket, R2, MinIO, AWS S3) for CDN serving, add a
+bucket service and set these on `teamshared-server`:
+
+| Var | Value |
+|---|---|
+| `TEAMSHARED_OBJECT_STORAGE_ENDPOINT` | S3-compatible endpoint URL (e.g. the Railway bucket URL) |
+| `TEAMSHARED_OBJECT_STORAGE_BUCKET` | bucket name |
+| `TEAMSHARED_OBJECT_STORAGE_ACCESS_KEY` | access key |
+| `TEAMSHARED_OBJECT_STORAGE_SECRET_KEY` | secret key |
+| `TEAMSHARED_OBJECT_STORAGE_REGION` | region (optional; defaults to `us-east-1`) |
+| `TEAMSHARED_OBJECT_STORAGE_PUBLIC_BASE_URL` | public CDN base URL (optional; adds a direct bucket link to `plan_publish` responses) |
+
+All four of endpoint, bucket, access key, and secret key must be present to
+enable the publisher; with any missing, `plan_publish`/`plan_update` degrade
+gracefully (Postgres stays canonical and the `/plan/{token}` route still
+renders). Object keys: `{share_token}/v{version}.html` (per-version snapshot)
+and `{share_token}/index.html` (always the latest version). Unpublishing and
+deleting a plan best-effort remove its `{share_token}/` prefix from the bucket.
+

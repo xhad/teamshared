@@ -280,6 +280,39 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Object storage (Railway S3-compatible bucket for public plans) ---
+    object_storage_endpoint: str | None = Field(
+        default=None,
+        description=(
+            "S3-compatible endpoint URL for the Railway bucket, e.g. "
+            "https://bucket.r2.cloudflarestorage.com or the Railway-provided URL."
+        ),
+    )
+    object_storage_bucket: str | None = Field(
+        default=None,
+        description="Bucket name on the object storage endpoint.",
+    )
+    object_storage_access_key: str | None = Field(
+        default=None,
+        description="Access key for the S3-compatible object storage.",
+    )
+    object_storage_secret_key: str | None = Field(
+        default=None,
+        description="Secret key for the S3-compatible object storage.",
+    )
+    object_storage_region: str | None = Field(
+        default=None,
+        description="Region for the S3-compatible object storage (optional).",
+    )
+    object_storage_public_base_url: str | None = Field(
+        default=None,
+        description=(
+            "Public CDN base URL prefix for direct bucket links, e.g. "
+            "https://plans.teamshared.com. Optional; when set, plan_publish "
+            "returns a direct bucket URL in addition to the /plan/{token} route."
+        ),
+    )
+
     pg_host: str = "localhost"
     pg_port: int = 5432
     pg_user: str = "teamshared"

@@ -20,7 +20,7 @@ from starlette.testclient import TestClient
 from teamshared.identity.rbac import PermissionDenied
 from teamshared.server import console as console_mod
 from teamshared.server.console import register_console_routes
-from teamshared.server.state import clear_state, set_state
+from teamshared.server.state import clear_state, get_state, set_state
 
 DEFAULT_ORG = uuid.UUID("00000000-0000-0000-0000-000000000001")
 OWNER_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
@@ -1542,5 +1542,190 @@ def test_connections_sync_without_csrf_rejected() -> None:
     resp = client.post(f"/app/connections/{cid}/sync", data={})
     assert resp.status_code == 403
     services.connectors.sync.assert_not_awaited()
+
+
+def test_plans_page_lists_plans() -> None:
+    client, services = _build()
+    services.plans.list_plans = AsyncMock(return_value=[
+        {"id": "p1", "title": "Q3 plan", "content_format": "markdown",
+         "visibility": "published", "current_version": 2,
+         "created_by": "cursor", "updated_at": "2026-07-16T12:00:00+00:00",
+         "share_token": "tok-1"},
+        {"id": "p2", "title": "Draft", "content_format": "html",
+         "visibility": "private", "current_version": 1,
+         "created_by": "hermes", "updated_at": "2026-07-15T10:00:00+00:00",
+         "share_token": None},
+    ])
+    _login(client)
+    resp = client.get("/app/plans")
+    assert resp.status_code == 200
+    assert "Q3 plan" in resp.text
+    assert "Draft" in resp.text
+    assert "published" in resp.text
+    assert "private" in resp.text
+    assert "/app/plans/new" in resp.text
+    assert "/app/plans/p1" in resp.text
+    services.plans.list_plans.assert_awaited_once()
+
+
+def test_plans_page_empty_renders() -> None:
+    client, services = _build()
+    services.plans.list_plans = AsyncMock(return_value=[])
+    _login(client)
+    resp = client.get("/app/plans")
+    assert resp.status_code == 200
+    assert "No plans yet" in resp.text
+
+
+def test_plan_detail_renders_version_history() -> None:
+    client, services = _build()
+    plan_id = uuid.uuid4()
+    services.plans.get = AsyncMock(return_value={
+        "id": str(plan_id), "title": "Q3 plan", "current_version": 2,
+        "content_format": "markdown", "visibility": "published",
+        "share_token": "tok-1", "content": "# v2 body",
+        "updated_at": "2026-07-16T12:00:00+00:00", "created_by": "cursor",
+    })
+    services.plans.list_versions = AsyncMock(return_value=[
+        {"version": 2, "author_label": "cursor", "created_at": "2026-07-16T12:00:00+00:00"},
+        {"version": 1, "author_label": "cursor", "created_at": "2026-07-15T10:00:00+00:00"},
+    ])
+    _login(client)
+    resp = client.get(f"/app/plans/{plan_id}")
+    assert resp.status_code == 200
+    assert "Q3 plan" in resp.text
+    assert "v2 body" in resp.text
+    assert "Version history" in resp.text
+    assert "/plan/tok-1" in resp.text
+    services.plans.get.assert_awaited_once()
+    services.plans.list_versions.assert_awaited_once()
+
+
+def test_plan_new_form_renders() -> None:
+    client, _ = _build()
+    _login(client)
+    resp = client.get("/app/plans/new")
+    assert resp.status_code == 200
+    assert 'name="title"' in resp.text
+    assert 'name="content"' in resp.text
+    assert 'name="content_format"' in resp.text
+    assert "New plan" in resp.text
+
+
+def test_plan_save_creates_new_plan() -> None:
+    client, _ = _build()
+    facade = MagicMock()
+    facade.plan_create = AsyncMock(return_value={
+        "id": "p-new", "title": "New", "version": 1,
+    })
+    state = _fake_state()
+    state.facade = facade
+    set_state(state)
+    _login(client)
+    resp = _app_post(
+        client, "/app/plans/save",
+        {"title": "New", "content": "# Goals", "content_format": "markdown"},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/plans/p-new?flash=created"
+    facade.plan_create.assert_awaited_once()
+    kwargs = facade.plan_create.await_args.kwargs
+    assert kwargs["title"] == "New"
+    assert kwargs["content"] == "# Goals"
+    clear_state()
+
+
+def test_plan_save_updates_existing_plan() -> None:
+    client, _ = _build()
+    facade = MagicMock()
+    facade.plan_update = AsyncMock(return_value={
+        "id": "p1", "title": "Q3", "version": 2,
+    })
+    state = _fake_state()
+    state.facade = facade
+    set_state(state)
+    _login(client)
+    resp = _app_post(
+        client, "/app/plans/save",
+        {"plan_id": "p1", "title": "Q3", "content": "# v2", "content_format": "markdown"},
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/plans/p1?flash=saved"
+    facade.plan_update.assert_awaited_once()
+    assert facade.plan_update.await_args.kwargs["plan_id"] == "p1"
+    clear_state()
+
+
+def test_plan_save_requires_title_and_content() -> None:
+    client, _ = _build()
+    facade = MagicMock()
+    facade.plan_create = AsyncMock()
+    facade.plan_update = AsyncMock()
+    state = _fake_state()
+    state.facade = facade
+    set_state(state)
+    _login(client)
+    resp = _app_post(client, "/app/plans/save", {"title": "", "content": ""})
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/plans?flash=invalid"
+    facade.plan_create.assert_not_awaited()
+    facade.plan_update.assert_not_awaited()
+    clear_state()
+
+
+def test_plan_publish_redirects_with_token() -> None:
+    client, _ = _build()
+    facade = MagicMock()
+    facade.plan_publish = AsyncMock(return_value={
+        "id": "p1", "share_token": "tok-1", "visibility": "published",
+        "public_url": "/plan/tok-1",
+    })
+    state = _fake_state()
+    state.facade = facade
+    set_state(state)
+    _login(client)
+    resp = _app_post(client, "/app/plans/p1/publish")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/plans/p1?flash=published"
+    facade.plan_publish.assert_awaited_once()
+    assert facade.plan_publish.await_args.kwargs["plan_id"] == "p1"
+    clear_state()
+
+
+def test_plan_unpublish_redirects() -> None:
+    client, _ = _build()
+    facade = MagicMock()
+    facade.plan_unpublish = AsyncMock(return_value={"id": "p1", "visibility": "private"})
+    state = _fake_state()
+    state.facade = facade
+    set_state(state)
+    _login(client)
+    resp = _app_post(client, "/app/plans/p1/unpublish")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/plans/p1?flash=unpublished"
+    facade.plan_unpublish.assert_awaited_once()
+    clear_state()
+
+
+def test_plan_archive_redirects_to_list() -> None:
+    client, _ = _build()
+    facade = MagicMock()
+    facade.plan_archive = AsyncMock(return_value={"plan_id": "p1", "archived": True})
+    state = _fake_state()
+    state.facade = facade
+    set_state(state)
+    _login(client)
+    resp = _app_post(client, "/app/plans/p1/archive")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/plans?flash=archived"
+    facade.plan_archive.assert_awaited_once()
+    clear_state()
+
+
+def test_plans_unauthenticated_redirects_to_login() -> None:
+    client, _ = _build()
+    resp = client.get("/app/plans")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/login"
 
 

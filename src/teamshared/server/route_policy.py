@@ -66,6 +66,7 @@ _PREFIX: tuple[tuple[str, RouteClass], ...] = (
     ("/assets/", RouteClass.PUBLIC_UNAUTH),
     ("/install/assets/", RouteClass.PUBLIC_UNAUTH),
     ("/install/plugin/", RouteClass.PUBLIC_UNAUTH),
+    ("/plan/", RouteClass.PUBLIC_UNAUTH),
 )
 
 

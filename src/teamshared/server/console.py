@@ -93,6 +93,7 @@ NAV: list[tuple[str, str, str]] = [
     ("/app/wiki", "Wiki", "wiki"),
     ("/app/playbooks", "Playbooks", "playbooks"),
     ("/app/skills", "Skills", "skills"),
+    ("/app/plans", "Plans", "plans"),
     ("/app/work", "Work", "work"),
     ("/app/projects", "Projects", "projects"),
     ("/app/strategy", "Strategy", "strategy"),
@@ -112,6 +113,7 @@ NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
             ("/app/wiki", "Wiki", "wiki"),
             ("/app/playbooks", "Playbooks", "playbooks"),
             ("/app/skills", "Skills", "skills"),
+            ("/app/plans", "Plans", "plans"),
             ("/app/memory", "Explorer", "memory"),
         ],
     ),
@@ -146,6 +148,9 @@ def _dt(value: Any, length: int = 16) -> str:
     if not value:
         return "\u2014"
     return str(value)[:length].replace("T", " ")
+
+
+_TEMPLATES.env.globals["dt"] = _dt
 
 
 def _group_by_kind(records: list[Any]) -> list[tuple[str, list[Any]]]:
@@ -2115,6 +2120,151 @@ def register_console_routes(
             return RedirectResponse("/app/connections?status=error", status_code=303)
         return RedirectResponse("/app/connections?status=disconnected", status_code=303)
 
+    # --- plans (versioned HTML/Markdown documents) ------------------------
+
+    async def plans_page(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "plans")
+        plans: list[dict[str, Any]] = []
+        note = ""
+        try:
+            plans = await services.plans.list_plans(principal.org_id, limit=200)
+        except Exception as exc:
+            log.warning("plans_page_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({
+            "plans": plans, "note": note,
+            "flash": request.query_params.get("flash") or "",
+        })
+        return _TEMPLATES.TemplateResponse(request, "plans.html", ctx)
+
+    async def plan_detail(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "plans")
+        plan_id = str(request.path_params["plan_id"])
+        plan: dict[str, Any] | None = None
+        versions: list[dict[str, Any]] = []
+        note = ""
+        try:
+            plan = await services.plans.get(principal.org_id, UUID(plan_id))
+            versions = await services.plans.list_versions(principal.org_id, UUID(plan_id))
+        except Exception as exc:
+            log.warning("plan_detail_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({
+            "plan": plan, "versions": versions, "note": note,
+            "flash": request.query_params.get("flash") or "",
+        })
+        return _TEMPLATES.TemplateResponse(request, "plan_detail.html", ctx)
+
+    async def plan_new(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "plans")
+        ctx.update({"plan": None, "is_new": True, "note": ""})
+        return _TEMPLATES.TemplateResponse(request, "plan_edit.html", ctx)
+
+    async def plan_edit(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        ctx = await _shell(request, principal, "plans")
+        plan_id = str(request.path_params["plan_id"])
+        plan: dict[str, Any] | None = None
+        note = ""
+        try:
+            plan = await services.plans.get(principal.org_id, UUID(plan_id))
+            if plan is None:
+                note = "Plan not found."
+        except Exception as exc:
+            log.warning("plan_edit_failed", error=str(exc))
+            note = f"Unavailable: {exc}"
+        ctx.update({"plan": plan, "is_new": False, "note": note})
+        return _TEMPLATES.TemplateResponse(request, "plan_edit.html", ctx)
+
+    async def plan_save(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        title = str(form.get("title") or "").strip()
+        content = str(form.get("content") or "")
+        content_format = str(form.get("content_format") or "markdown").strip()
+        plan_id = str(form.get("plan_id") or "").strip()
+        if not title or not content:
+            return RedirectResponse("/app/plans?flash=invalid", status_code=303)
+        try:
+            if plan_id:
+                await get_state().facade.plan_update(
+                    principal, plan_id=plan_id, content=content,
+                    content_format=content_format,
+                )
+                return RedirectResponse(f"/app/plans/{plan_id}?flash=saved", status_code=303)
+            row = await get_state().facade.plan_create(
+                principal, title=title, content=content,
+                content_format=content_format,
+            )
+            new_id = row.get("id")
+            return RedirectResponse(
+                f"/app/plans/{new_id}?flash=created" if new_id else "/app/plans?flash=created",
+                status_code=303,
+            )
+        except Exception as exc:
+            log.warning("plan_save_failed", error=str(exc))
+            return RedirectResponse("/app/plans?flash=error", status_code=303)
+
+    async def plan_publish_post(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        plan_id = str(request.path_params["plan_id"])
+        try:
+            await get_state().facade.plan_publish(principal, plan_id=plan_id)
+        except Exception as exc:
+            log.warning("plan_publish_failed", error=str(exc))
+            return RedirectResponse(f"/app/plans/{plan_id}?flash=error", status_code=303)
+        return RedirectResponse(f"/app/plans/{plan_id}?flash=published", status_code=303)
+
+    async def plan_unpublish_post(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        plan_id = str(request.path_params["plan_id"])
+        try:
+            await get_state().facade.plan_unpublish(principal, plan_id=plan_id)
+        except Exception as exc:
+            log.warning("plan_unpublish_failed", error=str(exc))
+            return RedirectResponse(f"/app/plans/{plan_id}?flash=error", status_code=303)
+        return RedirectResponse(f"/app/plans/{plan_id}?flash=unpublished", status_code=303)
+
+    async def plan_archive_post(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        plan_id = str(request.path_params["plan_id"])
+        try:
+            await get_state().facade.plan_archive(principal, plan_id=plan_id)
+        except Exception as exc:
+            log.warning("plan_archive_failed", error=str(exc))
+            return RedirectResponse(f"/app/plans/{plan_id}?flash=error", status_code=303)
+        return RedirectResponse("/app/plans?flash=archived", status_code=303)
+
     def _placeholder(active: str, title: str) -> Any:
         async def handler(request: Request) -> Response:
             principal = _session(request)
@@ -2148,6 +2298,14 @@ def register_console_routes(
         Route("/app/skills/new", skill_new, methods=["GET"]),
         Route("/app/skills/save", skill_save, methods=["POST"]),
         Route("/app/skills/{name}", skill_edit, methods=["GET"]),
+        Route("/app/plans", plans_page, methods=["GET"]),
+        Route("/app/plans/new", plan_new, methods=["GET"]),
+        Route("/app/plans/save", plan_save, methods=["POST"]),
+        Route("/app/plans/{plan_id}", plan_detail, methods=["GET"]),
+        Route("/app/plans/{plan_id}/edit", plan_edit, methods=["GET"]),
+        Route("/app/plans/{plan_id}/publish", plan_publish_post, methods=["POST"]),
+        Route("/app/plans/{plan_id}/unpublish", plan_unpublish_post, methods=["POST"]),
+        Route("/app/plans/{plan_id}/archive", plan_archive_post, methods=["POST"]),
         Route("/app/work", work_page, methods=["GET"]),
         Route("/app/work/new", work_new, methods=["GET"]),
         Route("/app/work/save", work_save, methods=["POST"]),

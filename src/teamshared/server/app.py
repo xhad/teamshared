@@ -65,6 +65,7 @@ from teamshared.server.install_api import (
 from teamshared.server.llm_prepare_api import handle_llm_prepare
 from teamshared.server.mcp_output_middleware import ToolOutputNormalizeMiddleware
 from teamshared.server.mcp_path import McpSlashMiddleware
+from teamshared.server.plans_public import handle_plan_view
 from teamshared.server.rate_limit import HttpRateLimitMiddleware, RateLimitLimits, RedisRateLimiter
 from teamshared.server.services import ProductionServices, make_services
 from teamshared.server.state import ServerState, clear_state, set_state
@@ -309,6 +310,17 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
                 status_code=503,
             )
 
+    async def plan_view_route(request: Request) -> Response:
+        try:
+            from teamshared.server.state import get_state
+
+            return await handle_plan_view(request, get_state())
+        except RuntimeError:
+            return HTMLResponse(
+                "<h1>teamshared</h1><p>Server is starting; plan not ready yet.</p>",
+                status_code=503,
+            )
+
     invites = InviteStore(settings.invites_file)
     agent_minter = AgentTokenMinter(
         api_keys=services.api_keys,
@@ -508,6 +520,7 @@ def build_http_app(settings: Settings | None = None) -> Starlette:
             Route("/health", health_route, methods=["GET"]),
             Route("/metrics", metrics_route, methods=["GET"]),
             Route("/memory", memory_dashboard_route, methods=["GET"]),
+            Route("/plan/{share_token}", plan_view_route, methods=["GET"]),
             Route("/install", install_index_route, methods=["GET"]),
             Route("/install.sh", install_sh_route, methods=["GET"]),
             Route("/uninstall.sh", uninstall_sh_route, methods=["GET"]),

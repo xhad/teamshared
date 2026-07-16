@@ -190,6 +190,29 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.project_status_post = AsyncMock(
         return_value={"id": "s1", "state": "on_track"}
     )
+    facade.plan_create = AsyncMock(
+        return_value={"id": "p1", "title": "t", "version": 1, "content_format": "markdown",
+                      "visibility": "private", "content": "# t"}
+    )
+    facade.plan_update = AsyncMock(
+        return_value={"id": "p1", "title": "t", "version": 2, "content_format": "markdown",
+                      "visibility": "private", "content": "# t2"}
+    )
+    facade.plan_get = AsyncMock(
+        return_value={"id": "p1", "title": "t", "current_version": 1,
+                      "content_format": "markdown", "content": "# t", "visibility": "private"}
+    )
+    facade.plan_list = AsyncMock(return_value={"count": 1, "plans": [
+        {"id": "p1", "title": "t", "current_version": 1, "visibility": "private"}
+    ]})
+    facade.plan_publish = AsyncMock(
+        return_value={"id": "p1", "share_token": "tok-123", "visibility": "published",
+                      "public_url": "/plan/tok-123"}
+    )
+    facade.plan_unpublish = AsyncMock(
+        return_value={"id": "p1", "visibility": "private"}
+    )
+    facade.plan_archive = AsyncMock(return_value={"plan_id": "p1", "archived": True})
 
     settings = MagicMock()
     settings.embed_provider = "openai"
@@ -830,3 +853,62 @@ async def test_integration_send_slack_delegates_to_connectors(
     assert data["sent"] is True
     assert state.services.connectors.send.await_args.kwargs["channel"] == "C123"
     assert state.services.connectors.send.await_args.kwargs["thread_ts"] == "1699999999.0"
+
+
+async def test_plan_create_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    data = await _call(
+        mcp, "plan_create", title="Q3 plan", content="# Goals", content_format="markdown",
+    )
+    assert data["id"] == "p1"
+    assert data["version"] == 1
+    state.facade.plan_create.assert_awaited_once()
+    kwargs = state.facade.plan_create.await_args.kwargs
+    assert kwargs["title"] == "Q3 plan"
+    assert kwargs["content"] == "# Goals"
+    assert kwargs["content_format"] == "markdown"
+
+
+async def test_plan_update_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    data = await _call(mcp, "plan_update", plan_id="p1", content="# Goals v2")
+    assert data["version"] == 2
+    state.facade.plan_update.assert_awaited_once()
+    kwargs = state.facade.plan_update.await_args.kwargs
+    assert kwargs["plan_id"] == "p1"
+    assert kwargs["content"] == "# Goals v2"
+
+
+async def test_plan_publish_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    data = await _call(mcp, "plan_publish", plan_id="p1")
+    assert data["share_token"] == "tok-123"
+    assert data["public_url"] == "/plan/tok-123"
+    state.facade.plan_publish.assert_awaited_once()
+    assert state.facade.plan_publish.await_args.kwargs["plan_id"] == "p1"
+
+
+async def test_plan_archive_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    data = await _call(mcp, "plan_archive", plan_id="p1")
+    assert data["archived"] is True
+    state.facade.plan_archive.assert_awaited_once()
+    assert state.facade.plan_archive.await_args.kwargs["plan_id"] == "p1"
+
+
+async def test_plan_list_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    data = await _call(mcp, "plan_list", limit=50)
+    assert data["count"] == 1
+    state.facade.plan_list.assert_awaited_once()
+    assert state.facade.plan_list.await_args.kwargs["limit"] == 50

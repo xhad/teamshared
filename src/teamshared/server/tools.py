@@ -2183,6 +2183,119 @@ def register_tools(mcp: Any) -> None:
             channel=channel, thread_id=thread_id, thread_ts=thread_ts,
         )
 
+    # --- plans (versioned HTML/Markdown documents) ------------------------
+
+    @mcp.tool()
+    async def plan_create(
+        title: Annotated[str, Field(description="Plan title")],
+        content: Annotated[
+            str, Field(description="Plan body (markdown or raw HTML)")
+        ],
+        content_format: Annotated[
+            str,
+            Field(description="'markdown' (rendered through the allowlist sanitizer) or 'html' (sanitized raw HTML)"),
+        ] = "markdown",
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Create a new versioned plan in the caller's org.
+
+        Plans default to private. Call ``plan_publish`` to generate the public
+        share URL (``/plan/{share_token}``). Each ``plan_update`` creates a new
+        immutable version row.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.plan_create(
+            principal,
+            title=title,
+            content=content,
+            content_format=content_format,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def plan_update(
+        plan_id: Annotated[str, Field(description="Plan UUID to update")],
+        content: Annotated[str, Field(description="New plan body (markdown or raw HTML)")],
+        content_format: Annotated[
+            str | None,
+            Field(description="Override content format ('markdown' or 'html'); defaults to the plan's current format"),
+        ] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Append a new version to an existing plan (version = prior max + 1).
+
+        If the plan is published, the new version is eagerly mirrored to the
+        Railway bucket. Old versions are never mutated.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.plan_update(
+            principal,
+            plan_id=plan_id,
+            content=content,
+            content_format=content_format,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def plan_get(
+        plan_id: Annotated[str, Field(description="Plan UUID")],
+    ) -> dict[str, Any]:
+        """Fetch a plan with its latest version content."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.plan_get(principal, plan_id=plan_id)
+
+    @mcp.tool()
+    async def plan_list(
+        limit: Annotated[int, Field(ge=1, le=200)] = 100,
+    ) -> dict[str, Any]:
+        """List all active plans in the caller's org, newest update first."""
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.plan_list(principal, limit=limit)
+
+    @mcp.tool()
+    async def plan_publish(
+        plan_id: Annotated[str, Field(description="Plan UUID to publish")],
+    ) -> dict[str, Any]:
+        """Publish a plan: generate the public share token and URL.
+
+        Idempotent: returns the existing token if already published. The latest
+        rendered HTML is eagerly pushed to the Railway bucket. The public URL is
+        ``/plan/{share_token}``.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.plan_publish(principal, plan_id=plan_id)
+
+    @mcp.tool()
+    async def plan_unpublish(
+        plan_id: Annotated[str, Field(description="Plan UUID to unpublish")],
+    ) -> dict[str, Any]:
+        """Revoke public access to a plan (visibility back to private).
+
+        The share token is retained for audit; the public route returns 404. Best-effort
+        removes the mirrored objects from the Railway bucket.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.plan_unpublish(principal, plan_id=plan_id)
+
+    @mcp.tool()
+    async def plan_archive(
+        plan_id: Annotated[str, Field(description="Plan UUID to archive")],
+    ) -> dict[str, Any]:
+        """Archive a plan (excluded from active lists) and clean up its bucket mirror (if published).
+
+        Archived plans are retained with full version history for audit; the public
+        ``/plan/{share_token}`` route returns 404 for an archived plan.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.plan_archive(principal, plan_id=plan_id)
+
 
 def _resolve_dependency_ids(
     *,

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}{% if is_new %}New plan{% else %}Edit plan{% endif %}{% endblock %}
+{% block content %}
+  <div class="work-detail-shell">
+    <a class="work-form-back" href="/app/plans">&larr; Back to plans</a>
+
+    {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+    <form method="post" action="/app/plans/save" class="panel">
+      <h1>{% if is_new %}New plan{% else %}Edit plan{% endif %}</h1>
+      <input type="hidden" name="plan_id" value="{{ plan.id if plan else '' }}" />
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+
+      <p class="sub" style="margin: .5rem 0;">
+        {% if is_new %}Creating a plan stores version 1 (private by default).{% else %}
+          Saving creates a <strong>new version</strong>; the old version is retained in history.
+        {% endif %}
+      </p>
+
+      <label for="title">Title</label>
+      <input id="title" name="title" type="text" required
+             value="{{ plan.title if plan else '' }}" placeholder="Q3 launch plan" />
+
+      <label for="content_format" style="margin-top: .75rem;">Content format</label>
+      <select id="content_format" name="content_format">
+        <option value="markdown" {% if plan and plan.content_format == 'markdown' %}selected{% endif %}>Markdown</option>
+        <option value="html" {% if plan and plan.content_format == 'html' %}selected{% endif %}>HTML (sanitized)</option>
+      </select>
+      <p class="sub">Markdown is rendered through the allowlist sanitizer; raw HTML is sanitized to the same safe tag set.</p>
+
+      <label for="content" style="margin-top: .75rem;">Content</label>
+      <textarea id="content" name="content" rows="20" required
+                style="font-family: monospace; width: 100%;"
+                placeholder="# Goals&#10;...">{{ plan.content if plan else '' }}</textarea>
+
+      <div class="page-head-actions" style="margin-top: 1rem;">
+        <button type="submit">{% if is_new %}Create plan{% else %}Save new version{% endif %}</button>
+        <a href="/app/plans{% if plan %}/{{ plan.id }}{% endif %}"><button type="button" class="ghost">Cancel</button></a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

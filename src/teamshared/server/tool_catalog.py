@@ -194,6 +194,28 @@ _CATALOG: list[dict[str, Any]] = [
     {"name": "integration_send", "tier": "core", "group": "integrations",
      "summary": "Send email / Slack / Discord (user-requested only)",
      "example": {"kind": "slack", "channel": "#general", "body": "shipped v0.5"}},
+    # --- plans ---
+    {"name": "plan_create", "tier": "core", "group": "plans",
+     "summary": "Create a versioned HTML/Markdown plan (private by default)",
+     "example": {"title": "Q3 launch plan", "content": "# Goals\n...", "content_format": "markdown"}},
+    {"name": "plan_update", "tier": "core", "group": "plans",
+     "summary": "Append a new version to an existing plan (immutable history)",
+     "example": {"plan_id": "<uuid>", "content": "# Goals (revised)\n..."}},
+    {"name": "plan_get", "tier": "extended", "group": "plans",
+     "summary": "Fetch a plan with its latest version content",
+     "example": {"plan_id": "<uuid>"}},
+    {"name": "plan_list", "tier": "extended", "group": "plans",
+     "summary": "List active plans in the caller's org",
+     "example": {"limit": 50}},
+    {"name": "plan_publish", "tier": "core", "group": "plans",
+     "summary": "Publish a plan: generate the public /plan/{token} URL + mirror to bucket",
+     "example": {"plan_id": "<uuid>"}},
+    {"name": "plan_unpublish", "tier": "extended", "group": "plans",
+     "summary": "Revoke public access (visibility back to private; bucket cleaned)",
+     "example": {"plan_id": "<uuid>"}},
+    {"name": "plan_archive", "tier": "extended", "group": "plans",
+     "summary": "Archive a plan (retained with history) and clean up its bucket mirror",
+     "example": {"plan_id": "<uuid>"}},
 ]
 
 _TOOL_RECIPE_HELP = {

@@ -222,6 +222,13 @@ See **[Context compression](docs/context-compression.md)** for how teamshared re
 | `integration_search`        | Live-search Gmail/Slack (raw hits, not memory recall)        |
 | `integration_read`          | Fetch one message/thread (also ingests it for future recall) |
 | `integration_send`          | Send an email or Slack message (audited + episodic)          |
+| `plan_create`               | Create a versioned HTML/Markdown plan (private by default)    |
+| `plan_update`               | Append a new version to a plan (immutable history)            |
+| `plan_get`                  | Fetch a plan with its latest version content                  |
+| `plan_list`                 | List active plans in the caller's org                         |
+| `plan_publish`              | Publish a plan: generate the public `/plan/{token}` URL       |
+| `plan_unpublish`            | Revoke public access (visibility back to private)             |
+| `plan_archive`              | Archive a plan (retained with history) + clean up bucket mirror |
 
 ## Integrations
 

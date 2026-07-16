@@ -2284,6 +2284,217 @@ class MemoryFacade:
         if owner != caller:
             raise PermissionError(f"session {session_id} belongs to {owner!r}, not {caller!r}")
 
+    # --- plans (versioned HTML/Markdown documents) -----------------------
+
+    async def plan_create(
+        self,
+        principal: Principal,
+        *,
+        title: str,
+        content: str,
+        content_format: str = "markdown",
+        agent_override: str | None = None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="plan_create",
+            request_id=caller_ctx.request_id,
+        )
+        await caller_ctx.authorizer.require(writer, Permissions.MEMORY_CREATE)
+        row = await self.services.plans.create(
+            principal.org_id,
+            title=title,
+            content=content,
+            content_format=content_format,
+            author_label=writer.display or writer.attribution,
+        )
+        await self.services.audit.record(
+            agent=writer.attribution,
+            action="plan.create",
+            org_id=principal.org_id,
+            actor_type=writer.type,
+            actor_id=writer.id,
+            resource_type="plan",
+            resource_id=str(row["id"]),
+            request_id=caller_ctx.request_id,
+        )
+        return _serialize_plan(row)
+
+    async def plan_update(
+        self,
+        principal: Principal,
+        *,
+        plan_id: str,
+        content: str,
+        content_format: str | None = None,
+        agent_override: str | None = None,
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="plan_update",
+            request_id=caller_ctx.request_id,
+        )
+        await caller_ctx.authorizer.require(writer, Permissions.MEMORY_UPDATE)
+        row = await self.services.plans.update(
+            principal.org_id,
+            UUID(plan_id),
+            content=content,
+            content_format=content_format,
+            editor_label=writer.display or writer.attribution,
+        )
+        if not row:
+            return {}
+        await self.services.audit.record(
+            agent=writer.attribution,
+            action="plan.update",
+            org_id=principal.org_id,
+            actor_type=writer.type,
+            actor_id=writer.id,
+            resource_type="plan",
+            resource_id=plan_id,
+            request_id=caller_ctx.request_id,
+            payload={"version": row.get("version")},
+        )
+        # Eagerly mirror the new version to the bucket when the plan is published.
+        if row.get("visibility") == "published" and row.get("share_token"):
+            await self._publish_to_bucket(row, content, content_format or row["content_format"])
+        return _serialize_plan(row)
+
+    async def plan_get(
+        self, principal: Principal, *, plan_id: str
+    ) -> dict[str, Any] | None:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(principal, Permissions.MEMORY_READ)
+        row = await self.services.plans.get(principal.org_id, UUID(plan_id))
+        return _serialize_plan(row) if row else None
+
+    async def plan_list(
+        self, principal: Principal, *, limit: int = 100
+    ) -> dict[str, Any]:
+        ctx = self._ctx(principal)
+        await ctx.authorizer.require(principal, Permissions.MEMORY_READ)
+        rows = await self.services.plans.list_plans(principal.org_id, limit=limit)
+        return {"count": len(rows), "plans": [_serialize_plan(r) for r in rows]}
+
+    async def plan_publish(
+        self, principal: Principal, *, plan_id: str
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        await caller_ctx.authorizer.require(principal, Permissions.MEMORY_UPDATE)
+        row = await self.services.plans.publish(principal.org_id, UUID(plan_id))
+        if not row:
+            return {}
+        await self.services.audit.record(
+            agent=principal.attribution,
+            action="plan.publish",
+            org_id=principal.org_id,
+            actor_type=principal.type,
+            actor_id=principal.id,
+            resource_type="plan",
+            resource_id=plan_id,
+            request_id=caller_ctx.request_id,
+            payload={"share_token": row.get("share_token")},
+        )
+        # Eagerly push the latest rendered HTML to the bucket.
+        latest = await self.services.plans.get(principal.org_id, UUID(plan_id))
+        if latest and row.get("share_token"):
+            html = _render_plan_html(latest.get("content") or "", latest.get("content_format") or "markdown")
+            await self._publish_to_bucket(row, html, "html")
+        out = _serialize_plan(row)
+        out["public_url"] = f"/plan/{row['share_token']}" if row.get("share_token") else None
+        publisher = self.services.plan_publisher
+        if publisher and row.get("share_token"):
+            direct = publisher.public_url(row["share_token"])
+            if direct:
+                out["public_url_direct"] = direct
+        return out
+
+    async def plan_unpublish(
+        self, principal: Principal, *, plan_id: str
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        await caller_ctx.authorizer.require(principal, Permissions.MEMORY_UPDATE)
+        row = await self.services.plans.unpublish(principal.org_id, UUID(plan_id))
+        if not row:
+            return {}
+        await self.services.audit.record(
+            agent=principal.attribution,
+            action="plan.unpublish",
+            org_id=principal.org_id,
+            actor_type=principal.type,
+            actor_id=principal.id,
+            resource_type="plan",
+            resource_id=plan_id,
+            request_id=caller_ctx.request_id,
+        )
+        publisher = self.services.plan_publisher
+        if publisher and row.get("share_token"):
+            try:
+                await publisher.unpublish(row["share_token"])
+            except Exception as exc:
+                log.warning("plan_bucket_unpublish_failed", error=str(exc))
+        return _serialize_plan(row)
+
+    async def plan_archive(
+        self, principal: Principal, *, plan_id: str
+    ) -> dict[str, Any]:
+        caller_ctx = self._ctx(principal)
+        await caller_ctx.authorizer.require(principal, Permissions.MEMORY_DELETE)
+        existing = await self.services.plans.get(principal.org_id, UUID(plan_id))
+        token = existing.get("share_token") if existing else None
+        changed = await self.services.plans.archive(principal.org_id, UUID(plan_id))
+        if not changed:
+            return {"plan_id": plan_id, "archived": False}
+        await self.services.audit.record(
+            agent=principal.attribution,
+            action="plan.archive",
+            org_id=principal.org_id,
+            actor_type=principal.type,
+            actor_id=principal.id,
+            resource_type="plan",
+            resource_id=plan_id,
+            request_id=caller_ctx.request_id,
+        )
+        publisher = self.services.plan_publisher
+        if publisher and token:
+            try:
+                await publisher.unpublish(token)
+            except Exception as exc:
+                log.warning("plan_bucket_archive_failed", error=str(exc))
+        return {"plan_id": plan_id, "archived": True}
+
+    async def _publish_to_bucket(
+        self, plan_row: dict[str, Any], content: str, content_format: str
+    ) -> None:
+        publisher = self.services.plan_publisher
+        token = plan_row.get("share_token")
+        version = plan_row.get("version") or plan_row.get("current_version")
+        if not publisher or not token or not version:
+            return
+        html = content if content_format == "html" else _render_plan_html(content, content_format)
+        try:
+            await publisher.publish_html(str(token), int(version), html)
+        except Exception as exc:
+            log.warning("plan_bucket_publish_failed", error=str(exc))
+
+
+def _render_plan_html(content: str, content_format: str) -> str:
+    """Render plan content to a safe HTML fragment for the bucket mirror."""
+    from teamshared.server.markdown_safe import render_markdown_safe, sanitize_html
+
+    if content_format == "html":
+        return sanitize_html(content)
+    return render_markdown_safe(content)
+
+
+def _serialize_plan(value: dict[str, Any] | None) -> dict[str, Any]:
+    if value is None:
+        return {}
+    out: dict[str, Any] = {}
+    for key, val in value.items():
+        out[key] = _serialize_value(val)
+    return out
+
 
 def _serialize_work(value: dict[str, Any] | None) -> dict[str, Any]:
     if value is None:
