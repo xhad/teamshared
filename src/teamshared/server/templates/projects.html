@@ -12,23 +12,34 @@
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
   {% if projects %}
-  <div class="project-grid">
+  <ul class="project-list" role="list">
     {% for p in projects %}
-    <a class="project-card" href="/app/work?project={{ p.id }}">
-      <h3>{{ p.name }}</h3>
-      {% if p.description_md %}<p class="muted">{{ p.description_md[:140] }}</p>{% endif %}
-      <div class="project-card-meta">
-        <span class="work-status-pill">View tasks &rarr;</span>
-        {% if p.project_status == 'archived' %}<span class="muted">Archived</span>{% endif %}
-      </div>
-    </a>
+    <li class="project-list-item" style="--i: {{ loop.index0 }}">
+      <a class="project-row" href="/app/work?project={{ p.id }}">
+        <span class="project-row-index" aria-hidden="true">{{ "%02d"|format(loop.index) }}</span>
+        <span class="project-row-main">
+          <span class="project-row-title">{{ p.name }}</span>
+          {% if p.description_md %}
+          <span class="project-row-desc">{{ p.description_md[:160] }}{% if p.description_md|length > 160 %}&hellip;{% endif %}</span>
+          {% endif %}
+        </span>
+        <span class="project-row-meta">
+          {% if p.project_status == 'archived' %}
+          <span class="project-status archived">Archived</span>
+          {% else %}
+          <span class="project-status active">Active</span>
+          {% endif %}
+          <span class="project-row-cta">Open tasks<span aria-hidden="true"> &rarr;</span></span>
+        </span>
+      </a>
+    </li>
     {% endfor %}
-  </div>
+  </ul>
   {% else %}
-  <div class="work-empty">
-    <div class="work-empty-icon" aria-hidden="true">&#128193;</div>
+  <div class="work-empty project-empty">
+    <div class="work-empty-icon" aria-hidden="true"></div>
     <h3>No projects yet</h3>
-    <p>Projects appear here when created via an agent or the API.</p>
+    <p>Projects organize related tasks for the team. They appear here when created via an agent or the API.</p>
   </div>
   {% endif %}
 {% endblock %}

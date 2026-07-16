@@ -110,7 +110,6 @@ NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
         "Memory",
         [
             ("/app/wiki", "Wiki", "wiki"),
-            ("/app/ontology", "Ontology", "ontology"),
             ("/app/playbooks", "Playbooks", "playbooks"),
             ("/app/skills", "Skills", "skills"),
             ("/app/memory", "Explorer", "memory"),

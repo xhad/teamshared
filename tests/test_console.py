@@ -576,6 +576,8 @@ def test_projects_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
         assert resp.status_code == 200
         assert "Q3 Launch" in resp.text
         assert "/app/work?project=p1" in resp.text
+        assert 'class="project-list"' in resp.text
+        assert 'class="project-row"' in resp.text
         assert "Create project" not in resp.text
         assert 'name="name"' not in resp.text
     finally:
