@@ -406,6 +406,74 @@ def test_slack_post_message_mocked() -> None:
     assert sent_body["thread_ts"] == "1699999999.0"
 
 
+def test_slack_fetch_without_channel_lists_conversations() -> None:
+    """OAuth connections have empty config — fetch must list channels, not KeyError."""
+    list_resp = MagicMock()
+    list_resp.raise_for_status = MagicMock()
+    list_resp.json = MagicMock(return_value={
+        "ok": True,
+        "channels": [{"id": "C1", "name": "general"}, {"id": "C2", "name": "eng"}],
+    })
+    hist_resp = MagicMock()
+    hist_resp.raise_for_status = MagicMock()
+    hist_resp.json = MagicMock(return_value={
+        "ok": True,
+        "messages": [
+            {"ts": "1700000000.1", "text": "hello from general", "user": "U1"},
+        ],
+    })
+    client = AsyncMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    client.get = AsyncMock(side_effect=[list_resp, hist_resp, hist_resp])
+    adapter = SlackConnector({})  # no default channel
+    with patch("teamshared.connectors.adapters.httpx.AsyncClient", return_value=client):
+        result = asyncio_run(adapter.fetch("xoxp-tok", None))
+    assert len(result.documents) >= 1
+    assert result.documents[0].external_id.startswith("C1:")
+    assert "hello" in result.documents[0].content
+    # First call is conversations.list
+    first_url = client.get.await_args_list[0].args[0]
+    assert "conversations.list" in first_url
+
+
+def test_slack_fetch_with_channel_skips_list() -> None:
+    hist_resp = MagicMock()
+    hist_resp.raise_for_status = MagicMock()
+    hist_resp.json = MagicMock(return_value={
+        "ok": True,
+        "messages": [{"ts": "1.0", "text": "pinned channel msg", "user": "U1"}],
+    })
+    client = AsyncMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    client.get = AsyncMock(return_value=hist_resp)
+    adapter = SlackConnector({"channel": "C99"})
+    with patch("teamshared.connectors.adapters.httpx.AsyncClient", return_value=client):
+        result = asyncio_run(adapter.fetch("xoxp-tok", None))
+    assert len(result.documents) == 1
+    assert result.documents[0].external_id == "C99:1.0"
+    assert client.get.await_count == 1
+    assert "conversations.history" in client.get.await_args.args[0]
+
+
+def test_slack_list_messages_filters_substring() -> None:
+    adapter = SlackConnector({})
+    docs = [
+        SourceDoc(external_id="C1:1", content="deploy the app", acl={"channel": "C1"},
+                  metadata={"channel_name": "eng"}),
+        SourceDoc(external_id="C1:2", content="lunch plans", acl={"channel": "C1"},
+                  metadata={"channel_name": "eng"}),
+    ]
+    with patch.object(
+        adapter, "fetch", new=AsyncMock(return_value=SyncResult(documents=docs, next_cursor=None))
+    ):
+        hits = asyncio_run(adapter.list_messages("tok", "deploy", max_results=5))
+    assert len(hits) == 1
+    assert hits[0]["id"] == "C1:1"
+    assert hits[0]["channel_name"] == "eng"
+
+
 # --- Agent RBAC: memory:read/create, not connector:manage -------------------
 
 

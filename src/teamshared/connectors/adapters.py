@@ -78,8 +78,62 @@ class SlackConnector(Connector):
     kind = "slack"
 
     async def fetch(self, token: str, cursor: str | None) -> SyncResult:
-        channel = self.config["channel"]
-        params: dict[str, Any] = {"channel": channel, "limit": 100}
+        """Fetch recent messages from a configured channel, or across joined channels.
+
+        OAuth connections usually ship with empty ``config`` (no default channel).
+        In that case, list conversations the token can see and pull recent history
+        from each so ``integration_search`` works without a console channel pick.
+        """
+        channel = (self.config or {}).get("channel")
+        if channel:
+            return await self._fetch_channel(token, channel, cursor)
+        channels = await self.list_channels(token, limit=20)
+        docs: list[SourceDoc] = []
+        for ch in channels:
+            cid = ch.get("id")
+            if not cid:
+                continue
+            try:
+                page = await self._fetch_channel(token, cid, None, limit=50)
+            except RuntimeError:
+                # Missing scope / not in channel — skip and keep going.
+                continue
+            name = ch.get("name") or ch.get("id") or ""
+            for doc in page.documents:
+                doc.metadata = {**(doc.metadata or {}), "channel_name": name}
+                docs.append(doc)
+        return SyncResult(documents=docs, next_cursor=None, has_more=False)
+
+    async def list_channels(
+        self, token: str, *, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """Return conversations the token can access (id + name)."""
+        headers = {"Authorization": f"Bearer {token}"}
+        params: dict[str, Any] = {
+            "types": "public_channel,private_channel,im,mpim",
+            "exclude_archived": True,
+            "limit": min(limit, 100),
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                "https://slack.com/api/conversations.list", params=params, headers=headers
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        if not data.get("ok"):
+            raise RuntimeError(f"slack conversations.list failed: {data.get('error')}")
+        channels = cast(list[dict[str, Any]], data.get("channels") or [])
+        return channels[:limit]
+
+    async def _fetch_channel(
+        self,
+        token: str,
+        channel: str,
+        cursor: str | None,
+        *,
+        limit: int = 100,
+    ) -> SyncResult:
+        params: dict[str, Any] = {"channel": channel, "limit": limit}
         if cursor:
             params["cursor"] = cursor
         headers = {"Authorization": f"Bearer {token}"}
@@ -89,6 +143,10 @@ class SlackConnector(Connector):
             )
             resp.raise_for_status()
             data = resp.json()
+        if not data.get("ok"):
+            raise RuntimeError(
+                f"slack conversations.history failed: {data.get('error')}"
+            )
         msgs = data.get("messages", [])
         docs = [
             SourceDoc(
@@ -102,6 +160,29 @@ class SlackConnector(Connector):
         ]
         next_cursor = data.get("response_metadata", {}).get("next_cursor") or None
         return SyncResult(documents=docs, next_cursor=next_cursor, has_more=bool(next_cursor))
+
+    async def list_messages(
+        self, token: str, query: str, *, max_results: int = 10
+    ) -> list[dict[str, Any]]:
+        """Recent messages filtered by substring (Slack has no free search in v1)."""
+        result = await self.fetch(token, None)
+        ql = query.lower().strip()
+        hits: list[dict[str, Any]] = []
+        for d in result.documents:
+            if ql and ql not in d.content.lower():
+                continue
+            channel = (d.acl or {}).get("channel", "")
+            hits.append(
+                {
+                    "id": d.external_id,
+                    "text": d.content,
+                    "channel": channel,
+                    "channel_name": (d.metadata or {}).get("channel_name") or channel,
+                }
+            )
+            if len(hits) >= max_results:
+                break
+        return hits
 
     async def post_message(
         self, token: str, channel: str, text: str, *, thread_ts: str | None = None

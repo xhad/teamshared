@@ -267,16 +267,11 @@ class ConnectorService:
         if conn["kind"] == "gmail":
             return await adapter.list_messages(bundle.access_token, query, max_results=max_results)
         if conn["kind"] == "slack":
-            # Slack has no free-text search over history; we list recent channel
-            # messages and filter client-side for v1.
-            channel = conn["config"].get("channel", "")
-            result = await adapter.fetch(bundle.access_token, None)
-            ql = query.lower()
-            return [
-                {"id": d.external_id, "text": d.content, "channel": channel}
-                for d in result.documents
-                if ql in d.content.lower()
-            ][:max_results]
+            # Slack has no free-text search over history; list recent messages
+            # (one channel or across joined channels) and filter client-side.
+            return await adapter.list_messages(
+                bundle.access_token, query, max_results=max_results
+            )
         raise ValueError(f"search not supported for kind {conn['kind']!r}")
 
     async def send(
