@@ -2031,11 +2031,11 @@ def register_tools(mcp: Any) -> None:
             principal, state_id=ident.state_id, repo=repo, key=key, value=value
         )
 
-    # --- Gmail + Slack integrations ---------------------------------------
+    # --- Gmail + Slack + Discord integrations -----------------------------
 
     @mcp.tool()
     async def integration_list() -> dict[str, Any]:
-        """List the caller's org's connected Gmail/Slack integrations.
+        """List the caller's org's connected Gmail/Slack/Discord integrations.
 
         Returns each connection's id, kind, name, status, and owning account.
         Use this to discover which integration a ``integration_search`` /
@@ -2049,14 +2049,14 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def integration_search(
-        kind: Annotated[str, Field(description="Integration kind: 'gmail' or 'slack'")],
-        query: Annotated[str, Field(description="Search query (Gmail search syntax, Slack text filter)")],
+        kind: Annotated[str, Field(description="Integration kind: 'gmail', 'slack', or 'discord'")],
+        query: Annotated[str, Field(description="Search query (Gmail search syntax, Slack/Discord text filter)")],
         k: Annotated[int, Field(ge=1, le=50, description="Max results")] = 10,
     ) -> dict[str, Any]:
-        """Live-search the connected Gmail/Slack account (not memory recall).
+        """Live-search the connected Gmail/Slack/Discord account (not memory recall).
 
         Returns raw hits from the provider (message id, snippet, from/subject for
-        Gmail; text + channel for Slack). Reads do not ingest; use
+        Gmail; text + channel for Slack/Discord). Reads do not ingest; use
         ``integration_read`` to fetch + persist a message for future recall.
         """
         state = get_state()
@@ -2070,13 +2070,18 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def integration_read(
-        kind: Annotated[str, Field(description="Integration kind: 'gmail' or 'slack'")],
+        kind: Annotated[str, Field(description="Integration kind: 'gmail', 'slack', or 'discord'")],
         message_id: Annotated[
             str,
-            Field(description="Message id (Gmail) or 'channel:ts' (Slack) to fetch"),
+            Field(
+                description=(
+                    "Message id (Gmail) or 'channel:ts' (Slack) or "
+                    "'channel_id:message_id' (Discord) to fetch"
+                )
+            ),
         ],
     ) -> dict[str, Any]:
-        """Fetch one message/thread from the connected Gmail/Slack account.
+        """Fetch one message/thread from the connected Gmail/Slack/Discord account.
 
         Also ingests the message body as a semantic memory (source='connector')
         so it is recallable from the shared brain in future turns.
@@ -2091,12 +2096,17 @@ def register_tools(mcp: Any) -> None:
         conn = await state.services.connectors.get_connector(ctx, connector_id)
         if conn is None:
             raise ValueError("connector not found")
-        from teamshared.connectors.adapters import GmailConnector, SlackConnector
+        from teamshared.connectors.adapters import (
+            DiscordConnector,
+            GmailConnector,
+            SlackConnector,
+        )
         from teamshared.connectors.registry import build_connector
 
         adapter = build_connector(conn["kind"], conn["config"])
+        token = state.services.connectors.api_token(conn["kind"], bundle)
         if isinstance(adapter, GmailConnector):
-            msg = await adapter.get_message(bundle.access_token, message_id)
+            msg = await adapter.get_message(token, message_id)
             content = (
                 f"From: {msg.get('from','')}\nSubject: {msg.get('subject','')}\n\n{msg.get('body','')}"
             )
@@ -2109,13 +2119,26 @@ def register_tools(mcp: Any) -> None:
             return {"kind": "gmail", "message": msg}
         if isinstance(adapter, SlackConnector):
             channel, ts = message_id.split(":", 1) if ":" in message_id else (message_id, "")
-            replies = await adapter.list_thread_replies(bundle.access_token, channel, ts) if ts else []
+            replies = await adapter.list_thread_replies(token, channel, ts) if ts else []
             return {"kind": "slack", "channel": channel, "thread": replies}
+        if isinstance(adapter, DiscordConnector):
+            msg = await adapter.get_message(token, message_id)
+            content = (
+                f"From: {msg.get('author','')}\nChannel: {msg.get('channel','')}\n\n"
+                f"{msg.get('content','')}"
+            )
+            await state.services.ingestion().ingest(
+                ctx, content, kind="note", scope="org", visibility="shared",
+                subject=f"discord:{msg.get('channel') or 'message'}",
+                source="connector",
+                source_ref={"connector_id": str(connector_id), "external_id": message_id},
+            )
+            return {"kind": "discord", "message": msg}
         raise ValueError(f"read not supported for kind {kind!r}")
 
     @mcp.tool()
     async def integration_send(
-        kind: Annotated[str, Field(description="Integration kind: 'gmail' or 'slack'")],
+        kind: Annotated[str, Field(description="Integration kind: 'gmail', 'slack', or 'discord'")],
         body: Annotated[str, Field(description="Message body / text to send")],
         to: Annotated[
             str | None,
@@ -2127,7 +2150,11 @@ def register_tools(mcp: Any) -> None:
         ] = None,
         channel: Annotated[
             str | None,
-            Field(description="Slack channel name/id (slack only); defaults to connector config"),
+            Field(
+                description=(
+                    "Slack/Discord channel name/id; defaults to connector config"
+                )
+            ),
         ] = None,
         thread_id: Annotated[
             str | None,
@@ -2135,10 +2162,14 @@ def register_tools(mcp: Any) -> None:
         ] = None,
         thread_ts: Annotated[
             str | None,
-            Field(description="Slack parent message ts to reply in thread (slack only)"),
+            Field(
+                description=(
+                    "Slack parent message ts, or Discord thread channel id, for a reply"
+                )
+            ),
         ] = None,
     ) -> dict[str, Any]:
-        """Send an email (gmail) or post a Slack message via the connected account.
+        """Send an email (gmail) or post a Slack/Discord message via the connected account.
 
         Bidirectional: the outgoing action is audited and logged as an episodic
         timeline event ("sent email to X" / "posted in #channel").

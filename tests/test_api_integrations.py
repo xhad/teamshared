@@ -14,6 +14,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
+from teamshared.connectors.oauth import OAuthExchangeResult
 from teamshared.connectors.vault import TokenBundle
 from teamshared.identity.principal import Principal
 from teamshared.server.api.integrations import integration_routes
@@ -41,6 +42,10 @@ def _services(*, configured: bool = True) -> MagicMock:
         slack_client_id="slack-cid" if configured else None,
         slack_client_secret="slack-sec" if configured else None,
         slack_redirect_uri="https://app/v1/integrations/oauth/callback" if configured else None,
+        discord_client_id="discord-cid" if configured else None,
+        discord_client_secret="discord-sec" if configured else None,
+        discord_redirect_uri="https://app/v1/integrations/oauth/callback" if configured else None,
+        discord_bot_token="Bot.Tok" if configured else None,
     )
     services.tenant_db = MagicMock()
     services.authorizer = MagicMock(return_value=SimpleNamespace(
@@ -166,6 +171,25 @@ def test_oauth_start_returns_json_for_api_caller() -> None:
     assert body["authorize_url"].startswith("https://slack.com/oauth/v2/authorize?")
 
 
+def test_oauth_start_discord_redirects_to_provider() -> None:
+    services = _services()
+    app = _app(services)
+    with patch(
+        "teamshared.server.api.integrations.verify_session",
+        return_value=_principal(),
+    ), TestClient(app, follow_redirects=False) as client:
+        resp = client.get(
+            "/v1/integrations/oauth/start?kind=discord",
+            cookies={"ts_session": _session_cookie()},
+        )
+    assert resp.status_code == 302
+    loc = resp.headers["location"]
+    assert loc.startswith("https://discord.com/api/oauth2/authorize?")
+    assert "permissions=" in loc
+    payload = services.working.set_oauth_state.await_args.args[1]
+    assert payload["kind"] == "discord"
+
+
 # --- oauth callback ---------------------------------------------------------
 
 
@@ -195,12 +219,13 @@ def test_oauth_callback_success_creates_connection() -> None:
                       "redirect_uri": "https://app/v1/integrations/oauth/callback"}
     )
     bundle = TokenBundle(access_token="ya29", refresh_token="1//r", expires_at=None)
+    result = OAuthExchangeResult(bundle=bundle)
     app = _app(services)
     with patch(
         "teamshared.server.api.integrations.verify_session",
         return_value=_principal(),
     ), patch(
-        "teamshared.connectors.oauth.exchange_code", new=AsyncMock(return_value=bundle),
+        "teamshared.connectors.oauth.exchange_code", new=AsyncMock(return_value=result),
     ), TestClient(app, follow_redirects=False) as client:
         resp = client.get(
             "/v1/integrations/oauth/callback?code=the-code&state=st123",
@@ -215,6 +240,38 @@ def test_oauth_callback_success_creates_connection() -> None:
     assert call.kwargs["bundle"] is bundle
 
 
+def test_oauth_callback_discord_stores_guild_config() -> None:
+    services = _services()
+    services.working.pop_oauth_state = AsyncMock(
+        return_value={"kind": "discord", "org_id": str(ORG), "account_id": str(ACCOUNT),
+                      "redirect_uri": "https://app/v1/integrations/oauth/callback"}
+    )
+    bundle = TokenBundle(access_token="d-tok", refresh_token="d-r", expires_at=None)
+    result = OAuthExchangeResult(
+        bundle=bundle,
+        display_name="Acme Corp",
+        config={"guild_id": "g123", "guild_name": "Acme Corp"},
+    )
+    app = _app(services)
+    with patch(
+        "teamshared.server.api.integrations.verify_session",
+        return_value=_principal(),
+    ), patch(
+        "teamshared.connectors.oauth.exchange_code", new=AsyncMock(return_value=result),
+    ), TestClient(app, follow_redirects=False) as client:
+        resp = client.get(
+            "/v1/integrations/oauth/callback?code=the-code&state=st-d",
+            cookies={"ts_session": _session_cookie()},
+        )
+    assert resp.status_code == 303
+    assert "kind=discord" in resp.headers["location"]
+    call = services.connectors.create_oauth_connection.await_args
+    assert call.kwargs["kind"] == "discord"
+    assert call.kwargs["name"] == "Acme Corp"
+    assert call.kwargs["config"]["guild_id"] == "g123"
+    assert call.kwargs["bundle"] is bundle
+
+
 def test_oauth_callback_no_session_redirects_error() -> None:
     services = _services()
     services.working.pop_oauth_state = AsyncMock(
@@ -222,12 +279,13 @@ def test_oauth_callback_no_session_redirects_error() -> None:
                       "redirect_uri": "https://app/v1/integrations/oauth/callback"}
     )
     bundle = TokenBundle(access_token="ya29", refresh_token="1//r", expires_at=None)
+    result = OAuthExchangeResult(bundle=bundle)
     app = _app(services, principal=None)
     with patch(
         "teamshared.server.api.integrations.verify_session",
         return_value=None,
     ), patch(
-        "teamshared.connectors.oauth.exchange_code", new=AsyncMock(return_value=bundle),
+        "teamshared.connectors.oauth.exchange_code", new=AsyncMock(return_value=result),
     ), TestClient(app, follow_redirects=False) as client:
         resp = client.get("/v1/integrations/oauth/callback?code=c&state=s")
     assert resp.status_code == 303

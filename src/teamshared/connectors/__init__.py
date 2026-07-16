@@ -9,7 +9,9 @@ in the approval queue by default). OAuth tokens are encrypted at rest by
 
 from teamshared.connectors.base import Connector, SourceDoc, SyncResult
 from teamshared.connectors.oauth import (
+    DISCORD_SCOPES,
     GMAIL_SCOPES,
+    OAuthExchangeResult,
     SLACK_SCOPES,
     build_authorize_url,
     exchange_code,
@@ -22,7 +24,9 @@ from teamshared.connectors.vault import TokenBundle, TokenVault
 
 __all__ = [
     "CONNECTOR_KINDS",
+    "DISCORD_SCOPES",
     "GMAIL_SCOPES",
+    "OAuthExchangeResult",
     "SLACK_SCOPES",
     "Connector",
     "ConnectorService",

@@ -107,21 +107,30 @@ class SlackConnector(Connector):
     async def list_channels(
         self, token: str, *, limit: int = 20
     ) -> list[dict[str, Any]]:
-        """Return conversations the token can access (id + name)."""
+        """Return conversations the user token can access (id + name).
+
+        Uses ``users.conversations`` (user-token API). Omit ``mpim`` from
+        ``types`` unless ``mpim:read`` is granted — Slack returns
+        ``missing_scope`` for the whole call if any requested type lacks scope.
+        """
         headers = {"Authorization": f"Bearer {token}"}
         params: dict[str, Any] = {
-            "types": "public_channel,private_channel,im,mpim",
+            "types": "public_channel,private_channel,im",
             "exclude_archived": True,
             "limit": min(limit, 100),
         }
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
-                "https://slack.com/api/conversations.list", params=params, headers=headers
+                "https://slack.com/api/users.conversations",
+                params=params,
+                headers=headers,
             )
             resp.raise_for_status()
             data = resp.json()
         if not data.get("ok"):
-            raise RuntimeError(f"slack conversations.list failed: {data.get('error')}")
+            raise RuntimeError(
+                f"slack users.conversations failed: {data.get('error')}"
+            )
         channels = cast(list[dict[str, Any]], data.get("channels") or [])
         return channels[:limit]
 
@@ -217,6 +226,230 @@ class SlackConnector(Connector):
         if not data.get("ok"):
             raise RuntimeError(f"slack conversations.replies failed: {data.get('error')}")
         return cast(list[dict[str, Any]], data.get("messages", []))
+
+
+class DiscordConnector(Connector):
+    """Discord guild integration via the Bot REST API.
+
+    ``config.guild_id`` is set at OAuth install time. The ``token`` argument on
+    every method is the deployment bot token (``Authorization: Bot …``), not the
+    vaulted user OAuth bearer.
+    """
+
+    kind = "discord"
+    _base = "https://discord.com/api/v10"
+    # GUILD_TEXT=0, GUILD_ANNOUNCEMENT=5
+    _TEXT_TYPES = frozenset({0, 5})
+
+    def _headers(self, token: str) -> dict[str, str]:
+        return {
+            "Authorization": f"Bot {token}",
+            "Content-Type": "application/json",
+        }
+
+    def _guild_id(self) -> str:
+        gid = (self.config or {}).get("guild_id")
+        if not gid:
+            raise ValueError("discord connector requires config.guild_id")
+        return str(gid)
+
+    async def list_channels(
+        self, token: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Return text channels in the connected guild (id + name)."""
+        guild_id = self._guild_id()
+        headers = self._headers(token)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                f"{self._base}/guilds/{guild_id}/channels", headers=headers
+            )
+            resp.raise_for_status()
+            channels = cast(list[dict[str, Any]], resp.json())
+        text = [c for c in channels if c.get("type") in self._TEXT_TYPES]
+        text.sort(key=lambda c: (c.get("position") or 0, c.get("id") or ""))
+        return text[:limit]
+
+    async def fetch(self, token: str, cursor: str | None) -> SyncResult:
+        """Fetch recent messages across guild text channels.
+
+        Cursor format (optional): ``channel_id:message_id`` to page one channel
+        with Discord's ``before`` snowflake. Without a cursor, pull a page from
+        each text channel (same shape as Slack's multi-channel OAuth sync).
+        """
+        if cursor and ":" in cursor:
+            channel_id, before = cursor.split(":", 1)
+            return await self._fetch_channel(token, channel_id, before or None)
+
+        channels = await self.list_channels(token, limit=20)
+        docs: list[SourceDoc] = []
+        for ch in channels:
+            cid = ch.get("id")
+            if not cid:
+                continue
+            try:
+                page = await self._fetch_channel(token, str(cid), None, limit=50)
+            except Exception:  # noqa: BLE001 - missing perms / deleted channel
+                continue
+            name = ch.get("name") or cid
+            for doc in page.documents:
+                doc.metadata = {**(doc.metadata or {}), "channel_name": name}
+                docs.append(doc)
+        return SyncResult(documents=docs, next_cursor=None, has_more=False)
+
+    async def _fetch_channel(
+        self,
+        token: str,
+        channel_id: str,
+        before: str | None,
+        *,
+        limit: int = 100,
+    ) -> SyncResult:
+        headers = self._headers(token)
+        params: dict[str, Any] = {"limit": min(limit, 100)}
+        if before:
+            params["before"] = before
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                f"{self._base}/channels/{channel_id}/messages",
+                params=params,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            msgs = cast(list[dict[str, Any]], resp.json())
+        docs: list[SourceDoc] = []
+        for m in msgs:
+            content = (m.get("content") or "").strip()
+            if not content:
+                continue
+            mid = m.get("id") or ""
+            author = (m.get("author") or {}).get("username") or ""
+            docs.append(
+                SourceDoc(
+                    external_id=f"{channel_id}:{mid}",
+                    content=content,
+                    title=f"#{(self.config or {}).get('guild_name', '')} {author}".strip() or None,
+                    uri=None,
+                    acl={"channel": channel_id, "guild_id": self._guild_id()},
+                    metadata={
+                        "message_id": mid,
+                        "channel_id": channel_id,
+                        "author": author,
+                        "timestamp": m.get("timestamp"),
+                    },
+                )
+            )
+        next_cursor = None
+        if msgs and len(msgs) >= min(limit, 100):
+            last_id = msgs[-1].get("id")
+            if last_id:
+                next_cursor = f"{channel_id}:{last_id}"
+        return SyncResult(
+            documents=docs, next_cursor=next_cursor, has_more=bool(next_cursor)
+        )
+
+    async def list_messages(
+        self, token: str, query: str, *, max_results: int = 10
+    ) -> list[dict[str, Any]]:
+        """Recent guild messages filtered by substring (no Discord search API in v1)."""
+        result = await self.fetch(token, None)
+        ql = query.lower().strip()
+        hits: list[dict[str, Any]] = []
+        for d in result.documents:
+            if ql and ql not in d.content.lower():
+                continue
+            channel = (d.acl or {}).get("channel", "")
+            hits.append(
+                {
+                    "id": d.external_id,
+                    "text": d.content,
+                    "channel": channel,
+                    "channel_name": (d.metadata or {}).get("channel_name") or channel,
+                    "author": (d.metadata or {}).get("author"),
+                }
+            )
+            if len(hits) >= max_results:
+                break
+        return hits
+
+    async def get_message(self, token: str, message_id: str) -> dict[str, Any]:
+        """Fetch one message. ``message_id`` is ``channel_id:message_id``."""
+        channel_id, mid = (
+            message_id.split(":", 1) if ":" in message_id else ("", message_id)
+        )
+        if not channel_id or not mid:
+            raise ValueError("discord message_id must be 'channel_id:message_id'")
+        headers = self._headers(token)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                f"{self._base}/channels/{channel_id}/messages/{mid}",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            m = cast(dict[str, Any], resp.json())
+        author = (m.get("author") or {}).get("username") or ""
+        return {
+            "id": f"{channel_id}:{m.get('id')}",
+            "channel": channel_id,
+            "message_id": m.get("id"),
+            "author": author,
+            "content": m.get("content") or "",
+            "timestamp": m.get("timestamp"),
+        }
+
+    async def post_message(
+        self, token: str, channel: str, text: str, *, thread_ts: str | None = None
+    ) -> dict[str, Any]:
+        """Post to a channel. ``thread_ts``, when set, is a thread channel id."""
+        target = thread_ts or channel
+        headers = self._headers(token)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{self._base}/channels/{target}/messages",
+                json={"content": text},
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = cast(dict[str, Any], resp.json())
+        return {
+            "id": f"{target}:{data.get('id')}",
+            "channel": target,
+            "message_id": data.get("id"),
+            "content": data.get("content"),
+        }
+
+    async def list_thread_replies(
+        self, token: str, channel: str, thread_ts: str
+    ) -> list[dict[str, Any]]:
+        """List messages in a thread channel.
+
+        Discord threads are channels. Callers pass the parent ``channel`` and
+        the thread channel id as ``thread_ts`` (or use ``thread_ts`` alone when
+        it is already the thread channel id).
+        """
+        thread_channel = thread_ts or channel
+        headers = self._headers(token)
+        params: dict[str, Any] = {"limit": 100}
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                f"{self._base}/channels/{thread_channel}/messages",
+                params=params,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            msgs = cast(list[dict[str, Any]], resp.json())
+        out: list[dict[str, Any]] = []
+        for m in msgs:
+            author = (m.get("author") or {}).get("username") or ""
+            out.append(
+                {
+                    "id": f"{thread_channel}:{m.get('id')}",
+                    "channel": thread_channel,
+                    "author": author,
+                    "content": m.get("content") or "",
+                    "timestamp": m.get("timestamp"),
+                }
+            )
+        return out
 
 
 class GmailConnector(Connector):

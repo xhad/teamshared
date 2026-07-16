@@ -117,7 +117,7 @@ memory_recall(
 | Raw hits to cite | `memory_recall` |
 | Prose answer + gaps | `memory_think` after step 1–2 found durable hits |
 | One budgeted pack | `memory_assemble_context(task=...)` |
-| Live Gmail / Slack | `integration_list` → `integration_search` / `integration_read` (not recall) |
+| Live Gmail / Slack / Discord | `integration_list` → `integration_search` / `integration_read` (not recall) |
 
 **Quality check:** with `explain=true`, prefer hits where
 `metadata.matched_keyword` is true. If top hits are `[tool]` working turns,
@@ -131,7 +131,7 @@ treat empty `memory_recall` for Slack/email as "no messages" until you have
 tried `integration_list` / `integration_search` when the user wants the live
 inbox.
 
-### Integrations (Gmail / Slack)
+### Integrations (Gmail / Slack / Discord)
 
 Connected accounts are **human-setup** in the console (`/app/connections`);
 agents use MCP once a connection exists. Ingested messages land in the org
@@ -144,11 +144,11 @@ Live search/read/send hits the provider API — that is **not** the same as
 | See what’s connected | `integration_list` |
 | Live search inbox/channel | `integration_search(kind=..., query=...)` |
 | Fetch one message (+ ingest for recall) | `integration_read(kind=..., message_id=...)` |
-| Send email / Slack | `integration_send` — **only when the user asks to send** |
+| Send email / Slack / Discord | `integration_send` — **only when the user asks to send** |
 
-Kinds: `gmail`, `slack`. If `integration_list` is empty, tell the user to
-connect under `/app/connections` — do not invent messages. Slack
-`message_id` is `channel:ts`.
+Kinds: `gmail`, `slack`, `discord`. If `integration_list` is empty, tell the
+user to connect under `/app/connections` — do not invent messages. Slack
+`message_id` is `channel:ts`; Discord is `channel_id:message_id`.
 
 ### Assemble context
 
@@ -345,7 +345,7 @@ these are human/browser actions, not MCP tools:
 - **Work** (`/app/work`): org-wide task queue; assign to people or agents.
 - **Manage:** agents, **API keys** (`tsk_…`, the bearer token MCP/agents use),
   people (add a teammate by email), and **Connections** (`/app/connections`) for
-  Gmail / Slack OAuth. Automatic capture is controlled by the deployment's
+  Gmail / Slack / Discord OAuth. Automatic capture is controlled by the deployment's
   capture setting.
 
 A fresh self-serve org starts empty and isolated; joining the shared team brain
@@ -618,24 +618,24 @@ Requires `reason` for audit. **Only when the user explicitly asks.**
 
 ### `integration_list` / `integration_search` / `integration_read` / `integration_send`
 
-Live Gmail and Slack via connected accounts. Prefer these for inbox/channel
-questions; use `memory_recall` for already-ingested `source: connector`
-memories.
+Live Gmail, Slack, and Discord via connected accounts. Prefer these for
+inbox/channel questions; use `memory_recall` for already-ingested
+`source: connector` memories.
 
 | Tool | When |
 |---|---|
 | `integration_list` | Discover connected kinds/status before search/send |
 | `integration_search` | `kind` + `query` — live provider hits (not memory) |
-| `integration_read` | Fetch one message; Gmail also ingests into memory |
-| `integration_send` | Outgoing email/Slack — user must request the send |
+| `integration_read` | Fetch one message; Gmail/Discord also ingest into memory |
+| `integration_send` | Outgoing email/Slack/Discord — user must request the send |
 
 | Param | Use |
 |---|---|
-| `kind` | `gmail` \| `slack` |
-| `query` | Gmail search syntax, or plaintext filter for Slack |
-| `message_id` | Gmail id, or Slack `channel:ts` |
+| `kind` | `gmail` \| `slack` \| `discord` |
+| `query` | Gmail search syntax, or plaintext filter for Slack/Discord |
+| `message_id` | Gmail id, Slack `channel:ts`, or Discord `channel_id:message_id` |
 | `to` / `subject` | Gmail recipient / subject |
-| `channel` / `thread_ts` | Slack post / thread reply |
+| `channel` / `thread_ts` | Slack/Discord post / thread reply |
 | `body` | Outgoing text (required for send) |
 
 Connecting accounts is a human console action (`/app/connections`), not an MCP tool.
@@ -670,10 +670,10 @@ Connecting accounts is a human console action (`/app/connections`), not an MCP t
 | Task progress notes | `work_comment_add` / `work_comment_list` |
 | Structured relationships | `memory_graph_*` |
 | Remove a bad memory | `memory_forget` (user-requested only) |
-| List connected Gmail/Slack | `integration_list` |
+| List connected Gmail/Slack/Discord | `integration_list` |
 | Live search mail/chat | `integration_search` |
 | Fetch + ingest one message | `integration_read` |
-| Send email / Slack | `integration_send` (user-requested only) |
+| Send email / Slack / Discord | `integration_send` (user-requested only) |
 
 ## Never
 

@@ -16,10 +16,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from teamshared.connectors.adapters import GmailConnector, SlackConnector
+from teamshared.connectors.adapters import DiscordConnector, GmailConnector, SlackConnector
 from teamshared.connectors.base import SourceDoc, SyncResult
 from teamshared.connectors.oauth import (
+    DISCORD_BOT_PERMISSIONS,
+    DISCORD_SCOPES,
     GMAIL_SCOPES,
+    OAuthExchangeResult,
     SLACK_SCOPES,
     build_authorize_url,
     exchange_code,
@@ -87,6 +90,18 @@ def test_build_authorize_url_slack() -> None:
     assert "channels%3Ahistory" in url and "chat%3Awrite" in url
 
 
+def test_build_authorize_url_discord() -> None:
+    url = build_authorize_url(
+        "discord", client_id="cid", redirect_uri="https://app/cb", state="st789",
+    )
+    assert url.startswith("https://discord.com/api/oauth2/authorize?")
+    assert "client_id=cid" in url
+    assert "state=st789" in url
+    assert "bot" in url and "identify" in url
+    assert f"permissions={DISCORD_BOT_PERMISSIONS}" in url
+    assert " ".join(DISCORD_SCOPES)  # scopes constant is stable
+
+
 def test_build_authorize_url_unknown_kind() -> None:
     with pytest.raises(ValueError):
         build_authorize_url("dropbox", client_id="x", redirect_uri="y", state="z")
@@ -107,14 +122,16 @@ def test_exchange_code_gmail_mocked() -> None:
     client.__aexit__ = AsyncMock(return_value=False)
     client.post = AsyncMock(return_value=fake_resp)
     with patch("teamshared.connectors.oauth.httpx.AsyncClient", return_value=client):
-        bundle = asyncio_run(exchange_code(
+        result = asyncio_run(exchange_code(
             "gmail", code="the-code", client_id="cid",
             client_secret="sec", redirect_uri="https://app/cb",
         ))
-    assert bundle.access_token == "ya29.abc"
-    assert bundle.refresh_token == "1//r"
-    assert bundle.token_type == "Bearer"
-    assert bundle.expires_at is not None
+    assert isinstance(result, OAuthExchangeResult)
+    assert result.bundle.access_token == "ya29.abc"
+    assert result.bundle.refresh_token == "1//r"
+    assert result.bundle.token_type == "Bearer"
+    assert result.bundle.expires_at is not None
+    assert result.config == {}
 
 
 def test_exchange_code_slack_mocked() -> None:
@@ -136,13 +153,39 @@ def test_exchange_code_slack_mocked() -> None:
     client.__aexit__ = AsyncMock(return_value=False)
     client.post = AsyncMock(return_value=fake_resp)
     with patch("teamshared.connectors.oauth.httpx.AsyncClient", return_value=client):
-        bundle = asyncio_run(exchange_code(
+        result = asyncio_run(exchange_code(
             "slack", code="c", client_id="cid", client_secret="sec",
             redirect_uri="https://app/cb",
         ))
-    assert bundle.access_token == "xoxp-user"
-    assert bundle.refresh_token == "xoxr-1"
-    assert bundle.expires_at is not None
+    assert result.bundle.access_token == "xoxp-user"
+    assert result.bundle.refresh_token == "xoxr-1"
+    assert result.bundle.expires_at is not None
+
+
+def test_exchange_code_discord_mocked() -> None:
+    fake_resp = MagicMock()
+    fake_resp.raise_for_status = MagicMock()
+    fake_resp.json = MagicMock(return_value={
+        "access_token": "discord-user-tok",
+        "refresh_token": "discord-refresh",
+        "token_type": "Bearer",
+        "scope": "bot identify",
+        "expires_in": 604800,
+        "guild": {"id": "g123", "name": "Acme Corp"},
+    })
+    client = AsyncMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    client.post = AsyncMock(return_value=fake_resp)
+    with patch("teamshared.connectors.oauth.httpx.AsyncClient", return_value=client):
+        result = asyncio_run(exchange_code(
+            "discord", code="c", client_id="cid", client_secret="sec",
+            redirect_uri="https://app/cb",
+        ))
+    assert result.bundle.access_token == "discord-user-tok"
+    assert result.bundle.refresh_token == "discord-refresh"
+    assert result.display_name == "Acme Corp"
+    assert result.config == {"guild_id": "g123", "guild_name": "Acme Corp"}
 
 
 def test_refresh_access_token_slack_rotation_mocked() -> None:
@@ -218,6 +261,8 @@ def _make_service(row_map: dict[str, object], *, settings: SimpleNamespace | Non
         settings=settings or SimpleNamespace(
             gmail_client_id="cid", gmail_client_secret="sec",
             slack_client_id="cid", slack_client_secret="sec",
+            discord_client_id="cid", discord_client_secret="sec",
+            discord_bot_token="BotTok.discord",
         ),
     )
     return svc, ingestion
@@ -432,9 +477,10 @@ def test_slack_fetch_without_channel_lists_conversations() -> None:
     assert len(result.documents) >= 1
     assert result.documents[0].external_id.startswith("C1:")
     assert "hello" in result.documents[0].content
-    # First call is conversations.list
+    # First call is users.conversations (user-token list API).
     first_url = client.get.await_args_list[0].args[0]
-    assert "conversations.list" in first_url
+    assert "users.conversations" in first_url
+    assert "mpim" not in client.get.await_args_list[0].kwargs["params"]["types"]
 
 
 def test_slack_fetch_with_channel_skips_list() -> None:
@@ -618,3 +664,65 @@ def test_refresh_if_needed_does_not_require_manage() -> None:
     assert out is new
     assert Permissions.CONNECTOR_MANAGE not in authz.required
     assert authz.required == []
+
+
+def test_discord_send_uses_bot_token() -> None:
+    """Discord Message API calls use TEAMSHARED_DISCORD_BOT_TOKEN, not user OAuth."""
+    from teamshared.identity.rbac import Permissions
+
+    row_map = {
+        "SELECT id, kind, name, status, config, account_id": (
+            uuid.uuid4(), "discord", "Acme Corp", "connected",
+            {"guild_id": "g123", "guild_name": "Acme Corp"}, None,
+        ),
+        "SELECT ciphertext, nonce": (b"x", b"y"),
+    }
+    svc, ingestion = _make_service(row_map)
+    bundle = TokenBundle(access_token="user-oauth-tok")
+    svc.vault.decrypt_bundle = MagicMock(return_value=bundle)
+    authz = _tracking_authorizer(Permissions.MEMORY_CREATE)
+    ctx = SimpleNamespace(
+        principal=_principal(), db=svc.db, authorizer=authz,
+        org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+        request_id="req",
+    )
+    posted = AsyncMock(return_value={"id": "C1:m1", "channel": "C1"})
+    with patch.object(DiscordConnector, "post_message", new=posted):
+        result = asyncio_run(
+            svc.send(ctx, uuid.uuid4(), body="ping", channel="C1")
+        )
+    assert result["sent"] is True
+    assert result["kind"] == "discord"
+    posted.assert_awaited_once()
+    assert posted.await_args.args[0] == "BotTok.discord"
+    ingestion.ingest.assert_awaited_once()
+
+
+def test_discord_list_messages_filters_substring() -> None:
+    adapter = DiscordConnector({"guild_id": "g1", "guild_name": "G"})
+    docs = [
+        SourceDoc(external_id="c1:1", content="deploy failed", acl={"channel": "c1"}),
+        SourceDoc(external_id="c1:2", content="all good", acl={"channel": "c1"}),
+    ]
+    with patch.object(
+        DiscordConnector, "fetch",
+        new=AsyncMock(return_value=SyncResult(documents=docs, next_cursor=None)),
+    ):
+        hits = asyncio_run(adapter.list_messages("bot", "deploy", max_results=10))
+    assert len(hits) == 1
+    assert hits[0]["id"] == "c1:1"
+
+
+def test_discord_post_message_mocked() -> None:
+    fake_resp = MagicMock()
+    fake_resp.raise_for_status = MagicMock()
+    fake_resp.json = MagicMock(return_value={"id": "m99", "content": "hi"})
+    client = AsyncMock()
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=False)
+    client.post = AsyncMock(return_value=fake_resp)
+    adapter = DiscordConnector({"guild_id": "g1"})
+    with patch("teamshared.connectors.adapters.httpx.AsyncClient", return_value=client):
+        out = asyncio_run(adapter.post_message("bot-tok", "C9", "hi"))
+    assert out["id"] == "C9:m99"
+    assert client.post.await_args.kwargs["headers"]["Authorization"] == "Bot bot-tok"

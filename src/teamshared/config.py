@@ -247,12 +247,36 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Discord OAuth + bot integration ---------------------------------
+    discord_client_id: str | None = Field(
+        default=None,
+        description="Discord OAuth2 application client id.",
+    )
+    discord_client_secret: str | None = Field(
+        default=None,
+        description="Discord OAuth2 application client secret.",
+    )
+    discord_redirect_uri: str | None = Field(
+        default=None,
+        description=(
+            "OAuth redirect URI registered with Discord, e.g. "
+            "https://teamshared.com/v1/integrations/oauth/callback."
+        ),
+    )
+    discord_bot_token: str | None = Field(
+        default=None,
+        description=(
+            "Discord bot token for Message/Channel REST calls. One bot for "
+            "the deployment; OAuth installs it into each connected guild."
+        ),
+    )
+
     # --- Integrations sync worker ----------------------------------------
     integrations_sync_interval_seconds: int = Field(
         default=300,
         description=(
             "How often the integrations-sync worker polls each connected "
-            "Gmail/Slack connector for new messages."
+            "Gmail/Slack/Discord connector for new messages."
         ),
     )
 

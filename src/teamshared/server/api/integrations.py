@@ -1,4 +1,4 @@
-"""REST handlers for the Gmail + Slack OAuth integration flow.
+"""REST handlers for the Gmail + Slack + Discord OAuth integration flow.
 
 Two browser-driven routes (no bearer token — auth comes from the console
 session cookie for ``start`` and from the signed Redis state nonce for
@@ -32,7 +32,7 @@ from teamshared.server.services import ProductionServices
 log = get_logger(__name__)
 
 _COOKIE = "ts_session"
-_OAUTH_KINDS = ("gmail", "slack")
+_OAUTH_KINDS = ("gmail", "slack", "discord")
 _SUPPORTED_KINDS = _OAUTH_KINDS
 
 
@@ -47,6 +47,10 @@ def _client_creds(services: ProductionServices, kind: str) -> tuple[str, str, st
         if not s.slack_client_id or not s.slack_client_secret or not s.slack_redirect_uri:
             raise RuntimeError("Slack OAuth is not configured (set TEAMSHARED_SLACK_*).")
         return s.slack_client_id, s.slack_client_secret, s.slack_redirect_uri
+    if kind == "discord":
+        if not s.discord_client_id or not s.discord_client_secret or not s.discord_redirect_uri:
+            raise RuntimeError("Discord OAuth is not configured (set TEAMSHARED_DISCORD_*).")
+        return s.discord_client_id, s.discord_client_secret, s.discord_redirect_uri
     raise ValueError(f"unsupported integration kind: {kind!r}")
 
 
@@ -80,10 +84,12 @@ def integration_routes(services: ProductionServices) -> list[Route]:
         if principal is None:
             return RedirectResponse("/login", status_code=303)
         try:
-            client_id, _client_secret, redirect_uri = _client_creds(services, kind)
+            client_id, _secret, redirect_uri = _client_creds(services, kind)
         except (RuntimeError, ValueError) as exc:
-            return JSONResponse({"error": {"code": "not_configured", "message": str(exc)}}, status_code=503)
-
+            return JSONResponse(
+                {"error": {"code": "not_configured", "message": str(exc)}},
+                status_code=503,
+            )
         state = secrets.token_urlsafe(24)
         await services.working.set_oauth_state(
             state,
@@ -117,7 +123,7 @@ def integration_routes(services: ProductionServices) -> list[Route]:
             return RedirectResponse("/app/connections?status=error&reason=bad_kind", status_code=303)
         try:
             client_id, client_secret, redirect_uri = _client_creds(services, kind)
-            bundle = await oauth_mod.exchange_code(
+            result = await oauth_mod.exchange_code(
                 kind, code=code, client_id=client_id,
                 client_secret=client_secret, redirect_uri=redirect_uri,
             )
@@ -133,15 +139,15 @@ def integration_routes(services: ProductionServices) -> list[Route]:
             return RedirectResponse("/app/connections?status=error&reason=no_session", status_code=303)
 
         ctx = _ctx(principal, services)
-        name = f"{kind}-{(principal.display or 'me').split('@')[0]}"
-        config: dict[str, Any] = {}
+        name = result.display_name or f"{kind}-{(principal.display or 'me').split('@')[0]}"
+        config: dict[str, Any] = dict(result.config or {})
         try:
             build_connector(kind, config)
         except ValueError:
             config = {}
         try:
             await services.connectors.create_oauth_connection(
-                ctx, kind=kind, name=name, config=config, bundle=bundle,
+                ctx, kind=kind, name=name, config=config, bundle=result.bundle,
             )
         except Exception as exc:  # noqa: BLE001
             log.error("oauth_connection_store_failed", kind=kind, error=str(exc))

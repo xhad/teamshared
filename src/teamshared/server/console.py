@@ -2070,6 +2070,12 @@ def register_console_routes(
                 and services.settings.slack_client_secret
                 and services.settings.slack_redirect_uri
             ),
+            "discord_configured": bool(
+                services.settings.discord_client_id
+                and services.settings.discord_client_secret
+                and services.settings.discord_redirect_uri
+                and services.settings.discord_bot_token
+            ),
         })
         return _TEMPLATES.TemplateResponse(request, "connections.html", ctx)
 

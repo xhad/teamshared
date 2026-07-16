@@ -29,9 +29,10 @@ def test_vault_dev_key_roundtrip() -> None:
 
 
 def test_registry_knows_all_kinds() -> None:
-    for kind in ("slack", "github", "notion", "gdrive", "linear", "mcp", "gmail"):
+    for kind in ("slack", "github", "notion", "gdrive", "linear", "mcp", "gmail", "discord"):
         assert kind in CONNECTOR_KINDS
     assert build_connector("github", {"repo": "a/b"}).kind == "github"
+    assert build_connector("discord", {"guild_id": "g1"}).kind == "discord"
 
 
 def test_registry_rejects_unknown() -> None:

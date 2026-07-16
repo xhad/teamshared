@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from teamshared.connectors.adapters import (
+    DiscordConnector,
     GitHubConnector,
     GmailConnector,
     GoogleDriveConnector,
@@ -18,6 +19,7 @@ from teamshared.connectors.base import Connector
 _REGISTRY: dict[str, type[Connector]] = {
     GitHubConnector.kind: GitHubConnector,
     SlackConnector.kind: SlackConnector,
+    DiscordConnector.kind: DiscordConnector,
     NotionConnector.kind: NotionConnector,
     GoogleDriveConnector.kind: GoogleDriveConnector,
     LinearConnector.kind: LinearConnector,

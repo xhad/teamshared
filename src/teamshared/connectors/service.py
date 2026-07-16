@@ -221,7 +221,19 @@ class ConnectorService:
             return self.settings.gmail_client_id or "", self.settings.gmail_client_secret or ""
         if kind == "slack":
             return self.settings.slack_client_id or "", self.settings.slack_client_secret or ""
+        if kind == "discord":
+            return self.settings.discord_client_id or "", self.settings.discord_client_secret or ""
         raise ValueError(f"no OAuth client creds for kind {kind!r}")
+
+    def api_token(self, kind: str, bundle: TokenBundle) -> str:
+        """Token to pass adapters. Discord uses the deployment bot token."""
+        if kind == "discord":
+            if self.settings is None or not self.settings.discord_bot_token:
+                raise RuntimeError(
+                    "Discord bot token is not configured (set TEAMSHARED_DISCORD_BOT_TOKEN)."
+                )
+            return str(self.settings.discord_bot_token)
+        return bundle.access_token
 
     async def refresh_if_needed(self, ctx: RequestContext, connector_id: UUID) -> TokenBundle | None:
         """Refresh the access token if expired; re-store the new bundle.
@@ -233,7 +245,7 @@ class ConnectorService:
         if conn is None:
             return None
         kind = conn["kind"]
-        if kind not in ("gmail", "slack"):
+        if kind not in ("gmail", "slack", "discord"):
             # Non-OAuth connectors have nothing to refresh.
             return await self.get_token_bundle(ctx, connector_id)
         bundle = await self.get_token_bundle(ctx, connector_id)
@@ -264,14 +276,12 @@ class ConnectorService:
         if bundle is None:
             raise ValueError("connector has no stored token")
         adapter = build_connector(conn["kind"], conn["config"])
+        token = self.api_token(conn["kind"], bundle)
         if conn["kind"] == "gmail":
-            return await adapter.list_messages(bundle.access_token, query, max_results=max_results)
-        if conn["kind"] == "slack":
-            # Slack has no free-text search over history; list recent messages
-            # (one channel or across joined channels) and filter client-side.
-            return await adapter.list_messages(
-                bundle.access_token, query, max_results=max_results
-            )
+            return await adapter.list_messages(token, query, max_results=max_results)
+        if conn["kind"] in ("slack", "discord"):
+            # No free-text search API in v1; list recent messages and filter.
+            return await adapter.list_messages(token, query, max_results=max_results)
         raise ValueError(f"search not supported for kind {conn['kind']!r}")
 
     async def send(
@@ -287,7 +297,7 @@ class ConnectorService:
         thread_id: str | None = None,
         thread_ts: str | None = None,
     ) -> dict[str, Any]:
-        """Send an email (gmail) or post a Slack message. Audited + episodic event."""
+        """Send an email (gmail) or post a Slack/Discord message. Audited + episodic event."""
         # Outgoing actions are agent-usable (MCP ``integration_send``); keep
         # connect/disconnect/sync on connector:manage.
         await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
@@ -299,19 +309,20 @@ class ConnectorService:
         if bundle is None:
             raise ValueError("connector has no stored token")
         adapter = build_connector(ckind, conn["config"])
+        token = self.api_token(ckind, bundle)
         if ckind == "gmail":
             if not to:
                 raise ValueError("gmail send requires 'to'")
             result = await adapter.send(
-                bundle.access_token, to=to, subject=subject or "(no subject)",
+                token, to=to, subject=subject or "(no subject)",
                 body=body, thread_id=thread_id,
             )
-        elif ckind == "slack":
+        elif ckind in ("slack", "discord"):
             target_channel = channel or conn["config"].get("channel")
             if not target_channel:
-                raise ValueError("slack send requires 'channel'")
+                raise ValueError(f"{ckind} send requires 'channel'")
             result = await adapter.post_message(
-                bundle.access_token, target_channel, body, thread_ts=thread_ts,
+                token, target_channel, body, thread_ts=thread_ts,
             )
         else:
             raise ValueError(f"send not supported for kind {ckind!r}")
@@ -342,6 +353,8 @@ class ConnectorService:
             return f"Sent email to {to or '?'} — subject: {subject or '(no subject)'} — {preview}"
         if kind == "slack":
             return f"Posted in #{channel or '?'} — {preview}"
+        if kind == "discord":
+            return f"Posted in Discord #{channel or '?'} — {preview}"
         return f"Sent via {kind}: {preview}"
 
     async def delete(self, ctx: RequestContext, connector_id: UUID) -> bool:
@@ -376,11 +389,14 @@ class ConnectorService:
             srow = await cur.fetchone()
             cursor = srow[0] if srow else None
 
-        # OAuth connectors (gmail/slack) refresh their access token lazily;
-        # legacy connectors keep the single-token decrypt path.
-        if kind in ("gmail", "slack"):
+        # OAuth connectors refresh their user access token lazily; Discord
+        # Message/Channel calls still use the deployment bot token.
+        if kind in ("gmail", "slack", "discord"):
             bundle = await self.refresh_if_needed(ctx, connector_id)
-            token = bundle.access_token if bundle else ""
+            if bundle is None:
+                token = ""
+            else:
+                token = self.api_token(kind, bundle)
         else:
             trow = await self._raw_token(ctx, connector_id)
             token = self.vault.decrypt(trow[0], trow[1]) if trow else ""

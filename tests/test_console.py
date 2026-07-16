@@ -1454,6 +1454,8 @@ def test_connections_page_lists_connections() -> None:
     services.settings = SimpleNamespace(
         gmail_client_id="cid", gmail_client_secret="sec", gmail_redirect_uri="https://app/cb",
         slack_client_id="cid", slack_client_secret="sec", slack_redirect_uri="https://app/cb",
+        discord_client_id="cid", discord_client_secret="sec",
+        discord_redirect_uri="https://app/cb", discord_bot_token="Bot.Tok",
     )
     _login(client)
     resp = client.get("/app/connections")
@@ -1462,6 +1464,7 @@ def test_connections_page_lists_connections() -> None:
     assert "gmail-owner" in resp.text
     assert "Connect Gmail" in resp.text
     assert "Connect Slack" in resp.text
+    assert "Connect Discord" in resp.text
 
 
 def test_connections_page_shows_unconfigured_hint() -> None:
@@ -1471,6 +1474,8 @@ def test_connections_page_shows_unconfigured_hint() -> None:
     services.settings = SimpleNamespace(
         gmail_client_id=None, gmail_client_secret=None, gmail_redirect_uri=None,
         slack_client_id=None, slack_client_secret=None, slack_redirect_uri=None,
+        discord_client_id=None, discord_client_secret=None,
+        discord_redirect_uri=None, discord_bot_token=None,
     )
     _login(client)
     resp = client.get("/app/connections")

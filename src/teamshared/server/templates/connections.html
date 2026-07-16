@@ -3,7 +3,7 @@
 {% block title %}Connections{% endblock %}
 {% block content %}
   <h1>Connections</h1>
-  <p class="sub">Connect your Gmail and Slack accounts so agents can search, read, and send through teamshared. Connections are per-person; ingested messages land in the org shared brain.</p>
+  <p class="sub">Connect your Gmail, Slack, and Discord accounts so agents can search, read, and send through teamshared. Connections are per-person; ingested messages land in the org shared brain.</p>
 
   {% if flash == 'connected' %}<div class="flash-ok">{{ kind | default('Account') }} connected.</div>{% endif %}
   {% if flash == 'disconnected' %}<div class="flash-ok">Connection removed.</div>{% endif %}
@@ -13,16 +13,20 @@
 
   <div class="panel" style="margin-top:1rem">
     <h2>Connect a new account</h2>
-    <p class="sub">Gmail and Slack use OAuth (you'll be redirected to the provider). Tokens are encrypted at rest and auto-refreshed.</p>
+    <p class="sub">Gmail, Slack, and Discord use OAuth (you'll be redirected to the provider). Tokens are encrypted at rest and auto-refreshed. Discord installs the teamshared bot into a server you pick.</p>
     <div class="inline-form" style="gap:0.75rem">
       <a class="btn" href="/v1/integrations/oauth/start?kind=gmail">Connect Gmail</a>
       <a class="btn" href="/v1/integrations/oauth/start?kind=slack">Connect Slack</a>
+      <a class="btn" href="/v1/integrations/oauth/start?kind=discord">Connect Discord</a>
     </div>
     {% if not gmail_configured %}
       <p class="muted" style="margin-top:0.5rem">Gmail OAuth is not configured on this server (set <code>TEAMSHARED_GMAIL_*</code>).</p>
     {% endif %}
     {% if not slack_configured %}
       <p class="muted" style="margin-top:0.5rem">Slack OAuth is not configured on this server (set <code>TEAMSHARED_SLACK_*</code>).</p>
+    {% endif %}
+    {% if not discord_configured %}
+      <p class="muted" style="margin-top:0.5rem">Discord OAuth is not configured on this server (set <code>TEAMSHARED_DISCORD_*</code> including bot token).</p>
     {% endif %}
   </div>
 
@@ -56,6 +60,6 @@
       </tbody>
     </table>
     </div>
-    {% else %}<p class="muted">No connections yet. Connect Gmail or Slack above.</p>{% endif %}
+    {% else %}<p class="muted">No connections yet. Connect Gmail, Slack, or Discord above.</p>{% endif %}
   </div>
 {% endblock %}

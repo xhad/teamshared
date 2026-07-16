@@ -181,9 +181,9 @@ _CATALOG: list[dict[str, Any]] = [
      "summary": "Mark done/cancelled", "example": {"work_id": "<uuid>", "work_status": "done"}},
     {"name": "work_comment_add", "tier": "core", "group": "work",
      "summary": "Add progress comment", "example": {"work_id": "<uuid>", "body": "PR opened"}},
-    # --- integrations (Gmail / Slack) ---
+    # --- integrations (Gmail / Slack / Discord) ---
     {"name": "integration_list", "tier": "core", "group": "integrations",
-     "summary": "List connected Gmail/Slack accounts",
+     "summary": "List connected Gmail/Slack/Discord accounts",
      "example": {}},
     {"name": "integration_search", "tier": "core", "group": "integrations",
      "summary": "Live-search a connected inbox/channel (not memory recall)",
@@ -192,7 +192,7 @@ _CATALOG: list[dict[str, Any]] = [
      "summary": "Fetch one message/thread; may ingest for future recall",
      "example": {"kind": "gmail", "message_id": "<id>"}},
     {"name": "integration_send", "tier": "core", "group": "integrations",
-     "summary": "Send email / Slack (user-requested only)",
+     "summary": "Send email / Slack / Discord (user-requested only)",
      "example": {"kind": "slack", "channel": "#general", "body": "shipped v0.5"}},
 ]
 
