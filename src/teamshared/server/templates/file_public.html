@@ -26,7 +26,7 @@
       z-index: 20;
     }
     .file-sidebar .file-brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.25rem; text-decoration: none; color: inherit; }
-    .file-sidebar .file-brand .brand-mark { width: 1.25rem; height: 1.25rem; border-radius: .25rem; background: var(--accent, #4f46e5); display: inline-block; }
+    .file-sidebar .file-brand .brand-mark { width: 1.75rem; height: 1.75rem; display: inline-block; object-fit: contain; }
     .file-sidebar .file-brand span { font-weight: 600; }
     .file-sidebar h1 { margin: 0 0 .25rem; font-size: 1.2rem; line-height: 1.25; color: #fff; }
     .file-sidebar .file-meta { color: #94a3b8; font-size: .8rem; margin-bottom: 1.25rem; }
@@ -75,7 +75,7 @@
 <body>
   <aside class="file-sidebar">
     <a class="file-brand" href="/">
-      <span class="brand-mark" aria-hidden="true"></span><span>TeamShared</span>
+      <img class="brand-mark" src="/assets/logo.png?v={{ asset_version }}" alt="TeamShared logo" /><span>TeamShared</span>
     </a>
 
     <h1>{{ title }}</h1>
