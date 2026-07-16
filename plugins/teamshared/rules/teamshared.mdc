@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.10.1
+version: 1.11.0
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.10.1 -->
+<!-- teamshared-rule-version: 1.11.0 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -149,6 +149,32 @@ Live search/read/send hits the provider API — that is **not** the same as
 Kinds: `gmail`, `slack`, `discord`. If `integration_list` is empty, tell the
 user to connect under `/app/connections` — do not invent messages. Slack
 `message_id` is `channel:ts`; Discord is `channel_id:message_id`.
+
+### Plans (versioned HTML/Markdown documents)
+
+Plans are versioned documents authored from agent chat (`plan_create` /
+`plan_update`) or the console (`/app/plans`). Each update creates a new
+immutable version row; the latest version is the live content. Plans default
+to **private**. `plan_publish` stamps a `share_token` and serves the plan at
+`/plan/{share_token}` (no-auth, sanitized through the allowlist). `plan_archive`
+retains full history but excludes the plan from active lists and the public
+route. Rendered HTML is mirrored eagerly to an S3-compatible bucket when
+`TEAMSHARED_OBJECT_STORAGE_*` is configured (Postgres stays canonical).
+
+| Want | Tool |
+|---|---|
+| Create a plan | `plan_create(title, content, content_format='markdown')` |
+| Append a new version | `plan_update(plan_id, content, content_format?)` |
+| Fetch a plan (latest version) | `plan_get(plan_id)` |
+| List active plans in the org | `plan_list(limit=100)` |
+| Publish / get the public URL | `plan_publish(plan_id)` → `share_token`, `/plan/{token}` |
+| Revoke public access | `plan_unpublish(plan_id)` |
+| Archive (retain history) | `plan_archive(plan_id)` |
+
+`content_format` is `'markdown'` (rendered through the allowlist sanitizer) or
+`'html'` (sanitized raw HTML, same allowlist). The public URL is returned in
+`plan_publish`'s `public_url`; a direct CDN link is added when
+`object_storage_public_base_url` is set.
 
 ### Assemble context
 
@@ -640,6 +666,34 @@ inbox/channel questions; use `memory_recall` for already-ingested
 
 Connecting accounts is a human console action (`/app/connections`), not an MCP tool.
 
+### `plan_create` / `plan_update` / `plan_get` / `plan_list` / `plan_publish` / `plan_unpublish` / `plan_archive`
+
+Versioned HTML/Markdown plans stored canonically in Postgres (append-only
+`plan_versions`) and mirrored eagerly to an S3-compatible bucket on
+publish/update when `TEAMSHARED_OBJECT_STORAGE_*` is configured. Plans default
+private; `plan_publish` generates the public `/plan/{share_token}` URL.
+
+| Tool | When |
+|---|---|
+| `plan_create` | New plan (version 1, private) |
+| `plan_update` | Append a new version (version = prior max + 1); old versions immutable |
+| `plan_get` | Fetch a plan with its latest version content |
+| `plan_list` | Active plans in the caller's org, newest update first |
+| `plan_publish` | Stamp `share_token`, flip to published, mirror to bucket; idempotent |
+| `plan_unpublish` | Visibility back to private (token retained for audit; bucket cleaned) |
+| `plan_archive` | Exclude from active lists + public route; retain full history for audit |
+
+| Param | Use |
+|---|---|
+| `plan_id` | Plan UUID |
+| `title` | Plan title (create) |
+| `content` | Plan body (markdown or raw HTML) |
+| `content_format` | `'markdown'` (sanitized render) or `'html'` (sanitized raw); defaults to the plan's current format on update |
+| `agent` | Override attribution (audited) |
+
+The public `/plan/{share_token}` route is no-auth and renders content through
+the allowlist sanitizer — no XSS surface. Console CRUD lives at `/app/plans`.
+
 ## Quick chooser
 
 | Need | Tool |
@@ -674,6 +728,9 @@ Connecting accounts is a human console action (`/app/connections`), not an MCP t
 | Live search mail/chat | `integration_search` |
 | Fetch + ingest one message | `integration_read` |
 | Send email / Slack / Discord | `integration_send` (user-requested only) |
+| Create / update a versioned plan | `plan_create` / `plan_update` |
+| Publish a plan (public URL) | `plan_publish` |
+| Archive a plan (retain history) | `plan_archive` |
 
 ## Never
 
