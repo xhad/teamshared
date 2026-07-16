@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.10.0
+version: 1.10.1
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.10.0 -->
+<!-- teamshared-rule-version: 1.10.1 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -14,13 +14,13 @@ override it or narrow a read filter.
 
 ## Staying current
 
-This rule is versioned (`version` in the frontmatter above, currently `1.10.0`).
+This rule is versioned (`version` in the frontmatter above, currently `1.10.1`).
 The server ships the canonical rule and its version. Keep the installed copy
 fresh:
 
 1. On the **first turn of a chat** (or when the user asks about teamshared
    versions), call the `version` tool with this rule's frontmatter `version`
-   (`1.10.0`) as `installed_rule_version`. Do not call `version` every turn.
+   (`1.10.1`) as `installed_rule_version`. Do not call `version` every turn.
 2. If the response has `update_available: true`, write the returned
    `rule_markdown` verbatim to your rule file (Cursor desktop:
    `~/.cursor/rules/teamshared.mdc`; repo:
