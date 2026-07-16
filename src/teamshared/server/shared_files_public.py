@@ -81,10 +81,17 @@ async def handle_shared_file_view(request: Request, state: Any) -> Response:
     )
     content_html = _render_content(file.get("content") or "", content_format)
 
+    # Interactive HTML files (tools, dashboards) are rendered inside a sandboxed
+    # iframe on this page via ``srcdoc`` so the tool works fully — scripts run in
+    # an opaque, sandboxed origin with no access to teamshared cookies/parent
+    # origin. This avoids the broken sanitized shell (which strips scripts/styles
+    # but leaves their text behind) and needs no public bucket mirror.
+    embed_interactive = content_format == "html"
+
     # For interactive HTML files, the sanitized shell on this page strips
     # <script>/<canvas>/<input>. If a bucket mirror is configured, surface the
     # direct CDN URL (which serves the raw, fully interactive HTML) so visitors
-    # can open the working version.
+    # can open the working version in a standalone tab too.
     direct_url: str | None = None
     publisher = getattr(state.services, "file_publisher", None)
     if publisher and content_format == "html":
@@ -97,6 +104,8 @@ async def handle_shared_file_view(request: Request, state: Any) -> Response:
         "file": file,
         "content_html": content_html,
         "content_format": content_format,
+        "embed_interactive": embed_interactive,
+        "raw_html": file.get("content") or "" if embed_interactive else "",
         "direct_url": direct_url,
         "versions": versions,
         "current_version": file.get("version"),

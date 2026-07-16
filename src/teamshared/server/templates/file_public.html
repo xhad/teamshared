@@ -95,6 +95,22 @@
           <a href="/s/{{ share_token }}">View latest (v{{ file.current_version }})</a>
         </div>
         {% endif %}
+        {% if embed_interactive %}
+        <div class="file-interactive-frame" style="border:1px solid var(--border,#e5e7eb);border-radius:.5rem;overflow:hidden;background:#fff;">
+          <iframe srcdoc="{{ raw_html }}"
+                  sandbox="allow-scripts allow-popups allow-forms allow-modals allow-popups-to-escape-sandbox"
+                  style="width:100%;height:90vh;border:0;display:block;background:#fff;"
+                  loading="lazy"
+                  title="{{ title }}"></iframe>
+        </div>
+        {% if direct_url %}
+        <div class="file-interactive-banner" style="margin-top:1rem;padding:.75rem 1rem;border-radius:.5rem;background:var(--accent-soft,#eef2ff);border:1px solid var(--border,#e5e7eb);font-size:.9rem;">
+          <strong>Standalone version.</strong> Open the mirrored copy in its own tab
+          (useful for fullscreen / sharing a direct link):
+          <a href="{{ direct_url }}" rel="noopener noreferrer" target="_blank">{{ direct_url }}</a>
+        </div>
+        {% endif %}
+        {% else %}
         {% if direct_url %}
         <div class="file-interactive-banner" style="margin-bottom:1rem;padding:.75rem 1rem;border-radius:.5rem;background:var(--accent-soft,#eef2ff);border:1px solid var(--border,#e5e7eb);font-size:.9rem;">
           <strong>Interactive version.</strong> This page shows a sanitized
@@ -104,6 +120,7 @@
         </div>
         {% endif %}
         <div class="file-html">{{ content_html | safe }}</div>
+        {% endif %}
       </main>
     </div>
   </div>
