@@ -10,120 +10,135 @@
   <link rel="stylesheet" href="/assets/console.css?v={{ asset_version }}" />
   <title>{{ title }} &middot; TeamShared Shared File</title>
   <style>
-    .file-public-shell { max-width: 72rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
-    .file-public-head { margin-bottom: 1.5rem; }
-    .file-public-head h1 { margin: 0 0 .25rem; font-size: 1.75rem; }
-    .file-public-head .file-meta { color: var(--muted, #6b7280); font-size: .85rem; }
-    .file-public-layout { display: grid; grid-template-columns: 16rem 1fr; gap: 1.5rem; align-items: start; }
-    .file-versions { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow: auto; }
-    .file-versions h3 { margin: 0 0 .5rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #6b7280); }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body { background: #0b0f14; }
+
+    /* Fixed left sidebar: brand, title, meta, version history. */
+    .file-sidebar {
+      position: fixed; left: 0; top: 0; bottom: 0;
+      width: 16rem; height: 100vh;
+      overflow-y: auto;
+      padding: 1.25rem 1rem 2rem;
+      background: #11161d;
+      color: #e5e7eb;
+      border-right: 1px solid #1f2a37;
+      box-sizing: border-box;
+      z-index: 20;
+    }
+    .file-sidebar .file-brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 1.25rem; text-decoration: none; color: inherit; }
+    .file-sidebar .file-brand .brand-mark { width: 1.25rem; height: 1.25rem; border-radius: .25rem; background: var(--accent, #4f46e5); display: inline-block; }
+    .file-sidebar .file-brand span { font-weight: 600; }
+    .file-sidebar h1 { margin: 0 0 .25rem; font-size: 1.2rem; line-height: 1.25; color: #fff; }
+    .file-sidebar .file-meta { color: #94a3b8; font-size: .8rem; margin-bottom: 1.25rem; }
+    .file-sidebar h3 { margin: 0 0 .5rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; }
     .file-versions ul { list-style: none; margin: 0; padding: 0; }
     .file-versions li { margin: 0 0 .25rem; }
-    .file-versions a { display: block; padding: .35rem .5rem; border-radius: .375rem; text-decoration: none; color: inherit; font-size: .9rem; }
-    .file-versions a:hover { background: var(--surface-2, #f3f4f6); }
-    .file-versions a.is-current { background: var(--accent-soft, #eef2ff); font-weight: 600; }
-    .file-versions a .v-num { color: var(--muted, #6b7280); font-size: .8rem; margin-left: .25rem; }
-    .file-content { min-width: 0; }
-    .file-content .file-html { line-height: 1.6; }
+    .file-versions a { display: block; padding: .4rem .5rem; border-radius: .375rem; text-decoration: none; color: #cbd5e1; font-size: .88rem; }
+    .file-versions a:hover { background: #1f2a37; }
+    .file-versions a.is-current { background: var(--accent, #4f46e5); color: #fff; font-weight: 600; }
+    .file-versions a .v-num { color: #94a3b8; font-size: .78rem; margin-left: .25rem; }
+    .file-versions a.is-current .v-num { color: #c7d2fe; }
+
+    /* Main content fills the remaining width to the right of the sidebar. */
+    .file-content { margin-left: 16rem; min-width: 0; }
+    .file-content .file-html { line-height: 1.6; max-width: 56rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; background: #fff; min-height: 100vh; }
     .file-content .file-html h1, .file-content .file-html h2 { margin-top: 1.5rem; }
     .file-content .file-html pre { overflow: auto; }
     .file-content .file-html table { border-collapse: collapse; }
     .file-content .file-html td, .file-content .file-html th { border: 1px solid var(--border, #e5e7eb); padding: .35rem .5rem; }
-    .file-version-banner { margin-bottom: 1rem; padding: .5rem .75rem; border-radius: .375rem; background: var(--surface-2, #f3f4f6); font-size: .85rem; }
+
+    /* Interactive HTML: iframe fills the entire remaining width and full height. */
+    .file-interactive-frame { width: 100%; height: 100vh; background: #fff; }
+    .file-interactive-frame iframe { width: 100%; height: 100vh; border: 0; display: block; background: #fff; }
+    .file-interactive-banner { margin: 0; padding: .75rem 1rem; background: #0f172a; color: #cbd5e1; font-size: .85rem; border-bottom: 1px solid #1f2a37; }
+    .file-interactive-banner a { color: #93c5fd; }
+
+    .file-version-banner { margin: 0; padding: .5rem 1rem; background: #fef3c7; color: #78350f; font-size: .85rem; border-bottom: 1px solid #fde68a; }
+    .file-version-banner a { color: #92400e; }
+
     .file-version-toggle { display: none; }
-    .file-brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; text-decoration: none; color: inherit; }
-    .file-brand .brand-mark { width: 1.25rem; height: 1.25rem; border-radius: .25rem; background: var(--accent, #4f46e5); display: inline-block; }
-    .file-brand span { font-weight: 600; }
 
     @media (max-width: 768px) {
-      .file-public-layout { grid-template-columns: 1fr; gap: .75rem; }
+      .file-sidebar { position: static; width: 100%; height: auto; max-height: none; }
+      .file-content { margin-left: 0; }
       .file-version-toggle {
         display: inline-flex; align-items: center; gap: .35rem;
-        background: var(--surface-2, #f3f4f6); border: 1px solid var(--border, #e5e7eb);
+        background: #1f2a37; border: 1px solid #334155; color: #e5e7eb;
         border-radius: .375rem; padding: .4rem .6rem; font-size: .85rem;
-        cursor: pointer; margin-bottom: .75rem;
+        cursor: pointer; margin: .5rem 1rem;
       }
-      .file-versions {
-        position: static; max-height: none; overflow: visible;
-        display: none; padding: .5rem; background: var(--surface-2, #f3f4f6);
-        border-radius: .5rem;
-      }
+      .file-versions { display: none; }
       .file-versions.is-open { display: block; }
     }
   </style>
 </head>
 <body>
-  <div class="file-public-shell">
+  <aside class="file-sidebar">
     <a class="file-brand" href="/">
       <span class="brand-mark" aria-hidden="true"></span><span>TeamShared</span>
     </a>
 
-    <div class="file-public-head">
-      <h1>{{ title }}</h1>
-      <div class="file-meta">
-        Version {{ current_version }}{% if not is_latest %} (latest is {{ file.current_version }}){% endif %}
-        &middot; by {{ file.author_label or 'unknown' }}
-      </div>
+    <h1>{{ title }}</h1>
+    <div class="file-meta">
+      Version {{ current_version }}{% if not is_latest %} (latest is {{ file.current_version }}){% endif %}
+      &middot; by {{ file.author_label or 'unknown' }}
     </div>
 
     <button class="file-version-toggle" type="button" aria-expanded="false"
       data-versions-toggle>Versions ({{ versions|length }})</button>
 
-    <div class="file-public-layout">
-      <aside class="file-versions" data-versions-panel>
-        <h3>Version history</h3>
-        {% if versions %}
-        <ul>
-          {% for v in versions %}
-          <li>
-            <a href="/s/{{ share_token }}?v={{ v.version }}"
-               class="{% if v.version == current_version %}is-current{% endif %}">
-              v{{ v.version }}<span class="v-num">&middot; {{ v.author_label or '' }}</span>
-            </a>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p style="color: var(--muted, #6b7280); font-size: .85rem;">No version history.</p>
-        {% endif %}
-      </aside>
-
-      <main class="file-content">
-        {% if not is_latest %}
-        <div class="file-version-banner">
-          Viewing an older version (v{{ current_version }}).
-          <a href="/s/{{ share_token }}">View latest (v{{ file.current_version }})</a>
-        </div>
-        {% endif %}
-        {% if embed_interactive %}
-        <div class="file-interactive-frame" style="border:1px solid var(--border,#e5e7eb);border-radius:.5rem;overflow:hidden;background:#fff;">
-          <iframe srcdoc="{{ raw_html }}"
-                  sandbox="allow-scripts allow-popups allow-forms allow-modals allow-popups-to-escape-sandbox"
-                  style="width:100%;height:90vh;border:0;display:block;background:#fff;"
-                  loading="lazy"
-                  title="{{ title }}"></iframe>
-        </div>
-        {% if direct_url %}
-        <div class="file-interactive-banner" style="margin-top:1rem;padding:.75rem 1rem;border-radius:.5rem;background:var(--accent-soft,#eef2ff);border:1px solid var(--border,#e5e7eb);font-size:.9rem;">
-          <strong>Standalone version.</strong> Open the mirrored copy in its own tab
-          (useful for fullscreen / sharing a direct link):
-          <a href="{{ direct_url }}" rel="noopener noreferrer" target="_blank">{{ direct_url }}</a>
-        </div>
-        {% endif %}
-        {% else %}
-        {% if direct_url %}
-        <div class="file-interactive-banner" style="margin-bottom:1rem;padding:.75rem 1rem;border-radius:.5rem;background:var(--accent-soft,#eef2ff);border:1px solid var(--border,#e5e7eb);font-size:.9rem;">
-          <strong>Interactive version.</strong> This page shows a sanitized
-          preview (scripts, canvas, and inputs are stripped for safety). For the
-          fully interactive tool, open the mirrored copy:
-          <a href="{{ direct_url }}" rel="noopener noreferrer" target="_blank">{{ direct_url }}</a>
-        </div>
-        {% endif %}
-        <div class="file-html">{{ content_html | safe }}</div>
-        {% endif %}
-      </main>
+    <div class="file-versions" data-versions-panel>
+      <h3>Version history</h3>
+      {% if versions %}
+      <ul>
+        {% for v in versions %}
+        <li>
+          <a href="/s/{{ share_token }}?v={{ v.version }}"
+             class="{% if v.version == current_version %}is-current{% endif %}">
+            v{{ v.version }}<span class="v-num">&middot; {{ v.author_label or '' }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p style="color: #94a3b8; font-size: .85rem;">No version history.</p>
+      {% endif %}
     </div>
-  </div>
+  </aside>
+
+  <main class="file-content">
+    {% if not is_latest %}
+    <div class="file-version-banner">
+      Viewing an older version (v{{ current_version }}).
+      <a href="/s/{{ share_token }}">View latest (v{{ file.current_version }})</a>
+    </div>
+    {% endif %}
+    {% if embed_interactive %}
+    {% if direct_url %}
+    <div class="file-interactive-banner">
+      <strong>Standalone version.</strong> Open the mirrored copy in its own tab
+      (useful for fullscreen / sharing a direct link):
+      <a href="{{ direct_url }}" rel="noopener noreferrer" target="_blank">{{ direct_url }}</a>
+    </div>
+    {% endif %}
+    <div class="file-interactive-frame">
+      <iframe srcdoc="{{ raw_html }}"
+              sandbox="allow-scripts allow-popups allow-forms allow-modals allow-popups-to-escape-sandbox"
+              loading="lazy"
+              title="{{ title }}"></iframe>
+    </div>
+    {% else %}
+    {% if direct_url %}
+    <div class="file-interactive-banner">
+      <strong>Interactive version.</strong> This page shows a sanitized
+      preview (scripts, canvas, and inputs are stripped for safety). For the
+      fully interactive tool, open the mirrored copy:
+      <a href="{{ direct_url }}" rel="noopener noreferrer" target="_blank">{{ direct_url }}</a>
+    </div>
+    {% endif %}
+    <div class="file-html">{{ content_html | safe }}</div>
+    {% endif %}
+  </main>
 
   <script>
     (function () {
