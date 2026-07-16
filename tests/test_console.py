@@ -426,7 +426,7 @@ def test_memory_explorer_lists_recent() -> None:
     resp = client.get("/app/memory")
     assert resp.status_code == 200
     assert "Memory explorer" in resp.text
-    assert "Ask the brain" in resp.text
+    assert "Ask the brain" not in resp.text
     assert "teamshared.com" in resp.text
     assert '/app/memory/m1' in resp.text
     services.vector_store.list_recent.assert_awaited()
@@ -440,41 +440,6 @@ def test_memory_explorer_search_uses_keyword_search() -> None:
     resp = client.get("/app/memory", params={"q": "postgres", "pillar": "semantic"})
     assert resp.status_code == 200
     services.vector_store.keyword_search.assert_awaited()
-
-
-def test_memory_think_renders_answer() -> None:
-    from teamshared.memory.types import ThinkCitation, ThinkGap, ThinkResult
-
-    client, services = _build()
-    services.vector_store.list_recent = AsyncMock(return_value=[])
-    facade = MagicMock()
-    facade.think = AsyncMock(
-        return_value=ThinkResult(
-            query="how do we deploy?",
-            answer_md="Use Railway with worker config paths.",
-            citations=[
-                ThinkCitation(
-                    memory_id="m1",
-                    pillar="semantic",
-                    snippet="Railway deploy guide",
-                    agent="cursor",
-                )
-            ],
-            gaps=[ThinkGap(kind="missing", claim="No CI doc found")],
-            sources_used=1,
-        )
-    )
-    set_state(SimpleNamespace(facade=facade))
-    _login(client)
-    resp = client.post(
-        "/app/memory/think",
-        data={"think_query": "how do we deploy?", "csrf_token": _csrf_token(client, "/app/memory")},
-    )
-    assert resp.status_code == 200
-    assert "Use Railway" in resp.text
-    assert "Railway deploy guide" in resp.text
-    assert "missing" in resp.text
-    facade.think.assert_awaited_once()
 
 
 def test_memory_detail_renders_item() -> None:

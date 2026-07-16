@@ -485,7 +485,7 @@ def _landing_page_html() -> str:
             <li>Memory wiki — curated topic pages, timeline, skills, and playbooks.</li>
             <li>Work &amp; projects — org task queue with boards, dependencies, and assignees.</li>
             <li>Strategy — vision, mission, and OKR cycles agents can recall.</li>
-            <li>Memory explorer — search, inspect records, and <strong>Ask the brain</strong>.</li>
+            <li>Memory explorer — search and inspect shared-brain records.</li>
             <li>Ontology — entity types, link types, and governed actions.</li>
             <li>People, orgs &amp; keys — multi-tenant OTP sign-in, invite teammates, mint API keys.</li>
           </ul>
@@ -501,7 +501,7 @@ def _landing_page_html() -> str:
               <div class="wrow"><span class="pill pill-epi">episodic</span> Shipped multi-tenant orgs · 013_accounts.sql</div>
               <div class="wrow"><span class="pill pill-proc">skill</span> ship-pr · atomic playbook building block</div>
               <div class="wrow"><span class="pill pill-epi">work</span> Multi-tenant OTP console shipped</div>
-              <div class="wrow muted">memory_think("how do we release?") → cited answer</div>
+              <div class="wrow muted">memory_recall("how do we release?") → ranked hits</div>
             </div>
           </div>
         </div>

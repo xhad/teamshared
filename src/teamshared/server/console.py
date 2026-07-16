@@ -1614,32 +1614,6 @@ def register_console_routes(
         ctx.update({"q": q, "pillar": pillar or "", "records": records, "note": note})
         return _TEMPLATES.TemplateResponse(request, "memory.html", ctx)
 
-    async def memory_think(request: Request) -> Response:
-        principal = _session(request)
-        if principal is None:
-            return _redirect_login()
-        form, fail = await _verified_form(request)
-        if fail is not None:
-            return fail
-        query = str(form.get("think_query") or "").strip()
-        if not query:
-            return RedirectResponse("/app/memory?flash=empty_query", status_code=303)
-        ctx = await _shell(request, principal, "memory")
-        ctx.update({"q": "", "pillar": "", "records": [], "note": "", "think_query": query})
-        try:
-            result = await get_state().facade.think(principal, query=query)
-            ctx["think"] = {
-                "query": result.query,
-                "answer_html": render_markdown_safe(result.answer_md),
-                "citations": result.citations,
-                "gaps": result.gaps,
-                "sources_used": result.sources_used,
-            }
-        except Exception as exc:
-            log.warning("memory_think_failed", error=str(exc))
-            ctx["note"] = f"Think unavailable: {exc}"
-        return _TEMPLATES.TemplateResponse(request, "memory.html", ctx)
-
     async def memory_detail(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
@@ -2158,7 +2132,6 @@ def register_console_routes(
         Route("/app/strategy/statement", strategy_statement_propose, methods=["POST"]),
         Route("/app/strategy/plans/{plan_id}", strategy_plan_detail, methods=["GET"]),
         Route("/app/memory", memory_explorer, methods=["GET"]),
-        Route("/app/memory/think", memory_think, methods=["POST"]),
         Route("/app/memory/{memory_id}", memory_detail, methods=["GET"]),
         Route("/app/people", people_page, methods=["GET"]),
         Route("/app/people/add", people_add, methods=["POST"]),
