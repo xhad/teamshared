@@ -1,8 +1,8 @@
-/* TeamShared console — design tokens & layout */
+/* TeamShared console — Clear · Grounded · Editorial (see .impeccable.md)
+   Dark-only knowledge workspace: deep space bg, indigo accents, system sans. */
 :root {
   color-scheme: dark;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
-  --font-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --bg: #07080d;
@@ -30,11 +30,12 @@
   --sidebar-w: 15.5rem;
   --topbar-h: 3.25rem;
   --radius-sm: 0.375rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 0.875rem;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.25);
-  --shadow-md: 0 12px 32px rgba(0,0,0,0.35);
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.28);
+  --shadow-md: 0 16px 40px rgba(0,0,0,0.4);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --space-panel: 1.15rem 1.35rem;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -100,12 +101,12 @@ aside.sidebar {
 aside .brand {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.65rem;
   font-weight: 700;
   color: var(--text);
-  font-size: 1.05rem;
-  padding: 0 1.25rem 1.1rem;
-  letter-spacing: -0.01em;
+  font-size: 1.08rem;
+  padding: 0.15rem 1.25rem 1.25rem;
+  letter-spacing: -0.025em;
 }
 
 aside .brand .ver {
@@ -114,64 +115,73 @@ aside .brand .ver {
   color: var(--faint);
   letter-spacing: 0.02em;
   align-self: center;
-  margin-left: -0.2rem;
+  margin-left: -0.15rem;
+  padding: 0.12rem 0.35rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
 }
 
-aside .brand a.ver:hover { color: var(--accent); }
+aside .brand a.ver:hover { color: var(--accent); border-color: rgba(99,102,241,.35); }
 
 .brand-mark {
-  width: 1.4rem;
-  height: 1.4rem;
+  width: 1.55rem;
+  height: 1.55rem;
   border-radius: var(--radius-sm);
   flex: none;
   background: url("/assets/logo.png") center/contain no-repeat;
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 aside nav {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
-  padding: 0 0.65rem;
+  gap: 0.12rem;
+  padding: 0 0.7rem;
   flex: 1;
 }
 
 aside nav a {
   color: var(--muted);
-  padding: 0.5rem 0.85rem;
+  padding: 0.48rem 0.8rem;
   border-radius: var(--radius-md);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 500;
   transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out);
 }
 
 aside nav a:hover {
-  background: var(--panel-2);
+  background: rgba(255,255,255,0.04);
   color: var(--text);
 }
 
 aside nav a.active {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-bright);
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .nav-section-label {
-  padding: 0.85rem 0.85rem 0.25rem;
-  font-size: 0.62rem;
+  padding: 1rem 0.8rem 0.3rem;
+  font-size: 0.6rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--faint);
 }
 
 .nav-section-label:first-child {
-  padding-top: 0.15rem;
+  padding-top: 0.25rem;
 }
 
 .main {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background:
+    radial-gradient(ellipse 70% 40% at 100% 0%, rgba(99,102,241,0.06), transparent 55%),
+    var(--bg);
 }
 
 header.topbar {
@@ -181,8 +191,8 @@ header.topbar {
   gap: 1rem;
   padding: 0 1.5rem;
   min-height: var(--topbar-h);
-  background: rgba(7,8,13,.72);
-  backdrop-filter: saturate(140%) blur(10px);
+  background: rgba(7,8,13,.78);
+  backdrop-filter: saturate(140%) blur(12px);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -193,8 +203,8 @@ header.topbar {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.35rem;
+  height: 2.35rem;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -202,6 +212,12 @@ header.topbar {
   color: var(--text);
   cursor: pointer;
   flex-shrink: 0;
+  transition: border-color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+}
+
+.nav-toggle:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
 }
 
 .nav-toggle svg { width: 1.1rem; height: 1.1rem; }
@@ -232,32 +248,43 @@ main.content {
   cursor: pointer;
 }
 
-/* Typography */
+/* Typography — weight + tracking, not a second typeface */
 h1 {
-  font-family: var(--font-serif);
-  font-size: clamp(1.45rem, 1.2rem + 1vw, 1.85rem);
-  font-weight: 600;
-  margin: 0 0 0.35rem;
-  letter-spacing: -0.02em;
+  font-family: var(--font-sans);
+  font-size: clamp(1.5rem, 1.25rem + 1vw, 1.9rem);
+  font-weight: 650;
+  margin: 0 0 0.4rem;
+  letter-spacing: -0.03em;
   color: var(--text);
   line-height: 1.2;
   text-wrap: balance;
 }
 
 h2 {
-  font-family: var(--font-serif);
-  font-size: clamp(1.05rem, 1rem + 0.4vw, 1.2rem);
-  font-weight: 600;
-  margin: 1.75rem 0 0.75rem;
-  letter-spacing: -0.01em;
+  font-family: var(--font-sans);
+  font-size: clamp(0.95rem, 0.9rem + 0.3vw, 1.05rem);
+  font-weight: 650;
+  margin: 2rem 0 0.85rem;
+  letter-spacing: -0.015em;
   color: var(--text);
   text-wrap: balance;
 }
 
+h2.section-quiet {
+  margin-top: 2.25rem;
+  color: var(--faint);
+  font-weight: 650;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .sub {
   color: var(--muted);
-  margin: 0 0 0.75rem;
-  max-width: 42rem;
+  margin: 0 0 1.25rem;
+  max-width: 40rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
 }
 
 .page-head {
@@ -277,6 +304,40 @@ h2 {
   flex-wrap: wrap;
   align-items: center;
 }
+
+.stats-row-secondary {
+  opacity: 0.92;
+}
+
+.stats-row-secondary .stat .num {
+  font-size: clamp(1.25rem, 1.15rem + 0.5vw, 1.55rem);
+}
+
+.onboarding-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.onboarding-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.92rem;
+}
+
+.onboarding-list .check {
+  width: 1.25rem;
+  text-align: center;
+  color: var(--faint);
+  font-weight: 600;
+}
+
+.onboarding-list li.done .check { color: var(--success); }
+.onboarding-list li.done a { color: var(--muted); }
 
 /* Stats & surfaces */
 .stats-row {
@@ -303,7 +364,7 @@ h2 {
 .stat a { color: inherit; text-decoration: none; display: block; }
 
 .stat .num {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: clamp(1.6rem, 1.4rem + 0.8vw, 2rem);
   font-weight: 600;
   color: var(--text);
@@ -345,7 +406,7 @@ h2 {
 }
 
 .card .num {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: 1.85rem;
   font-weight: 600;
   color: var(--text);
@@ -369,16 +430,33 @@ h2 {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 1.1rem 1.25rem;
+  padding: var(--space-panel);
   box-shadow: var(--shadow-sm);
+}
+
+.panel.panel-lead {
+  margin-bottom: 1.5rem;
+  border-color: rgba(99,102,241,0.22);
+  background:
+    linear-gradient(135deg, rgba(99,102,241,0.08), transparent 55%),
+    var(--panel);
+}
+
+.panel.panel-lead h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+  text-transform: none;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  font-weight: 650;
 }
 
 .panel h3 {
   margin: 0 0 0.9rem;
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.72rem;
+  font-weight: 650;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--faint);
 }
 
@@ -453,18 +531,19 @@ table {
 
 th, td {
   text-align: left;
-  padding: 0.55rem 0.65rem;
+  padding: 0.6rem 0.75rem;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
 
 th {
   color: var(--faint);
-  font-weight: 600;
+  font-weight: 650;
   text-transform: uppercase;
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
   white-space: nowrap;
+  background: rgba(0,0,0,0.15);
 }
 
 tbody tr:hover td { background: var(--panel-2); }
@@ -731,7 +810,7 @@ tbody tr:hover td { background: var(--panel-2); }
   font-size: 1.2rem;
 }
 
-.work-empty h3 { margin: 0 0 0.35rem; font-family: var(--font-serif); font-size: 1.05rem; font-weight: 600; }
+.work-empty h3 { margin: 0 0 0.35rem; font-family: var(--font-sans); font-size: 1.05rem; font-weight: 600; }
 .work-empty p { margin: 0 0 1.1rem; color: var(--muted); font-size: 0.9rem; max-width: 22rem; margin-inline: auto; }
 
 .work-form-shell { max-width: 56rem; margin: 0 auto; }
@@ -781,7 +860,7 @@ tbody tr:hover td { background: var(--panel-2); }
   border-radius: 0;
   background: transparent;
   color: var(--text);
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: clamp(1.35rem, 1.2rem + 0.6vw, 1.65rem);
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -918,7 +997,7 @@ tbody tr:hover td { background: var(--panel-2); }
 
 .work-detail-title {
   margin: 0 0 1.25rem;
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: clamp(1.35rem, 1.2rem + 0.6vw, 1.65rem);
   letter-spacing: -0.02em;
   line-height: 1.25;
@@ -1104,7 +1183,7 @@ tbody tr:hover td { background: var(--panel-2); }
 
 /* Prose */
 .prose { font-size: 0.92rem; max-width: 65ch; }
-.prose h1, .prose h2, .prose h3 { font-family: var(--font-serif); margin: 1rem 0 0.5rem; }
+.prose h1, .prose h2, .prose h3 { font-family: var(--font-sans); margin: 1rem 0 0.5rem; }
 
 .prose pre {
   background: var(--panel-2);
@@ -1195,7 +1274,7 @@ tbody tr:hover td { background: var(--panel-2); }
 
 button,
 .btn {
-  padding: 0.45rem 0.95rem;
+  padding: 0.48rem 1rem;
   border: 0;
   border-radius: var(--radius-md);
   background: var(--accent);
@@ -1204,23 +1283,47 @@ button,
   font-size: 0.85rem;
   font-weight: 600;
   font-family: inherit;
-  transition: background 0.15s var(--ease-out), transform 0.1s var(--ease-out);
+  letter-spacing: -0.01em;
+  transition: background 0.15s var(--ease-out), transform 0.1s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
 
-button:hover { background: var(--accent-bright); }
-button:active { transform: scale(0.98); }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:hover,
+.btn:hover { background: var(--accent-bright); }
+button:active,
+.btn:active { transform: scale(0.98); }
+button:focus-visible,
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 button.danger { background: var(--danger); }
 button.danger:hover { background: #ef4444; }
 
-button.ghost {
-  background: var(--panel-2);
+button.ghost,
+.btn.ghost {
+  background: transparent;
   color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+button.ghost:hover,
+.btn.ghost:hover {
+  background: var(--panel-2);
+  border-color: var(--border-strong);
+}
+
+button.quiet,
+.btn.quiet {
+  background: var(--panel-2);
+  color: var(--muted);
   border: 1px solid var(--border);
 }
 
-button.ghost:hover { background: var(--panel); border-color: var(--border-strong); }
+button.quiet:hover,
+.btn.quiet:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--panel);
+}
 
 td.actions { white-space: nowrap; }
 td.actions form { display: inline; margin-right: 0.3rem; }
@@ -1278,7 +1381,7 @@ td.actions form { display: inline; margin-right: 0.3rem; }
 
 .topbar-start { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
 
-/* Login page */
+/* Login page — brand-first, calm atmosphere */
 body.login-page {
   min-height: 100vh;
   display: flex;
@@ -1286,40 +1389,62 @@ body.login-page {
   justify-content: center;
   padding: 1.5rem;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, var(--accent-soft), transparent 70%),
+    radial-gradient(ellipse 90% 55% at 50% -15%, rgba(99,102,241,0.22), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 90% 90%, rgba(129,140,248,0.08), transparent 50%),
+    radial-gradient(ellipse 40% 35% at 10% 80%, rgba(99,102,241,0.06), transparent 45%),
     var(--bg);
 }
 
 form.login {
-  width: min(100%, 24rem);
-  background: var(--panel);
+  width: min(100%, 24.5rem);
+  background: rgba(17,19,29,0.92);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 2rem;
+  padding: 2.15rem 2rem 2rem;
   box-shadow: var(--shadow-md);
+  backdrop-filter: blur(8px);
+}
+
+form.login .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin-bottom: 0.35rem;
+}
+
+form.login .brand .brand-mark {
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 form.login h1 {
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   font-size: 1.35rem;
   margin: 0 0 1rem;
 }
 
 form.login label {
   display: block;
-  margin-bottom: 0.35rem;
-  font-weight: 600;
-  font-size: 0.88rem;
+  margin-bottom: 0.4rem;
+  font-weight: 650;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
 }
 
 form.login input[type=email],
 form.login input[name=code] {
   width: 100%;
-  padding: 0.65rem 0.75rem;
+  padding: 0.7rem 0.85rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   font-size: 1rem;
-  background: var(--panel-2);
+  background: var(--bg-soft);
   color: var(--text);
   font-family: inherit;
 }
@@ -1333,49 +1458,58 @@ form.login input:focus {
 }
 
 form.login input[name=code] {
-  letter-spacing: 0.35rem;
+  letter-spacing: 0.4rem;
   text-align: center;
-  font-size: 1.35rem;
+  font-size: 1.45rem;
   font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  padding: 0.85rem 0.75rem;
 }
 
 form.login button {
-  margin-top: 1rem;
+  margin-top: 1.15rem;
   width: 100%;
-  padding: 0.7rem 1rem;
-  font-size: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
 }
 
 form.login .note {
   background: var(--accent-soft);
-  border: 1px solid rgba(99,102,241,.3);
+  border: 1px solid rgba(99,102,241,.32);
   border-radius: var(--radius-md);
-  padding: 0.7rem 0.9rem;
-  margin: 0 0 1rem;
-  font-size: 0.88rem;
+  padding: 0.8rem 0.95rem;
+  margin: 0 0 1.15rem;
+  font-size: 0.9rem;
   color: var(--text);
+  line-height: 1.45;
 }
 
 form.login .note.err {
   background: var(--danger-soft);
-  border-color: rgba(248,113,113,.3);
+  border-color: rgba(248,113,113,.35);
   color: var(--danger);
 }
 
 form.login .otp {
   display: block;
-  margin-top: 0.4rem;
-  font-size: 1.5rem;
+  margin-top: 0.55rem;
+  font-size: 1.65rem;
   font-weight: 700;
-  letter-spacing: 0.35rem;
-  color: var(--text);
+  letter-spacing: 0.4rem;
+  color: var(--accent-bright);
   font-variant-numeric: tabular-nums;
 }
 
-form.login .alt { margin: 0.9rem 0 0; font-size: 0.85rem; text-align: center; }
+form.login .alt { margin: 1rem 0 0; font-size: 0.85rem; text-align: center; }
 form.login .alt a { color: var(--muted); }
-form.login .alt a:hover { color: var(--accent); }
-form.login .tagline { color: var(--muted); font-size: 0.9rem; margin: -0.5rem 0 1.4rem; }
+form.login .alt a:hover { color: var(--accent-bright); }
+form.login .tagline {
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin: 0 0 1.5rem;
+  line-height: 1.45;
+  max-width: 22rem;
+}
 
 /* Responsive */
 @media (max-width: 900px) {

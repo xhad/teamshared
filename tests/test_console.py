@@ -261,7 +261,7 @@ def test_otp_grants_session_and_renders_home(state_with_stats) -> None:
     _login(client)
     resp = client.get("/app")
     assert resp.status_code == 200
-    assert "Team mind overview" in resp.text
+    assert "At a glance" in resp.text
     # Live stats rendered through the home template.
     assert "Working sessions" in resp.text
     assert "cursor" in resp.text

@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Home{% endblock %}
 {% block content %}
-  <h1>Team mind overview</h1>
-  <p class="sub">The shared brain at a glance — live counts and recent activity.
-    <a href="/app/settings">System status</a> is on Settings.</p>
+  <h1>TeamShared</h1>
+  <p class="sub">Your org’s shared brain — memory, tasks, and recent activity in one place.
+    <a href="/app/settings">System status</a> lives under Settings.</p>
 
   {% if onboarding_steps and onboarding_steps | selectattr('done', 'equalto', false) | list %}
-  <div class="panel">
+  <div class="panel panel-lead">
     <h2>Get to first shared recall</h2>
     <p class="sub">The product becomes useful when two agents can share a real decision.</p>
-    <ul>
+    <ul class="onboarding-list">
       {% for step in onboarding_steps %}
-      <li>
-        {% if step.done %}<span aria-label="complete">✓</span>{% else %}<span aria-label="incomplete">○</span>{% endif %}
+      <li class="{% if step.done %}done{% endif %}">
+        {% if step.done %}<span class="check" aria-label="complete">✓</span>{% else %}<span class="check" aria-label="incomplete">○</span>{% endif %}
         <a href="{{ step.href }}">{{ step.label }}</a>
       </li>
       {% endfor %}
@@ -20,7 +20,7 @@
   </div>
   {% endif %}
 
-  <h2>Overview</h2>
+  <h2 class="section-quiet">At a glance</h2>
   <div class="stats-row" role="list">
     <div class="stat" role="listitem">
       <div class="num">{{ working_active }}</div>
@@ -51,8 +51,8 @@
     </div>
   </div>
 
-  <h2>Shared recall — last 7 days</h2>
-  <div class="stats-row" role="list">
+  <h2 class="section-quiet">Shared recall — last 7 days</h2>
+  <div class="stats-row stats-row-secondary" role="list">
     <div class="stat" role="listitem">
       <div class="num">{{ recall_metrics.get('active_agents', 0) }}</div>
       <div class="label">Active agents</div>
@@ -75,7 +75,7 @@
     </div>
   </div>
 
-  <h2>Breakdown &amp; activity</h2>
+  <h2 class="section-quiet">Breakdown &amp; activity</h2>
   <div class="grid2">
     <div class="panel">
       <h3>Memory by agent</h3>
@@ -108,7 +108,7 @@
           </tbody>
         </table>
       </div>
-      <p class="sub" style="margin-top:.75rem"><a href="/app/audit">View full audit log</a></p>
+      <p class="sub" style="margin-top:.75rem; margin-bottom:0"><a href="/app/audit">View full audit log</a></p>
       {% else %}
         <p class="muted">No activity recorded yet.</p>
       {% endif %}
