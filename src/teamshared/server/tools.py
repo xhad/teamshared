@@ -2183,13 +2183,13 @@ def register_tools(mcp: Any) -> None:
             channel=channel, thread_id=thread_id, thread_ts=thread_ts,
         )
 
-    # --- plans (versioned HTML/Markdown documents) ------------------------
+    # --- shared files (versioned HTML/Markdown documents) ----------------
 
     @mcp.tool()
-    async def plan_create(
-        title: Annotated[str, Field(description="Plan title")],
+    async def file_create(
+        title: Annotated[str, Field(description="File title")],
         content: Annotated[
-            str, Field(description="Plan body (markdown or raw HTML)")
+            str, Field(description="File body (markdown or raw HTML)")
         ],
         content_format: Annotated[
             str,
@@ -2197,15 +2197,15 @@ def register_tools(mcp: Any) -> None:
         ] = "markdown",
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Create a new versioned plan in the caller's org.
+        """Create a new versioned shared file in the caller's org.
 
-        Plans default to private. Call ``plan_publish`` to generate the public
-        share URL (``/plan/{share_token}``). Each ``plan_update`` creates a new
-        immutable version row.
+        Shared files default to private. Call ``file_publish`` to generate the
+        public share URL (``/s/{share_token}``). Each ``file_update`` creates a
+        new immutable version row.
         """
         state = get_state()
         principal = await _principal()
-        return await state.facade.plan_create(
+        return await state.facade.file_create(
             principal,
             title=title,
             content=content,
@@ -2214,87 +2214,130 @@ def register_tools(mcp: Any) -> None:
         )
 
     @mcp.tool()
-    async def plan_update(
-        plan_id: Annotated[str, Field(description="Plan UUID to update")],
-        content: Annotated[str, Field(description="New plan body (markdown or raw HTML)")],
+    async def file_upload_request(
+        title: Annotated[str, Field(description="File title for the uploaded file")],
         content_format: Annotated[
+            str,
+            Field(description="'html', 'markdown', or 'auto' (sniff from the file extension)"),
+        ] = "auto",
+        filename: Annotated[
             str | None,
-            Field(description="Override content format ('markdown' or 'html'); defaults to the plan's current format"),
+            Field(description="Optional filename (used for format sniffing and as the script's default path)"),
+        ] = None,
+        publish: Annotated[
+            bool, Field(description="If true, the uploaded file is published immediately (returns public URLs)")
+        ] = False,
+        upload_base_url: Annotated[
+            str | None,
+            Field(description="Optional server origin (e.g. https://teamshared.com). Defaults to settings.public_url."),
         ] = None,
         agent: Annotated[str | None, Field(description="Override agent identity")] = None,
     ) -> dict[str, Any]:
-        """Append a new version to an existing plan (version = prior max + 1).
+        """Get a one-time uploader script to push a local file into a shared file.
 
-        If the plan is published, the new version is eagerly mirrored to the
+        For large local HTML/Markdown files that don't fit inline in
+        ``file_create``. Returns ``upload_url``, ``upload_token``, an
+        ``expires_in_seconds`` TTL, and a self-deleting Python ``script``.
+        Save the script to disk and run ``python3 upload.py /path/to/file``;
+        it reads the file, POSTs it to the server with the one-time token,
+        prints the resulting file id (and public URL if ``publish=true``), and
+        deletes itself on success. The token is single-use and expires in ~10 min.
+        """
+        state = get_state()
+        principal = await _principal()
+        base = upload_base_url or getattr(state.settings, "public_url", None)
+        return await state.facade.file_upload_request(
+            principal,
+            title=title,
+            content_format=content_format,
+            filename=filename,
+            publish=publish,
+            upload_base_url=base,
+            agent_override=agent,
+        )
+
+    @mcp.tool()
+    async def file_update(
+        file_id: Annotated[str, Field(description="File UUID to update")],
+        content: Annotated[str, Field(description="New file body (markdown or raw HTML)")],
+        content_format: Annotated[
+            str | None,
+            Field(description="Override content format ('markdown' or 'html'); defaults to the file's current format"),
+        ] = None,
+        agent: Annotated[str | None, Field(description="Override agent identity")] = None,
+    ) -> dict[str, Any]:
+        """Append a new version to an existing shared file (version = prior max + 1).
+
+        If the file is published, the new version is eagerly mirrored to the
         Railway bucket. Old versions are never mutated.
         """
         state = get_state()
         principal = await _principal()
-        return await state.facade.plan_update(
+        return await state.facade.file_update(
             principal,
-            plan_id=plan_id,
+            file_id=file_id,
             content=content,
             content_format=content_format,
             agent_override=agent,
         )
 
     @mcp.tool()
-    async def plan_get(
-        plan_id: Annotated[str, Field(description="Plan UUID")],
+    async def file_get(
+        file_id: Annotated[str, Field(description="File UUID")],
     ) -> dict[str, Any]:
-        """Fetch a plan with its latest version content."""
+        """Fetch a shared file with its latest version content."""
         state = get_state()
         principal = await _principal()
-        return await state.facade.plan_get(principal, plan_id=plan_id)
+        return await state.facade.file_get(principal, file_id=file_id)
 
     @mcp.tool()
-    async def plan_list(
+    async def file_list(
         limit: Annotated[int, Field(ge=1, le=200)] = 100,
     ) -> dict[str, Any]:
-        """List all active plans in the caller's org, newest update first."""
+        """List all active shared files in the caller's org, newest update first."""
         state = get_state()
         principal = await _principal()
-        return await state.facade.plan_list(principal, limit=limit)
+        return await state.facade.file_list(principal, limit=limit)
 
     @mcp.tool()
-    async def plan_publish(
-        plan_id: Annotated[str, Field(description="Plan UUID to publish")],
+    async def file_publish(
+        file_id: Annotated[str, Field(description="File UUID to publish")],
     ) -> dict[str, Any]:
-        """Publish a plan: generate the public share token and URL.
+        """Publish a shared file: generate the public share token and URL.
 
         Idempotent: returns the existing token if already published. The latest
         rendered HTML is eagerly pushed to the Railway bucket. The public URL is
-        ``/plan/{share_token}``.
+        ``/s/{share_token}``.
         """
         state = get_state()
         principal = await _principal()
-        return await state.facade.plan_publish(principal, plan_id=plan_id)
+        return await state.facade.file_publish(principal, file_id=file_id)
 
     @mcp.tool()
-    async def plan_unpublish(
-        plan_id: Annotated[str, Field(description="Plan UUID to unpublish")],
+    async def file_unpublish(
+        file_id: Annotated[str, Field(description="File UUID to unpublish")],
     ) -> dict[str, Any]:
-        """Revoke public access to a plan (visibility back to private).
+        """Revoke public access to a shared file (visibility back to private).
 
         The share token is retained for audit; the public route returns 404. Best-effort
         removes the mirrored objects from the Railway bucket.
         """
         state = get_state()
         principal = await _principal()
-        return await state.facade.plan_unpublish(principal, plan_id=plan_id)
+        return await state.facade.file_unpublish(principal, file_id=file_id)
 
     @mcp.tool()
-    async def plan_archive(
-        plan_id: Annotated[str, Field(description="Plan UUID to archive")],
+    async def file_archive(
+        file_id: Annotated[str, Field(description="File UUID to archive")],
     ) -> dict[str, Any]:
-        """Archive a plan (excluded from active lists) and clean up its bucket mirror (if published).
+        """Archive a shared file (excluded from active lists) and clean up its bucket mirror (if published).
 
-        Archived plans are retained with full version history for audit; the public
-        ``/plan/{share_token}`` route returns 404 for an archived plan.
+        Archived files are retained with full version history for audit; the public
+        ``/s/{share_token}`` route returns 404 for an archived file.
         """
         state = get_state()
         principal = await _principal()
-        return await state.facade.plan_archive(principal, plan_id=plan_id)
+        return await state.facade.file_archive(principal, file_id=file_id)
 
 
 def _resolve_dependency_ids(

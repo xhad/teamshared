@@ -190,29 +190,35 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
     facade.project_status_post = AsyncMock(
         return_value={"id": "s1", "state": "on_track"}
     )
-    facade.plan_create = AsyncMock(
+    facade.file_create = AsyncMock(
         return_value={"id": "p1", "title": "t", "version": 1, "content_format": "markdown",
                       "visibility": "private", "content": "# t"}
     )
-    facade.plan_update = AsyncMock(
+    facade.file_upload_request = AsyncMock(
+        return_value={"upload_url": "https://teamshared.com/v1/files/upload",
+                      "upload_token": "tok-xyz", "expires_in_seconds": 600,
+                      "content_format": "auto", "publish": False, "script": "#!/usr/bin/env python3\n...",
+                      "instructions": "save and run"}
+    )
+    facade.file_update = AsyncMock(
         return_value={"id": "p1", "title": "t", "version": 2, "content_format": "markdown",
                       "visibility": "private", "content": "# t2"}
     )
-    facade.plan_get = AsyncMock(
+    facade.file_get = AsyncMock(
         return_value={"id": "p1", "title": "t", "current_version": 1,
                       "content_format": "markdown", "content": "# t", "visibility": "private"}
     )
-    facade.plan_list = AsyncMock(return_value={"count": 1, "plans": [
+    facade.file_list = AsyncMock(return_value={"count": 1, "files": [
         {"id": "p1", "title": "t", "current_version": 1, "visibility": "private"}
     ]})
-    facade.plan_publish = AsyncMock(
+    facade.file_publish = AsyncMock(
         return_value={"id": "p1", "share_token": "tok-123", "visibility": "published",
-                      "public_url": "/plan/tok-123"}
+                      "public_url": "/s/tok-123"}
     )
-    facade.plan_unpublish = AsyncMock(
+    facade.file_unpublish = AsyncMock(
         return_value={"id": "p1", "visibility": "private"}
     )
-    facade.plan_archive = AsyncMock(return_value={"plan_id": "p1", "archived": True})
+    facade.file_archive = AsyncMock(return_value={"file_id": "p1", "archived": True})
 
     settings = MagicMock()
     settings.embed_provider = "openai"
@@ -855,60 +861,77 @@ async def test_integration_send_slack_delegates_to_connectors(
     assert state.services.connectors.send.await_args.kwargs["thread_ts"] == "1699999999.0"
 
 
-async def test_plan_create_delegates_to_facade(
+async def test_file_create_delegates_to_facade(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:
     mcp, state = mcp_with_mocks
     data = await _call(
-        mcp, "plan_create", title="Q3 plan", content="# Goals", content_format="markdown",
+        mcp, "file_create", title="Q3 file", content="# Goals", content_format="markdown",
     )
     assert data["id"] == "p1"
     assert data["version"] == 1
-    state.facade.plan_create.assert_awaited_once()
-    kwargs = state.facade.plan_create.await_args.kwargs
-    assert kwargs["title"] == "Q3 plan"
+    state.facade.file_create.assert_awaited_once()
+    kwargs = state.facade.file_create.await_args.kwargs
+    assert kwargs["title"] == "Q3 file"
     assert kwargs["content"] == "# Goals"
     assert kwargs["content_format"] == "markdown"
 
 
-async def test_plan_update_delegates_to_facade(
+async def test_file_upload_request_delegates_to_facade(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:
     mcp, state = mcp_with_mocks
-    data = await _call(mcp, "plan_update", plan_id="p1", content="# Goals v2")
+    data = await _call(
+        mcp, "file_upload_request",
+        title="Vault modeller", content_format="auto", filename="modeller.html", publish=True,
+    )
+    assert data["upload_token"] == "tok-xyz"
+    assert data["upload_url"].endswith("/v1/files/upload")
+    state.facade.file_upload_request.assert_awaited_once()
+    kwargs = state.facade.file_upload_request.await_args.kwargs
+    assert kwargs["title"] == "Vault modeller"
+    assert kwargs["filename"] == "modeller.html"
+    assert kwargs["publish"] is True
+
+
+async def test_file_update_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    data = await _call(mcp, "file_update", file_id="p1", content="# Goals v2")
     assert data["version"] == 2
-    state.facade.plan_update.assert_awaited_once()
-    kwargs = state.facade.plan_update.await_args.kwargs
-    assert kwargs["plan_id"] == "p1"
+    state.facade.file_update.assert_awaited_once()
+    kwargs = state.facade.file_update.await_args.kwargs
+    assert kwargs["file_id"] == "p1"
     assert kwargs["content"] == "# Goals v2"
 
 
-async def test_plan_publish_delegates_to_facade(
+async def test_file_publish_delegates_to_facade(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:
     mcp, state = mcp_with_mocks
-    data = await _call(mcp, "plan_publish", plan_id="p1")
+    data = await _call(mcp, "file_publish", file_id="p1")
     assert data["share_token"] == "tok-123"
-    assert data["public_url"] == "/plan/tok-123"
-    state.facade.plan_publish.assert_awaited_once()
-    assert state.facade.plan_publish.await_args.kwargs["plan_id"] == "p1"
+    assert data["public_url"] == "/s/tok-123"
+    state.facade.file_publish.assert_awaited_once()
+    assert state.facade.file_publish.await_args.kwargs["file_id"] == "p1"
 
 
-async def test_plan_archive_delegates_to_facade(
+async def test_file_archive_delegates_to_facade(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:
     mcp, state = mcp_with_mocks
-    data = await _call(mcp, "plan_archive", plan_id="p1")
+    data = await _call(mcp, "file_archive", file_id="p1")
     assert data["archived"] is True
-    state.facade.plan_archive.assert_awaited_once()
-    assert state.facade.plan_archive.await_args.kwargs["plan_id"] == "p1"
+    state.facade.file_archive.assert_awaited_once()
+    assert state.facade.file_archive.await_args.kwargs["file_id"] == "p1"
 
 
-async def test_plan_list_delegates_to_facade(
+async def test_file_list_delegates_to_facade(
     mcp_with_mocks: tuple[FastMCP, ServerState],
 ) -> None:
     mcp, state = mcp_with_mocks
-    data = await _call(mcp, "plan_list", limit=50)
+    data = await _call(mcp, "file_list", limit=50)
     assert data["count"] == 1
-    state.facade.plan_list.assert_awaited_once()
-    assert state.facade.plan_list.await_args.kwargs["limit"] == 50
+    state.facade.file_list.assert_awaited_once()
+    assert state.facade.file_list.await_args.kwargs["limit"] == 50

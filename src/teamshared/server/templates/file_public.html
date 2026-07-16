@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/assets/console.css?v={{ asset_version }}" />
+  <title>{{ title }} &middot; TeamShared Shared File</title>
+  <style>
+    .file-public-shell { max-width: 72rem; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+    .file-public-head { margin-bottom: 1.5rem; }
+    .file-public-head h1 { margin: 0 0 .25rem; font-size: 1.75rem; }
+    .file-public-head .file-meta { color: var(--muted, #6b7280); font-size: .85rem; }
+    .file-public-layout { display: grid; grid-template-columns: 16rem 1fr; gap: 1.5rem; align-items: start; }
+    .file-versions { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow: auto; }
+    .file-versions h3 { margin: 0 0 .5rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #6b7280); }
+    .file-versions ul { list-style: none; margin: 0; padding: 0; }
+    .file-versions li { margin: 0 0 .25rem; }
+    .file-versions a { display: block; padding: .35rem .5rem; border-radius: .375rem; text-decoration: none; color: inherit; font-size: .9rem; }
+    .file-versions a:hover { background: var(--surface-2, #f3f4f6); }
+    .file-versions a.is-current { background: var(--accent-soft, #eef2ff); font-weight: 600; }
+    .file-versions a .v-num { color: var(--muted, #6b7280); font-size: .8rem; margin-left: .25rem; }
+    .file-content { min-width: 0; }
+    .file-content .file-html { line-height: 1.6; }
+    .file-content .file-html h1, .file-content .file-html h2 { margin-top: 1.5rem; }
+    .file-content .file-html pre { overflow: auto; }
+    .file-content .file-html table { border-collapse: collapse; }
+    .file-content .file-html td, .file-content .file-html th { border: 1px solid var(--border, #e5e7eb); padding: .35rem .5rem; }
+    .file-version-banner { margin-bottom: 1rem; padding: .5rem .75rem; border-radius: .375rem; background: var(--surface-2, #f3f4f6); font-size: .85rem; }
+    .file-version-toggle { display: none; }
+    .file-brand { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; text-decoration: none; color: inherit; }
+    .file-brand .brand-mark { width: 1.25rem; height: 1.25rem; border-radius: .25rem; background: var(--accent, #4f46e5); display: inline-block; }
+    .file-brand span { font-weight: 600; }
+
+    @media (max-width: 768px) {
+      .file-public-layout { grid-template-columns: 1fr; gap: .75rem; }
+      .file-version-toggle {
+        display: inline-flex; align-items: center; gap: .35rem;
+        background: var(--surface-2, #f3f4f6); border: 1px solid var(--border, #e5e7eb);
+        border-radius: .375rem; padding: .4rem .6rem; font-size: .85rem;
+        cursor: pointer; margin-bottom: .75rem;
+      }
+      .file-versions {
+        position: static; max-height: none; overflow: visible;
+        display: none; padding: .5rem; background: var(--surface-2, #f3f4f6);
+        border-radius: .5rem;
+      }
+      .file-versions.is-open { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <div class="file-public-shell">
+    <a class="file-brand" href="/">
+      <span class="brand-mark" aria-hidden="true"></span><span>TeamShared</span>
+    </a>
+
+    <div class="file-public-head">
+      <h1>{{ title }}</h1>
+      <div class="file-meta">
+        Version {{ current_version }}{% if not is_latest %} (latest is {{ file.current_version }}){% endif %}
+        &middot; by {{ file.author_label or 'unknown' }}
+      </div>
+    </div>
+
+    <button class="file-version-toggle" type="button" aria-expanded="false"
+      data-versions-toggle>Versions ({{ versions|length }})</button>
+
+    <div class="file-public-layout">
+      <aside class="file-versions" data-versions-panel>
+        <h3>Version history</h3>
+        {% if versions %}
+        <ul>
+          {% for v in versions %}
+          <li>
+            <a href="/s/{{ share_token }}?v={{ v.version }}"
+               class="{% if v.version == current_version %}is-current{% endif %}">
+              v{{ v.version }}<span class="v-num">&middot; {{ v.author_label or '' }}</span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p style="color: var(--muted, #6b7280); font-size: .85rem;">No version history.</p>
+        {% endif %}
+      </aside>
+
+      <main class="file-content">
+        {% if not is_latest %}
+        <div class="file-version-banner">
+          Viewing an older version (v{{ current_version }}).
+          <a href="/s/{{ share_token }}">View latest (v{{ file.current_version }})</a>
+        </div>
+        {% endif %}
+        {% if direct_url %}
+        <div class="file-interactive-banner" style="margin-bottom:1rem;padding:.75rem 1rem;border-radius:.5rem;background:var(--accent-soft,#eef2ff);border:1px solid var(--border,#e5e7eb);font-size:.9rem;">
+          <strong>Interactive version.</strong> This page shows a sanitized
+          preview (scripts, canvas, and inputs are stripped for safety). For the
+          fully interactive tool, open the mirrored copy:
+          <a href="{{ direct_url }}" rel="noopener noreferrer" target="_blank">{{ direct_url }}</a>
+        </div>
+        {% endif %}
+        <div class="file-html">{{ content_html | safe }}</div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var btn = document.querySelector('[data-versions-toggle]');
+      var panel = document.querySelector('[data-versions-panel]');
+      if (!btn || !panel) return;
+      btn.addEventListener('click', function () {
+        var open = panel.classList.toggle('is-open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    })();
+  </script>
+</body>
+</html>

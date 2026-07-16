@@ -62,6 +62,13 @@ _OTP_PREFIX = "auth:otp:login:"
 # without trusting the browser.
 _OAUTH_STATE_PREFIX = "auth:oauth:state:"
 
+# One-time file-upload grants. An authenticated agent mints a grant (storing the
+# caller's org/principal/title/format), returns an upload URL + secret + a small
+# self-deleting local script. The script POSTs the file body to /v1/files/upload
+# with X-Upload-Token; the handler pops the grant (single-use) and creates the
+# shared file. Lets large local files bypass chat-JSON size limits.
+_FILE_UPLOAD_PREFIX = "file:upload:"
+
 
 def _otp_key(email: str) -> str:
     return f"{_OTP_PREFIX}{email.strip().lower()}"
@@ -69,6 +76,10 @@ def _otp_key(email: str) -> str:
 
 def _oauth_state_key(state: str) -> str:
     return f"{_OAUTH_STATE_PREFIX}{state}"
+
+
+def _file_upload_key(token: str) -> str:
+    return f"{_FILE_UPLOAD_PREFIX}{token}"
 
 
 def _hash_otp(code: str) -> str:
@@ -218,6 +229,29 @@ class WorkingMemory:
     async def pop_oauth_state(self, state: str) -> dict[str, Any] | None:
         """Consume and return the OAuth state payload, or None if missing/expired."""
         raw = await self.client.getdel(_oauth_state_key(state))
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+
+    # --- One-time file-upload grants ---------------------------------------
+
+    async def set_file_upload_grant(
+        self, token: str, payload: dict[str, Any], *, ttl: int = 600
+    ) -> None:
+        """Store a short-lived, single-use file-upload grant.
+
+        ``payload`` carries the minting principal's org/attribution plus the
+        file title/format/filename so the public upload endpoint can create the
+        shared file without a bearer. Single-use: popped atomically on read.
+        """
+        await self.client.set(_file_upload_key(token), json.dumps(payload), ex=ttl)
+
+    async def pop_file_upload_grant(self, token: str) -> dict[str, Any] | None:
+        """Consume and return the file-upload grant, or None if missing/expired."""
+        raw = await self.client.getdel(_file_upload_key(token))
         if raw is None:
             return None
         try:

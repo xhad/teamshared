@@ -1544,10 +1544,10 @@ def test_connections_sync_without_csrf_rejected() -> None:
     services.connectors.sync.assert_not_awaited()
 
 
-def test_plans_page_lists_plans() -> None:
+def test_files_page_lists_files() -> None:
     client, services = _build()
-    services.plans.list_plans = AsyncMock(return_value=[
-        {"id": "p1", "title": "Q3 plan", "content_format": "markdown",
+    services.shared_files.list_plans = AsyncMock(return_value=[
+        {"id": "p1", "title": "Q3 file", "content_format": "markdown",
          "visibility": "published", "current_version": 2,
          "created_by": "cursor", "updated_at": "2026-07-16T12:00:00+00:00",
          "share_token": "tok-1"},
@@ -1557,65 +1557,65 @@ def test_plans_page_lists_plans() -> None:
          "share_token": None},
     ])
     _login(client)
-    resp = client.get("/app/plans")
+    resp = client.get("/app/files")
     assert resp.status_code == 200
-    assert "Q3 plan" in resp.text
+    assert "Q3 file" in resp.text
     assert "Draft" in resp.text
     assert "published" in resp.text
     assert "private" in resp.text
-    assert "/app/plans/new" in resp.text
-    assert "/app/plans/p1" in resp.text
-    services.plans.list_plans.assert_awaited_once()
+    assert "/app/files/new" in resp.text
+    assert "/app/files/p1" in resp.text
+    services.shared_files.list_plans.assert_awaited_once()
 
 
-def test_plans_page_empty_renders() -> None:
+def test_files_page_empty_renders() -> None:
     client, services = _build()
-    services.plans.list_plans = AsyncMock(return_value=[])
+    services.shared_files.list_plans = AsyncMock(return_value=[])
     _login(client)
-    resp = client.get("/app/plans")
+    resp = client.get("/app/files")
     assert resp.status_code == 200
-    assert "No plans yet" in resp.text
+    assert "No files yet" in resp.text
 
 
-def test_plan_detail_renders_version_history() -> None:
+def test_file_detail_renders_version_history() -> None:
     client, services = _build()
-    plan_id = uuid.uuid4()
-    services.plans.get = AsyncMock(return_value={
-        "id": str(plan_id), "title": "Q3 plan", "current_version": 2,
+    file_id = uuid.uuid4()
+    services.shared_files.get = AsyncMock(return_value={
+        "id": str(file_id), "title": "Q3 file", "current_version": 2,
         "content_format": "markdown", "visibility": "published",
         "share_token": "tok-1", "content": "# v2 body",
         "updated_at": "2026-07-16T12:00:00+00:00", "created_by": "cursor",
     })
-    services.plans.list_versions = AsyncMock(return_value=[
+    services.shared_files.list_versions = AsyncMock(return_value=[
         {"version": 2, "author_label": "cursor", "created_at": "2026-07-16T12:00:00+00:00"},
         {"version": 1, "author_label": "cursor", "created_at": "2026-07-15T10:00:00+00:00"},
     ])
     _login(client)
-    resp = client.get(f"/app/plans/{plan_id}")
+    resp = client.get(f"/app/files/{file_id}")
     assert resp.status_code == 200
-    assert "Q3 plan" in resp.text
+    assert "Q3 file" in resp.text
     assert "v2 body" in resp.text
     assert "Version history" in resp.text
-    assert "/plan/tok-1" in resp.text
-    services.plans.get.assert_awaited_once()
-    services.plans.list_versions.assert_awaited_once()
+    assert "/s/tok-1" in resp.text
+    services.shared_files.get.assert_awaited_once()
+    services.shared_files.list_versions.assert_awaited_once()
 
 
-def test_plan_new_form_renders() -> None:
+def test_file_new_form_renders() -> None:
     client, _ = _build()
     _login(client)
-    resp = client.get("/app/plans/new")
+    resp = client.get("/app/files/new")
     assert resp.status_code == 200
     assert 'name="title"' in resp.text
     assert 'name="content"' in resp.text
     assert 'name="content_format"' in resp.text
-    assert "New plan" in resp.text
+    assert "New file" in resp.text
 
 
-def test_plan_save_creates_new_plan() -> None:
+def test_file_save_creates_new_file() -> None:
     client, _ = _build()
     facade = MagicMock()
-    facade.plan_create = AsyncMock(return_value={
+    facade.file_create = AsyncMock(return_value={
         "id": "p-new", "title": "New", "version": 1,
     })
     state = _fake_state()
@@ -1623,22 +1623,22 @@ def test_plan_save_creates_new_plan() -> None:
     set_state(state)
     _login(client)
     resp = _app_post(
-        client, "/app/plans/save",
+        client, "/app/files/save",
         {"title": "New", "content": "# Goals", "content_format": "markdown"},
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/plans/p-new?flash=created"
-    facade.plan_create.assert_awaited_once()
-    kwargs = facade.plan_create.await_args.kwargs
+    assert resp.headers["location"] == "/app/files/p-new?flash=created"
+    facade.file_create.assert_awaited_once()
+    kwargs = facade.file_create.await_args.kwargs
     assert kwargs["title"] == "New"
     assert kwargs["content"] == "# Goals"
     clear_state()
 
 
-def test_plan_save_updates_existing_plan() -> None:
+def test_file_save_updates_existing_file() -> None:
     client, _ = _build()
     facade = MagicMock()
-    facade.plan_update = AsyncMock(return_value={
+    facade.file_update = AsyncMock(return_value={
         "id": "p1", "title": "Q3", "version": 2,
     })
     state = _fake_state()
@@ -1646,85 +1646,85 @@ def test_plan_save_updates_existing_plan() -> None:
     set_state(state)
     _login(client)
     resp = _app_post(
-        client, "/app/plans/save",
-        {"plan_id": "p1", "title": "Q3", "content": "# v2", "content_format": "markdown"},
+        client, "/app/files/save",
+        {"file_id": "p1", "title": "Q3", "content": "# v2", "content_format": "markdown"},
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/plans/p1?flash=saved"
-    facade.plan_update.assert_awaited_once()
-    assert facade.plan_update.await_args.kwargs["plan_id"] == "p1"
+    assert resp.headers["location"] == "/app/files/p1?flash=saved"
+    facade.file_update.assert_awaited_once()
+    assert facade.file_update.await_args.kwargs["file_id"] == "p1"
     clear_state()
 
 
-def test_plan_save_requires_title_and_content() -> None:
+def test_file_save_requires_title_and_content() -> None:
     client, _ = _build()
     facade = MagicMock()
-    facade.plan_create = AsyncMock()
-    facade.plan_update = AsyncMock()
+    facade.file_create = AsyncMock()
+    facade.file_update = AsyncMock()
     state = _fake_state()
     state.facade = facade
     set_state(state)
     _login(client)
-    resp = _app_post(client, "/app/plans/save", {"title": "", "content": ""})
+    resp = _app_post(client, "/app/files/save", {"title": "", "content": ""})
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/plans?flash=invalid"
-    facade.plan_create.assert_not_awaited()
-    facade.plan_update.assert_not_awaited()
+    assert resp.headers["location"] == "/app/files?flash=invalid"
+    facade.file_create.assert_not_awaited()
+    facade.file_update.assert_not_awaited()
     clear_state()
 
 
-def test_plan_publish_redirects_with_token() -> None:
+def test_file_publish_redirects_with_token() -> None:
     client, _ = _build()
     facade = MagicMock()
-    facade.plan_publish = AsyncMock(return_value={
+    facade.file_publish = AsyncMock(return_value={
         "id": "p1", "share_token": "tok-1", "visibility": "published",
-        "public_url": "/plan/tok-1",
+        "public_url": "/s/tok-1",
     })
     state = _fake_state()
     state.facade = facade
     set_state(state)
     _login(client)
-    resp = _app_post(client, "/app/plans/p1/publish")
+    resp = _app_post(client, "/app/files/p1/publish")
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/plans/p1?flash=published"
-    facade.plan_publish.assert_awaited_once()
-    assert facade.plan_publish.await_args.kwargs["plan_id"] == "p1"
+    assert resp.headers["location"] == "/app/files/p1?flash=published"
+    facade.file_publish.assert_awaited_once()
+    assert facade.file_publish.await_args.kwargs["file_id"] == "p1"
     clear_state()
 
 
-def test_plan_unpublish_redirects() -> None:
+def test_file_unpublish_redirects() -> None:
     client, _ = _build()
     facade = MagicMock()
-    facade.plan_unpublish = AsyncMock(return_value={"id": "p1", "visibility": "private"})
+    facade.file_unpublish = AsyncMock(return_value={"id": "p1", "visibility": "private"})
     state = _fake_state()
     state.facade = facade
     set_state(state)
     _login(client)
-    resp = _app_post(client, "/app/plans/p1/unpublish")
+    resp = _app_post(client, "/app/files/p1/unpublish")
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/plans/p1?flash=unpublished"
-    facade.plan_unpublish.assert_awaited_once()
+    assert resp.headers["location"] == "/app/files/p1?flash=unpublished"
+    facade.file_unpublish.assert_awaited_once()
     clear_state()
 
 
-def test_plan_archive_redirects_to_list() -> None:
+def test_file_archive_redirects_to_list() -> None:
     client, _ = _build()
     facade = MagicMock()
-    facade.plan_archive = AsyncMock(return_value={"plan_id": "p1", "archived": True})
+    facade.file_archive = AsyncMock(return_value={"file_id": "p1", "archived": True})
     state = _fake_state()
     state.facade = facade
     set_state(state)
     _login(client)
-    resp = _app_post(client, "/app/plans/p1/archive")
+    resp = _app_post(client, "/app/files/p1/archive")
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/app/plans?flash=archived"
-    facade.plan_archive.assert_awaited_once()
+    assert resp.headers["location"] == "/app/files?flash=archived"
+    facade.file_archive.assert_awaited_once()
     clear_state()
 
 
-def test_plans_unauthenticated_redirects_to_login() -> None:
+def test_files_unauthenticated_redirects_to_login() -> None:
     client, _ = _build()
-    resp = client.get("/app/plans")
+    resp = client.get("/app/files")
     assert resp.status_code == 303
     assert resp.headers["location"] == "/login"
 

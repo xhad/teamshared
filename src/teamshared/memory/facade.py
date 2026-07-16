@@ -2284,9 +2284,9 @@ class MemoryFacade:
         if owner != caller:
             raise PermissionError(f"session {session_id} belongs to {owner!r}, not {caller!r}")
 
-    # --- plans (versioned HTML/Markdown documents) -----------------------
+    # --- shared files (versioned HTML/Markdown documents) ----------------
 
-    async def plan_create(
+    async def file_create(
         self,
         principal: Principal,
         *,
@@ -2297,11 +2297,11 @@ class MemoryFacade:
     ) -> dict[str, Any]:
         caller_ctx = self._ctx(principal)
         writer = await self._write_principal(
-            principal, agent_override, operation="plan_create",
+            principal, agent_override, operation="file_create",
             request_id=caller_ctx.request_id,
         )
         await caller_ctx.authorizer.require(writer, Permissions.MEMORY_CREATE)
-        row = await self.services.plans.create(
+        row = await self.services.shared_files.create(
             principal.org_id,
             title=title,
             content=content,
@@ -2310,34 +2310,105 @@ class MemoryFacade:
         )
         await self.services.audit.record(
             agent=writer.attribution,
-            action="plan.create",
+            action="file.create",
             org_id=principal.org_id,
             actor_type=writer.type,
             actor_id=writer.id,
-            resource_type="plan",
+            resource_type="file",
             resource_id=str(row["id"]),
             request_id=caller_ctx.request_id,
         )
-        return _serialize_plan(row)
+        return _serialize_file(row)
 
-    async def plan_update(
+    async def file_upload_request(
         self,
         principal: Principal,
         *,
-        plan_id: str,
+        title: str,
+        content_format: str = "auto",
+        filename: str | None = None,
+        publish: bool = False,
+        upload_base_url: str | None = None,
+        agent_override: str | None = None,
+    ) -> dict[str, Any]:
+        """Mint a one-time upload grant and return a self-deleting local script.
+
+        The caller (an agent) writes the returned ``script`` to disk and runs it
+        with the path to a local file. The script reads the file and POSTs it to
+        ``/v1/files/upload`` with the one-time token; the handler creates the
+        shared file (and optionally publishes it). This bypasses chat-JSON size
+        limits for large local HTML/Markdown files.
+        """
+        from teamshared.server.shared_files_upload import build_upload_script, mint_upload_grant
+
+        caller_ctx = self._ctx(principal)
+        writer = await self._write_principal(
+            principal, agent_override, operation="file_upload_request",
+            request_id=caller_ctx.request_id,
+        )
+        await caller_ctx.authorizer.require(writer, Permissions.MEMORY_CREATE)
+        grant = await mint_upload_grant(
+            services=self.services,
+            org_id=principal.org_id,
+            principal_id=writer.id,
+            principal_type=writer.type,
+            principal_display=writer.display or writer.attribution,
+            principal_attribution=writer.attribution,
+            title=title,
+            content_format=content_format,
+            filename=filename,
+            publish=publish,
+        )
+        await self.services.audit.record(
+            agent=writer.attribution,
+            action="file.upload_request",
+            org_id=principal.org_id,
+            actor_type=writer.type,
+            actor_id=writer.id,
+            resource_type="file",
+            request_id=caller_ctx.request_id,
+            payload={"publish": bool(publish), "filename": filename},
+        )
+        base = (upload_base_url or "").rstrip("/")
+        upload_url = f"{base}/v1/files/upload" if base else "/v1/files/upload"
+        script = build_upload_script(
+            upload_url=upload_url,
+            upload_token=grant["token"],
+            filename=filename,
+            publish=publish,
+        )
+        return {
+            "upload_url": upload_url,
+            "upload_token": grant["token"],
+            "expires_in_seconds": grant["ttl"],
+            "content_format": content_format,
+            "publish": bool(publish),
+            "script": script,
+            "instructions": (
+                "Save the script to a file (e.g. upload.py), then run: "
+                "python3 upload.py /path/to/your/file.html  — it POSTs the file "
+                "to teamshared and self-deletes on success."
+            ),
+        }
+
+    async def file_update(
+        self,
+        principal: Principal,
+        *,
+        file_id: str,
         content: str,
         content_format: str | None = None,
         agent_override: str | None = None,
     ) -> dict[str, Any]:
         caller_ctx = self._ctx(principal)
         writer = await self._write_principal(
-            principal, agent_override, operation="plan_update",
+            principal, agent_override, operation="file_update",
             request_id=caller_ctx.request_id,
         )
         await caller_ctx.authorizer.require(writer, Permissions.MEMORY_UPDATE)
-        row = await self.services.plans.update(
+        row = await self.services.shared_files.update(
             principal.org_id,
-            UUID(plan_id),
+            UUID(file_id),
             content=content,
             content_format=content_format,
             editor_label=writer.display or writer.attribution,
@@ -2346,140 +2417,147 @@ class MemoryFacade:
             return {}
         await self.services.audit.record(
             agent=writer.attribution,
-            action="plan.update",
+            action="file.update",
             org_id=principal.org_id,
             actor_type=writer.type,
             actor_id=writer.id,
-            resource_type="plan",
-            resource_id=plan_id,
+            resource_type="file",
+            resource_id=file_id,
             request_id=caller_ctx.request_id,
             payload={"version": row.get("version")},
         )
-        # Eagerly mirror the new version to the bucket when the plan is published.
+        # Eagerly mirror the new version to the bucket when the file is published.
         if row.get("visibility") == "published" and row.get("share_token"):
             await self._publish_to_bucket(row, content, content_format or row["content_format"])
-        return _serialize_plan(row)
+        return _serialize_file(row)
 
-    async def plan_get(
-        self, principal: Principal, *, plan_id: str
+    async def file_get(
+        self, principal: Principal, *, file_id: str
     ) -> dict[str, Any] | None:
         ctx = self._ctx(principal)
         await ctx.authorizer.require(principal, Permissions.MEMORY_READ)
-        row = await self.services.plans.get(principal.org_id, UUID(plan_id))
-        return _serialize_plan(row) if row else None
+        row = await self.services.shared_files.get(principal.org_id, UUID(file_id))
+        return _serialize_file(row) if row else None
 
-    async def plan_list(
+    async def file_list(
         self, principal: Principal, *, limit: int = 100
     ) -> dict[str, Any]:
         ctx = self._ctx(principal)
         await ctx.authorizer.require(principal, Permissions.MEMORY_READ)
-        rows = await self.services.plans.list_plans(principal.org_id, limit=limit)
-        return {"count": len(rows), "plans": [_serialize_plan(r) for r in rows]}
+        rows = await self.services.shared_files.list_plans(principal.org_id, limit=limit)
+        return {"count": len(rows), "files": [_serialize_file(r) for r in rows]}
 
-    async def plan_publish(
-        self, principal: Principal, *, plan_id: str
+    async def file_publish(
+        self, principal: Principal, *, file_id: str
     ) -> dict[str, Any]:
         caller_ctx = self._ctx(principal)
         await caller_ctx.authorizer.require(principal, Permissions.MEMORY_UPDATE)
-        row = await self.services.plans.publish(principal.org_id, UUID(plan_id))
+        row = await self.services.shared_files.publish(principal.org_id, UUID(file_id))
         if not row:
             return {}
         await self.services.audit.record(
             agent=principal.attribution,
-            action="plan.publish",
+            action="file.publish",
             org_id=principal.org_id,
             actor_type=principal.type,
             actor_id=principal.id,
-            resource_type="plan",
-            resource_id=plan_id,
+            resource_type="file",
+            resource_id=file_id,
             request_id=caller_ctx.request_id,
             payload={"share_token": row.get("share_token")},
         )
-        # Eagerly push the latest rendered HTML to the bucket.
-        latest = await self.services.plans.get(principal.org_id, UUID(plan_id))
+        # Eagerly mirror the file to the bucket. For content_format='html' we
+        # mirror the RAW author HTML verbatim so interactive tools (script,
+        # canvas, inputs) keep working via the direct CDN URL; the /s/{token}
+        # route still renders a sanitized shell. Markdown is rendered to safe
+        # HTML here.
+        latest = await self.services.shared_files.get(principal.org_id, UUID(file_id))
         if latest and row.get("share_token"):
-            html = _render_plan_html(latest.get("content") or "", latest.get("content_format") or "markdown")
-            await self._publish_to_bucket(row, html, "html")
-        out = _serialize_plan(row)
-        out["public_url"] = f"/plan/{row['share_token']}" if row.get("share_token") else None
-        publisher = self.services.plan_publisher
+            await self._publish_to_bucket(
+                row,
+                latest.get("content") or "",
+                latest.get("content_format") or "markdown",
+            )
+        out = _serialize_file(row)
+        out["public_url"] = f"/s/{row['share_token']}" if row.get("share_token") else None
+        publisher = self.services.file_publisher
         if publisher and row.get("share_token"):
             direct = publisher.public_url(row["share_token"])
             if direct:
                 out["public_url_direct"] = direct
         return out
 
-    async def plan_unpublish(
-        self, principal: Principal, *, plan_id: str
+    async def file_unpublish(
+        self, principal: Principal, *, file_id: str
     ) -> dict[str, Any]:
         caller_ctx = self._ctx(principal)
         await caller_ctx.authorizer.require(principal, Permissions.MEMORY_UPDATE)
-        row = await self.services.plans.unpublish(principal.org_id, UUID(plan_id))
+        row = await self.services.shared_files.unpublish(principal.org_id, UUID(file_id))
         if not row:
             return {}
         await self.services.audit.record(
             agent=principal.attribution,
-            action="plan.unpublish",
+            action="file.unpublish",
             org_id=principal.org_id,
             actor_type=principal.type,
             actor_id=principal.id,
-            resource_type="plan",
-            resource_id=plan_id,
+            resource_type="file",
+            resource_id=file_id,
             request_id=caller_ctx.request_id,
         )
-        publisher = self.services.plan_publisher
+        publisher = self.services.file_publisher
         if publisher and row.get("share_token"):
             try:
                 await publisher.unpublish(row["share_token"])
             except Exception as exc:
-                log.warning("plan_bucket_unpublish_failed", error=str(exc))
-        return _serialize_plan(row)
+                log.warning("file_bucket_unpublish_failed", error=str(exc))
+        return _serialize_file(row)
 
-    async def plan_archive(
-        self, principal: Principal, *, plan_id: str
+    async def file_archive(
+        self, principal: Principal, *, file_id: str
     ) -> dict[str, Any]:
         caller_ctx = self._ctx(principal)
         await caller_ctx.authorizer.require(principal, Permissions.MEMORY_DELETE)
-        existing = await self.services.plans.get(principal.org_id, UUID(plan_id))
+        existing = await self.services.shared_files.get(principal.org_id, UUID(file_id))
         token = existing.get("share_token") if existing else None
-        changed = await self.services.plans.archive(principal.org_id, UUID(plan_id))
+        changed = await self.services.shared_files.archive(principal.org_id, UUID(file_id))
         if not changed:
-            return {"plan_id": plan_id, "archived": False}
+            return {"file_id": file_id, "archived": False}
         await self.services.audit.record(
             agent=principal.attribution,
-            action="plan.archive",
+            action="file.archive",
             org_id=principal.org_id,
             actor_type=principal.type,
             actor_id=principal.id,
-            resource_type="plan",
-            resource_id=plan_id,
+            resource_type="file",
+            resource_id=file_id,
             request_id=caller_ctx.request_id,
         )
-        publisher = self.services.plan_publisher
+        publisher = self.services.file_publisher
         if publisher and token:
             try:
                 await publisher.unpublish(token)
             except Exception as exc:
-                log.warning("plan_bucket_archive_failed", error=str(exc))
-        return {"plan_id": plan_id, "archived": True}
+                log.warning("file_bucket_archive_failed", error=str(exc))
+        return {"file_id": file_id, "archived": True}
 
     async def _publish_to_bucket(
-        self, plan_row: dict[str, Any], content: str, content_format: str
+        self, file_row: dict[str, Any], content: str, content_format: str
     ) -> None:
-        publisher = self.services.plan_publisher
-        token = plan_row.get("share_token")
-        version = plan_row.get("version") or plan_row.get("current_version")
+        publisher = self.services.file_publisher
+        token = file_row.get("share_token")
+        version = file_row.get("version") or file_row.get("current_version")
         if not publisher or not token or not version:
             return
-        html = content if content_format == "html" else _render_plan_html(content, content_format)
+        html = content if content_format == "html" else _render_file_html(content, content_format)
         try:
             await publisher.publish_html(str(token), int(version), html)
         except Exception as exc:
-            log.warning("plan_bucket_publish_failed", error=str(exc))
+            log.warning("file_bucket_publish_failed", error=str(exc))
 
 
-def _render_plan_html(content: str, content_format: str) -> str:
-    """Render plan content to a safe HTML fragment for the bucket mirror."""
+def _render_file_html(content: str, content_format: str) -> str:
+    """Render shared-file content to a safe HTML fragment for the bucket mirror."""
     from teamshared.server.markdown_safe import render_markdown_safe, sanitize_html
 
     if content_format == "html":
@@ -2487,7 +2565,7 @@ def _render_plan_html(content: str, content_format: str) -> str:
     return render_markdown_safe(content)
 
 
-def _serialize_plan(value: dict[str, Any] | None) -> dict[str, Any]:
+def _serialize_file(value: dict[str, Any] | None) -> dict[str, Any]:
     if value is None:
         return {}
     out: dict[str, Any] = {}

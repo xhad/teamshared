@@ -30,10 +30,11 @@ from teamshared.server.api.middleware import (
     PrincipalAuthMiddleware,
     RateLimitMiddleware,
 )
+from teamshared.server.shared_files_upload import handle_shared_file_upload
 from teamshared.server.rate_limit import enforce_admin_export, enforce_admin_purge
 from teamshared.server.services import ProductionServices
 
-_PUBLIC = frozenset({"/v1/healthz", "/v1/orgs", "/v1/integrations/oauth/start", "/v1/integrations/oauth/callback"})
+_PUBLIC = frozenset({"/v1/healthz", "/v1/orgs", "/v1/integrations/oauth/start", "/v1/integrations/oauth/callback", "/v1/files/upload"})
 
 
 def _ctx(request: Request, services: ProductionServices) -> RequestContext:
@@ -396,6 +397,10 @@ def build_api_app(
         Route("/admin/users/{user_id}/memory", purge_user, methods=["DELETE"]),
     ]
     routes.extend(integration_routes(services))
+
+    async def files_upload(request: Request) -> JSONResponse:
+        return await handle_shared_file_upload(request, services)
+    routes.append(Route("/files/upload", files_upload, methods=["POST"]))
 
     middleware = [
         Middleware(

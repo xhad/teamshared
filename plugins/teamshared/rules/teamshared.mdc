@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.11.0
+version: 1.11.3
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.11.0 -->
+<!-- teamshared-rule-version: 1.11.3 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -150,31 +150,54 @@ Kinds: `gmail`, `slack`, `discord`. If `integration_list` is empty, tell the
 user to connect under `/app/connections` — do not invent messages. Slack
 `message_id` is `channel:ts`; Discord is `channel_id:message_id`.
 
-### Plans (versioned HTML/Markdown documents)
+### Shared files (versioned HTML/Markdown documents)
 
-Plans are versioned documents authored from agent chat (`plan_create` /
-`plan_update`) or the console (`/app/plans`). Each update creates a new
-immutable version row; the latest version is the live content. Plans default
-to **private**. `plan_publish` stamps a `share_token` and serves the plan at
-`/plan/{share_token}` (no-auth, sanitized through the allowlist). `plan_archive`
-retains full history but excludes the plan from active lists and the public
+Shared files are versioned documents authored from agent chat (`file_create` /
+`file_update`) or the console (`/app/files`). Each update creates a new
+immutable version row; the latest version is the live content. Files default
+to **private**. `file_publish` stamps a `share_token` and serves the file at
+`/s/{share_token}` (no-auth, sanitized through the allowlist). `file_archive`
+retains full history but excludes the file from active lists and the public
 route. Rendered HTML is mirrored eagerly to an S3-compatible bucket when
 `TEAMSHARED_OBJECT_STORAGE_*` is configured (Postgres stays canonical).
 
+When the user says **"share this file"** (or "share this") for a local file on
+their machine, use `file_upload_request` (with `publish=true`) — it mints a
+one-time grant and returns a self-deleting uploader script. For inline content
+(small enough to pass through chat), use `file_create` then `file_publish`.
+
 | Want | Tool |
 |---|---|
-| Create a plan | `plan_create(title, content, content_format='markdown')` |
-| Append a new version | `plan_update(plan_id, content, content_format?)` |
-| Fetch a plan (latest version) | `plan_get(plan_id)` |
-| List active plans in the org | `plan_list(limit=100)` |
-| Publish / get the public URL | `plan_publish(plan_id)` → `share_token`, `/plan/{token}` |
-| Revoke public access | `plan_unpublish(plan_id)` |
-| Archive (retain history) | `plan_archive(plan_id)` |
+| Create a shared file | `file_create(title, content, content_format='markdown')` |
+| Upload a large local file into a shared file | `file_upload_request(title, content_format='auto', filename?, publish?)` → one-time script |
+| Append a new version | `file_update(file_id, content, content_format?)` |
+| Fetch a shared file (latest version) | `file_get(file_id)` |
+| List active shared files in the org | `file_list(limit=100)` |
+| Publish / get the public URL | `file_publish(file_id)` → `share_token`, `/s/{token}` |
+| Revoke public access | `file_unpublish(file_id)` |
+| Archive (retain history) | `file_archive(file_id)` |
 
 `content_format` is `'markdown'` (rendered through the allowlist sanitizer) or
-`'html'` (sanitized raw HTML, same allowlist). The public URL is returned in
-`plan_publish`'s `public_url`; a direct CDN link is added when
-`object_storage_public_base_url` is set.
+`'html'`. **Important:** the `/s/{token}` route always sanitizes HTML through
+the allowlist (strips `<script>`, `<canvas>`, `<input>`, `<style>`, …) so
+agent-authored HTML can never run JS on the no-auth public page. For interactive
+HTML tools (charts, sliders, simulations) the sanitizer would break the page, so
+`file_publish` mirrors the **raw, unsanitized** HTML to the S3 bucket and returns
+`public_url_direct` — share **that** CDN link for interactive content, not
+`/s/{token}`. The `/s/{token}` page shows a sanitized preview plus an
+"Open interactive version" link to `public_url_direct` when a bucket is
+configured. `public_url_direct` is only present when
+`TEAMSHARED_OBJECT_STORAGE_*` (incl. `object_storage_public_base_url`) is set.
+
+**Uploading large local files:** `file_create` takes inline content, which
+breaks for big HTML/Markdown blobs passed through chat JSON. For a file on the
+user's machine, call `file_upload_request` — it mints a one-time grant and
+returns `upload_url`, `upload_token`, `expires_in_seconds` (~600), and a
+self-deleting Python `script` (stdlib only). Save the script to disk and run
+`python3 upload.py /path/to/file`; it reads the file, POSTs the raw bytes to
+`/v1/files/upload` with the one-time token (single-use, ~10 min TTL), prints the
+resulting `file_id` (and `public_url`/`public_url_direct` if `publish=true`),
+and deletes itself on success. The token is consumed on first use.
 
 ### Assemble context
 
@@ -666,33 +689,40 @@ inbox/channel questions; use `memory_recall` for already-ingested
 
 Connecting accounts is a human console action (`/app/connections`), not an MCP tool.
 
-### `plan_create` / `plan_update` / `plan_get` / `plan_list` / `plan_publish` / `plan_unpublish` / `plan_archive`
+### `file_create` / `file_upload_request` / `file_update` / `file_get` / `file_list` / `file_publish` / `file_unpublish` / `file_archive`
 
-Versioned HTML/Markdown plans stored canonically in Postgres (append-only
-`plan_versions`) and mirrored eagerly to an S3-compatible bucket on
-publish/update when `TEAMSHARED_OBJECT_STORAGE_*` is configured. Plans default
-private; `plan_publish` generates the public `/plan/{share_token}` URL.
+Versioned HTML/Markdown shared files stored canonically in Postgres (append-only
+`shared_file_versions`) and mirrored eagerly to an S3-compatible bucket on
+publish/update when `TEAMSHARED_OBJECT_STORAGE_*` is configured. Files default
+private; `file_publish` generates the public `/s/{share_token}` URL.
 
 | Tool | When |
 |---|---|
-| `plan_create` | New plan (version 1, private) |
-| `plan_update` | Append a new version (version = prior max + 1); old versions immutable |
-| `plan_get` | Fetch a plan with its latest version content |
-| `plan_list` | Active plans in the caller's org, newest update first |
-| `plan_publish` | Stamp `share_token`, flip to published, mirror to bucket; idempotent |
-| `plan_unpublish` | Visibility back to private (token retained for audit; bucket cleaned) |
-| `plan_archive` | Exclude from active lists + public route; retain full history for audit |
+| `file_create` | New shared file (version 1, private) — inline content (small) |
+| `file_upload_request` | Get a one-time local uploader script for a large local file → `POST /v1/files/upload` creates the shared file |
+| `file_update` | Append a new version (version = prior max + 1); old versions immutable |
+| `file_get` | Fetch a shared file with its latest version content |
+| `file_list` | Active shared files in the caller's org, newest update first |
+| `file_publish` | Stamp `share_token`, flip to published, mirror to bucket; idempotent |
+| `file_unpublish` | Visibility back to private (token retained for audit; bucket cleaned) |
+| `file_archive` | Exclude from active lists + public route; retain full history for audit |
 
 | Param | Use |
 |---|---|
-| `plan_id` | Plan UUID |
-| `title` | Plan title (create) |
-| `content` | Plan body (markdown or raw HTML) |
-| `content_format` | `'markdown'` (sanitized render) or `'html'` (sanitized raw); defaults to the plan's current format on update |
+| `file_id` | File UUID |
+| `title` | File title (create) |
+| `content` | File body (markdown or raw HTML) — `file_create` only |
+| `content_format` | `'markdown'` (sanitized render), `'html'` (raw mirror), or `'auto'` (sniff from filename) for upload |
+| `filename` | (`file_upload_request`) hint for format sniffing + script default path |
+| `publish` | (`file_upload_request`) publish immediately and return public URLs |
+| `upload_base_url` | (`file_upload_request`) server origin; defaults to `settings.public_url` |
 | `agent` | Override attribution (audited) |
 
-The public `/plan/{share_token}` route is no-auth and renders content through
-the allowlist sanitizer — no XSS surface. Console CRUD lives at `/app/plans`.
+The public `/s/{share_token}` route is no-auth and renders content through
+the allowlist sanitizer — no XSS surface. Console CRUD lives at `/app/files`.
+`file_upload_request` returns a self-deleting stdlib Python script; the upload
+token is single-use (~10 min TTL) and the `POST /v1/files/upload` endpoint is
+public but gated by that token (no bearer required).
 
 ## Quick chooser
 
@@ -728,9 +758,10 @@ the allowlist sanitizer — no XSS surface. Console CRUD lives at `/app/plans`.
 | Live search mail/chat | `integration_search` |
 | Fetch + ingest one message | `integration_read` |
 | Send email / Slack / Discord | `integration_send` (user-requested only) |
-| Create / update a versioned plan | `plan_create` / `plan_update` |
-| Publish a plan (public URL) | `plan_publish` |
-| Archive a plan (retain history) | `plan_archive` |
+| Create / update a versioned shared file | `file_create` / `file_update` |
+| Upload a large local file into a shared file | `file_upload_request` |
+| Publish a shared file (public URL) | `file_publish` |
+| Archive a shared file (retain history) | `file_archive` |
 
 ## Never
 

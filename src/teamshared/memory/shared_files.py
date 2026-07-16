@@ -1,17 +1,17 @@
-"""Versioned HTML/Markdown plans over :class:`TenantDb` (RLS-enforced).
+"""Versioned HTML/Markdown shared files over :class:`TenantDb` (RLS-enforced).
 
-Plans are documents authored by agents (via MCP tools) or humans (via the
-console). Each update creates a new immutable ``plan_versions`` row (append-only
-history, same model as ``wiki_pages`` / ``skills``); the latest version per plan
-is the live content.
+Shared files are documents authored by agents (via MCP tools) or humans (via the
+console). Each update creates a new immutable ``shared_file_versions`` row
+(append-only history, same model as ``wiki_pages`` / ``skills``); the latest
+version per file is the live content.
 
-Plans default to ``visibility='private'``. :meth:`publish` stamps a
+Shared files default to ``visibility='private'``. :meth:`publish` stamps a
 ``share_token`` UUID and flips visibility to ``'published'``; the public URL is
-``/plan/{share_token}``. The public read path (:meth:`get_published_by_token`,
+``/s/{share_token}``. The public read path (:meth:`get_published_by_token`,
 :meth:`list_published_versions`, :meth:`get_published_version`) runs through
 SECURITY DEFINER functions over an RLS-less ``db.admin()`` connection because
 the public route has no org context -- the functions fail closed (return
-nothing) unless the plan is published AND active.
+nothing) unless the file is published AND active.
 """
 
 from __future__ import annotations
@@ -21,18 +21,18 @@ from uuid import UUID
 
 from teamshared.tenancy.context import TenantDb
 
-_PLAN_FIELDS = (
+_FILE_FIELDS = (
     "id", "org_id", "title", "content_format", "visibility", "share_token",
     "current_version", "status", "created_by", "created_at", "updated_at",
 )
-_PLAN_SELECT = (
+_FILE_SELECT = (
     "id, org_id, title, content_format, visibility, share_token, "
     "current_version, status, created_by, created_at, updated_at"
 )
 
 
-def _plan_row(row: tuple[Any, ...]) -> dict[str, Any]:
-    d = dict(zip(_PLAN_FIELDS, row, strict=False))
+def _file_row(row: tuple[Any, ...]) -> dict[str, Any]:
+    d = dict(zip(_FILE_FIELDS, row, strict=False))
     d["id"] = str(d["id"])
     d["org_id"] = str(d["org_id"])
     d["share_token"] = str(d["share_token"]) if d.get("share_token") else None
@@ -41,7 +41,7 @@ def _plan_row(row: tuple[Any, ...]) -> dict[str, Any]:
 
 def _version_row(row: tuple[Any, ...]) -> dict[str, Any]:
     return {
-        "plan_id": str(row[0]),
+        "file_id": str(row[0]),
         "version": int(row[1]),
         "content": row[2],
         "content_format": row[3],
@@ -50,7 +50,7 @@ def _version_row(row: tuple[Any, ...]) -> dict[str, Any]:
     }
 
 
-class PlanStore:
+class SharedFileStore:
     def __init__(self, db: TenantDb) -> None:
         self.db = db
 
@@ -63,44 +63,44 @@ class PlanStore:
         content_format: str = "markdown",
         author_label: str = "agent",
     ) -> dict[str, Any]:
-        """Insert a new plan + its first version row (version=1)."""
+        """Insert a new shared file + its first version row (version=1)."""
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                f"INSERT INTO plans "
+                f"INSERT INTO shared_files "
                 f"(org_id, title, content_format, current_version, created_by) "
-                f"VALUES (%s,%s,%s,1,%s) RETURNING {_PLAN_SELECT}",
+                f"VALUES (%s,%s,%s,1,%s) RETURNING {_FILE_SELECT}",
                 (str(org_id), title, content_format, author_label),
             )
             prow = await cur.fetchone()
             assert prow is not None
-            plan_id = prow[0]
+            file_id = prow[0]
             cur = await conn.execute(
-                "INSERT INTO plan_versions "
-                "(plan_id, org_id, version, content, content_format, author_label) "
+                "INSERT INTO shared_file_versions "
+                "(file_id, org_id, version, content, content_format, author_label) "
                 "VALUES (%s,%s,1,%s,%s,%s) RETURNING "
-                "plan_id, version, content, content_format, author_label, created_at",
-                (str(plan_id), str(org_id), content, content_format, author_label),
+                "file_id, version, content, content_format, author_label, created_at",
+                (str(file_id), str(org_id), content, content_format, author_label),
             )
             vrow = await cur.fetchone()
-        plan = _plan_row(prow)
-        plan["content"] = vrow[2]
-        plan["version"] = 1
-        return plan
+        file = _file_row(prow)
+        file["content"] = vrow[2]
+        file["version"] = 1
+        return file
 
     async def update(
         self,
         org_id: UUID,
-        plan_id: UUID,
+        file_id: UUID,
         *,
         content: str,
         content_format: str | None = None,
         editor_label: str = "agent",
     ) -> dict[str, Any]:
-        """Append a new version row (version = prior max + 1) and bump the plan."""
+        """Append a new version row (version = prior max + 1) and bump the file."""
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                "SELECT current_version, content_format FROM plans WHERE id = %s",
-                (str(plan_id),),
+                "SELECT current_version, content_format FROM shared_files WHERE id = %s",
+                (str(file_id),),
             )
             prow = await cur.fetchone()
             if prow is None:
@@ -108,112 +108,112 @@ class PlanStore:
             next_version = int(prow[0]) + 1
             fmt = content_format or prow[1]
             cur = await conn.execute(
-                "INSERT INTO plan_versions "
-                "(plan_id, org_id, version, content, content_format, author_label) "
+                "INSERT INTO shared_file_versions "
+                "(file_id, org_id, version, content, content_format, author_label) "
                 "VALUES (%s,%s,%s,%s,%s,%s) RETURNING "
-                "plan_id, version, content, content_format, author_label, created_at",
-                (str(plan_id), str(org_id), next_version, content, fmt, editor_label),
+                "file_id, version, content, content_format, author_label, created_at",
+                (str(file_id), str(org_id), next_version, content, fmt, editor_label),
             )
             vrow = await cur.fetchone()
             await conn.execute(
-                "UPDATE plans SET current_version = %s, content_format = %s, "
+                "UPDATE shared_files SET current_version = %s, content_format = %s, "
                 "updated_at = now() WHERE id = %s",
-                (next_version, fmt, str(plan_id)),
+                (next_version, fmt, str(file_id)),
             )
             cur = await conn.execute(
-                f"SELECT {_PLAN_SELECT} FROM plans WHERE id = %s",
-                (str(plan_id),),
+                f"SELECT {_FILE_SELECT} FROM shared_files WHERE id = %s",
+                (str(file_id),),
             )
             prow = await cur.fetchone()
         if prow is None:
             return {}
-        plan = _plan_row(prow)
-        plan["content"] = vrow[2]
-        plan["version"] = next_version
-        return plan
+        file = _file_row(prow)
+        file["content"] = vrow[2]
+        file["version"] = next_version
+        return file
 
-    async def get(self, org_id: UUID, plan_id: UUID) -> dict[str, Any] | None:
-        """A plan with its latest version content."""
+    async def get(self, org_id: UUID, file_id: UUID) -> dict[str, Any] | None:
+        """A shared file with its latest version content."""
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                f"SELECT {_PLAN_SELECT} FROM plans WHERE id = %s AND status = 'active'",
-                (str(plan_id),),
+                f"SELECT {_FILE_SELECT} FROM shared_files WHERE id = %s AND status = 'active'",
+                (str(file_id),),
             )
             prow = await cur.fetchone()
             if prow is None:
                 return None
             cur = await conn.execute(
-                "SELECT plan_id, version, content, content_format, author_label, created_at "
-                "FROM plan_versions WHERE plan_id = %s AND version = %s",
-                (str(plan_id), prow[6]),
+                "SELECT file_id, version, content, content_format, author_label, created_at "
+                "FROM shared_file_versions WHERE file_id = %s AND version = %s",
+                (str(file_id), prow[6]),
             )
             vrow = await cur.fetchone()
-        plan = _plan_row(prow)
+        file = _file_row(prow)
         if vrow is not None:
-            plan["content"] = vrow[2]
-            plan["content_format"] = vrow[3]
-        return plan
+            file["content"] = vrow[2]
+            file["content_format"] = vrow[3]
+        return file
 
     async def get_version(
-        self, org_id: UUID, plan_id: UUID, version: int
+        self, org_id: UUID, file_id: UUID, version: int
     ) -> dict[str, Any] | None:
-        """A specific version of a plan."""
+        """A specific version of a shared file."""
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                f"SELECT {_PLAN_SELECT} FROM plans WHERE id = %s",
-                (str(plan_id),),
+                f"SELECT {_FILE_SELECT} FROM shared_files WHERE id = %s",
+                (str(file_id),),
             )
             prow = await cur.fetchone()
             if prow is None:
                 return None
             cur = await conn.execute(
-                "SELECT plan_id, version, content, content_format, author_label, created_at "
-                "FROM plan_versions WHERE plan_id = %s AND version = %s",
-                (str(plan_id), version),
+                "SELECT file_id, version, content, content_format, author_label, created_at "
+                "FROM shared_file_versions WHERE file_id = %s AND version = %s",
+                (str(file_id), version),
             )
             vrow = await cur.fetchone()
         if vrow is None:
             return None
-        plan = _plan_row(prow)
-        plan["content"] = vrow[2]
-        plan["content_format"] = vrow[3]
-        plan["version"] = vrow[1]
-        return plan
+        file = _file_row(prow)
+        file["content"] = vrow[2]
+        file["content_format"] = vrow[3]
+        file["version"] = vrow[1]
+        return file
 
     async def list_plans(
         self, org_id: UUID, *, limit: int = 100
     ) -> list[dict[str, Any]]:
-        """All active plans in the org, newest update first."""
+        """All active shared files in the org, newest update first."""
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                f"SELECT {_PLAN_SELECT} FROM plans WHERE status = 'active' "
+                f"SELECT {_FILE_SELECT} FROM shared_files WHERE status = 'active' "
                 f"ORDER BY updated_at DESC LIMIT %s",
                 (limit,),
             )
             rows = await cur.fetchall()
-        return [_plan_row(r) for r in rows]
+        return [_file_row(r) for r in rows]
 
     async def list_versions(
-        self, org_id: UUID, plan_id: UUID
+        self, org_id: UUID, file_id: UUID
     ) -> list[dict[str, Any]]:
-        """All versions of a plan, newest first."""
+        """All versions of a shared file, newest first."""
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                "SELECT plan_id, version, content, content_format, author_label, created_at "
-                "FROM plan_versions WHERE plan_id = %s ORDER BY version DESC",
-                (str(plan_id),),
+                "SELECT file_id, version, content, content_format, author_label, created_at "
+                "FROM shared_file_versions WHERE file_id = %s ORDER BY version DESC",
+                (str(file_id),),
             )
             rows = await cur.fetchall()
         return [_version_row(r) for r in rows]
 
     async def publish(
-        self, org_id: UUID, plan_id: UUID
+        self, org_id: UUID, file_id: UUID
     ) -> dict[str, Any]:
         """Flip visibility to published and stamp a share token (idempotent)."""
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                "SELECT share_token FROM plans WHERE id = %s AND status = 'active'",
-                (str(plan_id),),
+                "SELECT share_token FROM shared_files WHERE id = %s AND status = 'active'",
+                (str(file_id),),
             )
             prow = await cur.fetchone()
             if prow is None:
@@ -221,46 +221,46 @@ class PlanStore:
             existing_token = prow[0]
             if existing_token is not None:
                 await conn.execute(
-                    "UPDATE plans SET visibility = 'published', updated_at = now() "
+                    "UPDATE shared_files SET visibility = 'published', updated_at = now() "
                     "WHERE id = %s",
-                    (str(plan_id),),
+                    (str(file_id),),
                 )
             else:
                 await conn.execute(
-                    "UPDATE plans SET visibility = 'published', "
+                    "UPDATE shared_files SET visibility = 'published', "
                     "share_token = gen_random_uuid(), updated_at = now() WHERE id = %s",
-                    (str(plan_id),),
+                    (str(file_id),),
                 )
             cur = await conn.execute(
-                f"SELECT {_PLAN_SELECT} FROM plans WHERE id = %s",
-                (str(plan_id),),
+                f"SELECT {_FILE_SELECT} FROM shared_files WHERE id = %s",
+                (str(file_id),),
             )
             prow = await cur.fetchone()
-        return _plan_row(prow) if prow else {}
+        return _file_row(prow) if prow else {}
 
     async def unpublish(
-        self, org_id: UUID, plan_id: UUID
+        self, org_id: UUID, file_id: UUID
     ) -> dict[str, Any]:
         """Flip visibility back to private (share token retained for audit)."""
         async with self.db.org(org_id) as conn:
             await conn.execute(
-                "UPDATE plans SET visibility = 'private', updated_at = now() WHERE id = %s",
-                (str(plan_id),),
+                "UPDATE shared_files SET visibility = 'private', updated_at = now() WHERE id = %s",
+                (str(file_id),),
             )
             cur = await conn.execute(
-                f"SELECT {_PLAN_SELECT} FROM plans WHERE id = %s",
-                (str(plan_id),),
+                f"SELECT {_FILE_SELECT} FROM shared_files WHERE id = %s",
+                (str(file_id),),
             )
             prow = await cur.fetchone()
-        return _plan_row(prow) if prow else {}
+        return _file_row(prow) if prow else {}
 
-    async def archive(self, org_id: UUID, plan_id: UUID) -> bool:
-        """Archive a plan (versions retained for audit; excluded from active lists)."""
+    async def archive(self, org_id: UUID, file_id: UUID) -> bool:
+        """Archive a shared file (versions retained for audit; excluded from active lists)."""
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                "UPDATE plans SET status = 'archived', updated_at = now() "
+                "UPDATE shared_files SET status = 'archived', updated_at = now() "
                 "WHERE id = %s AND status = 'active'",
-                (str(plan_id),),
+                (str(file_id),),
             )
             changed = cur.rowcount > 0
         return changed
@@ -270,18 +270,18 @@ class PlanStore:
     async def get_published_by_token(
         self, share_token: UUID | str
     ) -> dict[str, Any] | None:
-        """Latest version of a published plan, looked up by share token.
+        """Latest version of a published shared file, looked up by share token.
 
-        Bypasses RLS via the ``public_plan_by_token`` SECURITY DEFINER function
-        over an ``admin()`` connection (no org GUC). Fails closed: returns None
-        unless the plan is published AND active.
+        Bypasses RLS via the ``public_shared_file_by_token`` SECURITY DEFINER
+        function over an ``admin()`` connection (no org GUC). Fails closed:
+        returns None unless the file is published AND active.
         """
         async with self.db.admin() as conn:
             cur = await conn.execute(
-                "SELECT plan_id, org_id, title, content_format, current_version, "
+                "SELECT file_id, org_id, title, content_format, current_version, "
                 "version, content, version_format, author_label, "
-                "version_created, plan_created, plan_updated "
-                "FROM public_plan_by_token(%s)",
+                "version_created, file_created, file_updated "
+                "FROM public_shared_file_by_token(%s)",
                 (str(share_token),),
             )
             row = await cur.fetchone()
@@ -308,10 +308,10 @@ class PlanStore:
         """A specific published version, looked up by share token + version."""
         async with self.db.admin() as conn:
             cur = await conn.execute(
-                "SELECT plan_id, org_id, title, content_format, current_version, "
+                "SELECT file_id, org_id, title, content_format, current_version, "
                 "version, content, version_format, author_label, "
-                "version_created, plan_created, plan_updated "
-                "FROM public_plan_version_by_token(%s, %s)",
+                "version_created, file_created, file_updated "
+                "FROM public_shared_file_version_by_token(%s, %s)",
                 (str(share_token), version),
             )
             row = await cur.fetchone()
@@ -339,7 +339,7 @@ class PlanStore:
         async with self.db.admin() as conn:
             cur = await conn.execute(
                 "SELECT version, author_label, created_at "
-                "FROM public_plan_versions_list(%s)",
+                "FROM public_shared_file_versions_list(%s)",
                 (str(share_token),),
             )
             rows = await cur.fetchall()
@@ -354,11 +354,11 @@ class PlanStore:
                 "SELECT COUNT(*) FILTER (WHERE status='active'), "
                 "COUNT(*) FILTER (WHERE visibility='published'), "
                 "COALESCE(SUM(current_version), 0) "
-                "FROM plans WHERE status = 'active'"
+                "FROM shared_files WHERE status = 'active'"
             )
             row = await cur.fetchone()
         return {
-            "plans": int(row[0]) if row else 0,
+            "files": int(row[0]) if row else 0,
             "published": int(row[1]) if row else 0,
             "versions": int(row[2]) if row else 0,
         }

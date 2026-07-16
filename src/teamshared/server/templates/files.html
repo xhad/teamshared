@@ -1,33 +1,33 @@
 {% extends "base.html" %}
 {% import "console_macros.html" as cm with context %}
-{% block title %}Plans{% endblock %}
+{% block title %}Files{% endblock %}
 {% block content %}
   <div class="page-head">
     <div>
-      <h1>Plans</h1>
-      <p class="sub">Versioned HTML/Markdown documents. Publish a plan to get a public share URL (<code>/plan/{token}</code>); each edit creates a new version.</p>
+      <h1>Files</h1>
+      <p class="sub">Versioned HTML/Markdown documents. Publish a file to get a public share URL (<code>/s/{token}</code>); each edit creates a new version.</p>
     </div>
     <div class="page-head-actions">
-      <a href="/app/plans/new"><button type="button">+ New plan</button></a>
+      <a href="/app/files/new"><button type="button">+ New file</button></a>
     </div>
   </div>
 
-  {% if flash == 'created' %}<div class="flash-ok">Plan created.</div>{% endif %}
-  {% if flash == 'archived' %}<div class="flash-ok">Plan archived.</div>{% endif %}
+  {% if flash == 'created' %}<div class="flash-ok">File created.</div>{% endif %}
+  {% if flash == 'archived' %}<div class="flash-ok">File archived.</div>{% endif %}
   {% if flash == 'invalid' %}<div class="unavailable">Title and content are required.</div>{% endif %}
   {% if flash == 'error' %}<div class="unavailable">Could not save. Please try again.</div>{% endif %}
   {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
-  {% if plans %}
+  {% if files %}
   <div class="panel">
     <table class="row-table">
       <thead>
         <tr><th>Title</th><th>Format</th><th>Visibility</th><th>Version</th><th>Updated</th><th></th></tr>
       </thead>
       <tbody>
-      {% for p in plans %}
+      {% for p in files %}
         <tr>
-          <td><a href="/app/plans/{{ p.id }}">{{ p.title }}</a></td>
+          <td><a href="/app/files/{{ p.id }}">{{ p.title }}</a></td>
           <td>{{ p.content_format }}</td>
           <td>
             {% if p.visibility == 'published' %}
@@ -38,7 +38,7 @@
           </td>
           <td>v{{ p.current_version }}</td>
           <td>{{ dt(p.updated_at) }}{% if p.created_by %} &middot; {{ p.created_by }}{% endif %}</td>
-          <td><a href="/app/plans/{{ p.id }}/edit">Edit</a></td>
+          <td><a href="/app/files/{{ p.id }}/edit">Edit</a></td>
         </tr>
       {% endfor %}
       </tbody>
@@ -46,7 +46,7 @@
   </div>
   {% else %}
     <div class="panel">
-      <p class="sub">No plans yet. Create one to share a versioned document publicly.</p>
+      <p class="sub">No files yet. Create one to share a versioned document publicly.</p>
     </div>
   {% endif %}
 {% endblock %}

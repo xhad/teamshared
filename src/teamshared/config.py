@@ -280,7 +280,7 @@ class Settings(BaseSettings):
         ),
     )
 
-    # --- Object storage (Railway S3-compatible bucket for public plans) ---
+    # --- Object storage (Railway S3-compatible bucket for public shared files) ---
     object_storage_endpoint: str | None = Field(
         default=None,
         description=(
@@ -308,8 +308,8 @@ class Settings(BaseSettings):
         default=None,
         description=(
             "Public CDN base URL prefix for direct bucket links, e.g. "
-            "https://plans.teamshared.com. Optional; when set, plan_publish "
-            "returns a direct bucket URL in addition to the /plan/{token} route."
+            "https://files.teamshared.com. Optional; when set, file_publish "
+            "returns a direct bucket URL in addition to the /s/{token} route."
         ),
     )
 

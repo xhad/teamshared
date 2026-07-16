@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% import "console_macros.html" as cm with context %}
+{% block title %}{% if file %}{{ file.title }}{% else %}File{% endif %}{% endblock %}
+{% block content %}
+  <div class="work-detail-shell">
+    <a class="work-form-back" href="/app/files">&larr; Back to files</a>
+
+    {% if flash == 'saved' %}<div class="flash-ok">File updated (new version saved).</div>{% endif %}
+    {% if flash == 'created' %}<div class="flash-ok">File created.</div>{% endif %}
+    {% if flash == 'published' %}<div class="flash-ok">File published. Public URL: <a href="/s/{{ file.share_token }}">/s/{{ file.share_token }}</a></div>{% endif %}
+    {% if flash == 'unpublished' %}<div class="flash-ok">File unpublished (no longer public).</div>{% endif %}
+    {% if flash == 'error' %}<div class="unavailable">Could not complete that action. Please try again.</div>{% endif %}
+    {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
+
+    {% if file %}
+    <h1>{{ file.title }}</h1>
+    <p class="meta">
+      v{{ file.current_version }} &middot; {{ file.content_format }}
+      &middot;
+      {% if file.visibility == 'published' %}
+        <span class="status-pill ok">published</span>
+        &middot; <a href="/s/{{ file.share_token }}" target="_blank" rel="noopener">public link</a>
+      {% else %}
+        <span class="status-pill">private</span>
+      {% endif %}
+      &middot; updated {{ dt(file.updated_at) }}
+    </p>
+
+    <div class="page-head-actions" style="margin: 1rem 0;">
+      <a href="/app/files/{{ file.id }}/edit"><button type="button">Edit (new version)</button></a>
+      {% if file.visibility == 'published' %}
+        <form method="post" action="/app/files/{{ file.id }}/unpublish" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <button type="submit" class="ghost">Unpublish</button>
+        </form>
+      {% else %}
+        <form method="post" action="/app/files/{{ file.id }}/publish" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+          <button type="submit">Publish</button>
+        </form>
+      {% endif %}
+      <form method="post" action="/app/files/{{ file.id }}/archive" style="display:inline;"
+            onsubmit="return confirm('Archive this file? It will be excluded from the active list but retained with full version history.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+        <button type="submit" class="ghost">Archive</button>
+      </form>
+    </div>
+
+    {% if versions %}
+    <div class="panel">
+      <h3>Version history ({{ versions|length }})</h3>
+      <ul class="work-activity">
+        {% for v in versions %}
+        <li class="work-activity-item">
+          <strong>v{{ v.version }}</strong>
+          &middot; {{ v.author_label or 'unknown' }}
+          &middot; {{ dt(v.created_at) }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <h3>Current content</h3>
+      <pre style="white-space: pre-wrap; word-break: break-word; max-height: 32rem; overflow: auto;">{{ file.content }}</pre>
+    </div>
+    {% else %}
+    <div class="unavailable">{{ note or 'File not found.' }}</div>
+    {% endif %}
+  </div>
+{% endblock %}

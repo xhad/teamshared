@@ -93,7 +93,7 @@ NAV: list[tuple[str, str, str]] = [
     ("/app/wiki", "Wiki", "wiki"),
     ("/app/playbooks", "Playbooks", "playbooks"),
     ("/app/skills", "Skills", "skills"),
-    ("/app/plans", "Plans", "plans"),
+    ("/app/files", "Files", "files"),
     ("/app/work", "Work", "work"),
     ("/app/projects", "Projects", "projects"),
     ("/app/strategy", "Strategy", "strategy"),
@@ -113,7 +113,7 @@ NAV_GROUPS: list[tuple[str | None, list[tuple[str, str, str]]]] = [
             ("/app/wiki", "Wiki", "wiki"),
             ("/app/playbooks", "Playbooks", "playbooks"),
             ("/app/skills", "Skills", "skills"),
-            ("/app/plans", "Plans", "plans"),
+            ("/app/files", "Files", "files"),
             ("/app/memory", "Explorer", "memory"),
         ],
     ),
@@ -2120,74 +2120,74 @@ def register_console_routes(
             return RedirectResponse("/app/connections?status=error", status_code=303)
         return RedirectResponse("/app/connections?status=disconnected", status_code=303)
 
-    # --- plans (versioned HTML/Markdown documents) ------------------------
+    # --- shared files (versioned HTML/Markdown documents) ----------------
 
-    async def plans_page(request: Request) -> Response:
+    async def files_page(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        ctx = await _shell(request, principal, "plans")
-        plans: list[dict[str, Any]] = []
+        ctx = await _shell(request, principal, "files")
+        files: list[dict[str, Any]] = []
         note = ""
         try:
-            plans = await services.plans.list_plans(principal.org_id, limit=200)
+            files = await services.shared_files.list_plans(principal.org_id, limit=200)
         except Exception as exc:
-            log.warning("plans_page_failed", error=str(exc))
+            log.warning("files_page_failed", error=str(exc))
             note = f"Unavailable: {exc}"
         ctx.update({
-            "plans": plans, "note": note,
+            "files": files, "note": note,
             "flash": request.query_params.get("flash") or "",
         })
-        return _TEMPLATES.TemplateResponse(request, "plans.html", ctx)
+        return _TEMPLATES.TemplateResponse(request, "files.html", ctx)
 
-    async def plan_detail(request: Request) -> Response:
+    async def file_detail(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        ctx = await _shell(request, principal, "plans")
-        plan_id = str(request.path_params["plan_id"])
-        plan: dict[str, Any] | None = None
+        ctx = await _shell(request, principal, "files")
+        file_id = str(request.path_params["file_id"])
+        file: dict[str, Any] | None = None
         versions: list[dict[str, Any]] = []
         note = ""
         try:
-            plan = await services.plans.get(principal.org_id, UUID(plan_id))
-            versions = await services.plans.list_versions(principal.org_id, UUID(plan_id))
+            file = await services.shared_files.get(principal.org_id, UUID(file_id))
+            versions = await services.shared_files.list_versions(principal.org_id, UUID(file_id))
         except Exception as exc:
-            log.warning("plan_detail_failed", error=str(exc))
+            log.warning("file_detail_failed", error=str(exc))
             note = f"Unavailable: {exc}"
         ctx.update({
-            "plan": plan, "versions": versions, "note": note,
+            "file": file, "versions": versions, "note": note,
             "flash": request.query_params.get("flash") or "",
         })
-        return _TEMPLATES.TemplateResponse(request, "plan_detail.html", ctx)
+        return _TEMPLATES.TemplateResponse(request, "file_detail.html", ctx)
 
-    async def plan_new(request: Request) -> Response:
+    async def file_new(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        ctx = await _shell(request, principal, "plans")
-        ctx.update({"plan": None, "is_new": True, "note": ""})
-        return _TEMPLATES.TemplateResponse(request, "plan_edit.html", ctx)
+        ctx = await _shell(request, principal, "files")
+        ctx.update({"file": None, "is_new": True, "note": ""})
+        return _TEMPLATES.TemplateResponse(request, "file_edit.html", ctx)
 
-    async def plan_edit(request: Request) -> Response:
+    async def file_edit(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
             return _redirect_login()
-        ctx = await _shell(request, principal, "plans")
-        plan_id = str(request.path_params["plan_id"])
-        plan: dict[str, Any] | None = None
+        ctx = await _shell(request, principal, "files")
+        file_id = str(request.path_params["file_id"])
+        file: dict[str, Any] | None = None
         note = ""
         try:
-            plan = await services.plans.get(principal.org_id, UUID(plan_id))
-            if plan is None:
-                note = "Plan not found."
+            file = await services.shared_files.get(principal.org_id, UUID(file_id))
+            if file is None:
+                note = "File not found."
         except Exception as exc:
-            log.warning("plan_edit_failed", error=str(exc))
+            log.warning("file_edit_failed", error=str(exc))
             note = f"Unavailable: {exc}"
-        ctx.update({"plan": plan, "is_new": False, "note": note})
-        return _TEMPLATES.TemplateResponse(request, "plan_edit.html", ctx)
+        ctx.update({"file": file, "is_new": False, "note": note})
+        return _TEMPLATES.TemplateResponse(request, "file_edit.html", ctx)
 
-    async def plan_save(request: Request) -> Response:
+    async def file_save(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
             return _redirect_login()
@@ -2197,73 +2197,73 @@ def register_console_routes(
         title = str(form.get("title") or "").strip()
         content = str(form.get("content") or "")
         content_format = str(form.get("content_format") or "markdown").strip()
-        plan_id = str(form.get("plan_id") or "").strip()
+        file_id = str(form.get("file_id") or "").strip()
         if not title or not content:
-            return RedirectResponse("/app/plans?flash=invalid", status_code=303)
+            return RedirectResponse("/app/files?flash=invalid", status_code=303)
         try:
-            if plan_id:
-                await get_state().facade.plan_update(
-                    principal, plan_id=plan_id, content=content,
+            if file_id:
+                await get_state().facade.file_update(
+                    principal, file_id=file_id, content=content,
                     content_format=content_format,
                 )
-                return RedirectResponse(f"/app/plans/{plan_id}?flash=saved", status_code=303)
-            row = await get_state().facade.plan_create(
+                return RedirectResponse(f"/app/files/{file_id}?flash=saved", status_code=303)
+            row = await get_state().facade.file_create(
                 principal, title=title, content=content,
                 content_format=content_format,
             )
             new_id = row.get("id")
             return RedirectResponse(
-                f"/app/plans/{new_id}?flash=created" if new_id else "/app/plans?flash=created",
+                f"/app/files/{new_id}?flash=created" if new_id else "/app/files?flash=created",
                 status_code=303,
             )
         except Exception as exc:
-            log.warning("plan_save_failed", error=str(exc))
-            return RedirectResponse("/app/plans?flash=error", status_code=303)
+            log.warning("file_save_failed", error=str(exc))
+            return RedirectResponse("/app/files?flash=error", status_code=303)
 
-    async def plan_publish_post(request: Request) -> Response:
+    async def file_publish_post(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
             return _redirect_login()
         form, deny = await _verified_form(request)
         if deny:
             return deny
-        plan_id = str(request.path_params["plan_id"])
+        file_id = str(request.path_params["file_id"])
         try:
-            await get_state().facade.plan_publish(principal, plan_id=plan_id)
+            await get_state().facade.file_publish(principal, file_id=file_id)
         except Exception as exc:
-            log.warning("plan_publish_failed", error=str(exc))
-            return RedirectResponse(f"/app/plans/{plan_id}?flash=error", status_code=303)
-        return RedirectResponse(f"/app/plans/{plan_id}?flash=published", status_code=303)
+            log.warning("file_publish_failed", error=str(exc))
+            return RedirectResponse(f"/app/files/{file_id}?flash=error", status_code=303)
+        return RedirectResponse(f"/app/files/{file_id}?flash=published", status_code=303)
 
-    async def plan_unpublish_post(request: Request) -> Response:
+    async def file_unpublish_post(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
             return _redirect_login()
         form, deny = await _verified_form(request)
         if deny:
             return deny
-        plan_id = str(request.path_params["plan_id"])
+        file_id = str(request.path_params["file_id"])
         try:
-            await get_state().facade.plan_unpublish(principal, plan_id=plan_id)
+            await get_state().facade.file_unpublish(principal, file_id=file_id)
         except Exception as exc:
-            log.warning("plan_unpublish_failed", error=str(exc))
-            return RedirectResponse(f"/app/plans/{plan_id}?flash=error", status_code=303)
-        return RedirectResponse(f"/app/plans/{plan_id}?flash=unpublished", status_code=303)
+            log.warning("file_unpublish_failed", error=str(exc))
+            return RedirectResponse(f"/app/files/{file_id}?flash=error", status_code=303)
+        return RedirectResponse(f"/app/files/{file_id}?flash=unpublished", status_code=303)
 
-    async def plan_archive_post(request: Request) -> Response:
+    async def file_archive_post(request: Request) -> Response:
         principal = _session(request)
         if principal is None:
             return _redirect_login()
         form, deny = await _verified_form(request)
         if deny:
             return deny
-        plan_id = str(request.path_params["plan_id"])
+        file_id = str(request.path_params["file_id"])
         try:
-            await get_state().facade.plan_archive(principal, plan_id=plan_id)
+            await get_state().facade.file_archive(principal, file_id=file_id)
         except Exception as exc:
-            log.warning("plan_archive_failed", error=str(exc))
-            return RedirectResponse(f"/app/plans/{plan_id}?flash=error", status_code=303)
-        return RedirectResponse("/app/plans?flash=archived", status_code=303)
+            log.warning("file_archive_failed", error=str(exc))
+            return RedirectResponse(f"/app/files/{file_id}?flash=error", status_code=303)
+        return RedirectResponse("/app/files?flash=archived", status_code=303)
 
     def _placeholder(active: str, title: str) -> Any:
         async def handler(request: Request) -> Response:
@@ -2298,14 +2298,14 @@ def register_console_routes(
         Route("/app/skills/new", skill_new, methods=["GET"]),
         Route("/app/skills/save", skill_save, methods=["POST"]),
         Route("/app/skills/{name}", skill_edit, methods=["GET"]),
-        Route("/app/plans", plans_page, methods=["GET"]),
-        Route("/app/plans/new", plan_new, methods=["GET"]),
-        Route("/app/plans/save", plan_save, methods=["POST"]),
-        Route("/app/plans/{plan_id}", plan_detail, methods=["GET"]),
-        Route("/app/plans/{plan_id}/edit", plan_edit, methods=["GET"]),
-        Route("/app/plans/{plan_id}/publish", plan_publish_post, methods=["POST"]),
-        Route("/app/plans/{plan_id}/unpublish", plan_unpublish_post, methods=["POST"]),
-        Route("/app/plans/{plan_id}/archive", plan_archive_post, methods=["POST"]),
+        Route("/app/files", files_page, methods=["GET"]),
+        Route("/app/files/new", file_new, methods=["GET"]),
+        Route("/app/files/save", file_save, methods=["POST"]),
+        Route("/app/files/{file_id}", file_detail, methods=["GET"]),
+        Route("/app/files/{file_id}/edit", file_edit, methods=["GET"]),
+        Route("/app/files/{file_id}/publish", file_publish_post, methods=["POST"]),
+        Route("/app/files/{file_id}/unpublish", file_unpublish_post, methods=["POST"]),
+        Route("/app/files/{file_id}/archive", file_archive_post, methods=["POST"]),
         Route("/app/work", work_page, methods=["GET"]),
         Route("/app/work/new", work_new, methods=["GET"]),
         Route("/app/work/save", work_save, methods=["POST"]),

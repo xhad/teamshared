@@ -1,12 +1,12 @@
-"""S3-compatible object storage publisher for public plan mirroring.
+"""S3-compatible object storage publisher for public shared-file mirroring.
 
 Wraps a synchronous ``boto3`` S3 client in :func:`asyncio.to_thread` so the
 async event loop is never blocked. Railway buckets (and R2, MinIO, AWS S3, etc.)
-all speak the S3 API, so this is the only storage abstraction the plan feature
-needs.
+all speak the S3 API, so this is the only storage abstraction the file-sharing
+feature needs.
 
 When the four required settings (endpoint, bucket, access key, secret key) are
-not all present, the publisher is ``None`` and plan publish/update degrade
+not all present, the publisher is ``None`` and file publish/update degrade
 gracefully (Postgres stays canonical; the public route still renders from
 Postgres). This keeps local dev and tests bucket-free.
 """
@@ -41,8 +41,8 @@ def _client_factory(
     )
 
 
-class PlanPublisher:
-    """Eagerly pushes rendered plan HTML to an S3-compatible bucket.
+class FilePublisher:
+    """Eagerly pushes rendered shared-file HTML to an S3-compatible bucket.
 
     Object keys: ``{share_token}/v{version}.html`` (per-version snapshot) and
     ``{share_token}/index.html`` (always the latest version, for the CDN root).
@@ -77,7 +77,7 @@ class PlanPublisher:
         await asyncio.to_thread(self._put_object, version_key, body)
         await asyncio.to_thread(self._put_object, index_key, body)
         log.info(
-            "plan_published_to_bucket",
+            "file_published_to_bucket",
             share_token=share_token,
             version=version,
             bucket=self._bucket,
@@ -86,7 +86,7 @@ class PlanPublisher:
     async def unpublish(self, share_token: str) -> None:
         """Best-effort delete of all objects under the token prefix."""
         await asyncio.to_thread(self._delete_prefix, share_token)
-        log.info("plan_unpublished_from_bucket", share_token=share_token)
+        log.info("file_unpublished_from_bucket", share_token=share_token)
 
     def _put_object(self, key: str, body: bytes) -> None:
         self._client.put_object(
@@ -117,11 +117,11 @@ class PlanPublisher:
         return f"{base}/{share_token}/v{version}.html"
 
 
-def build_plan_publisher(settings: Any) -> PlanPublisher | None:
-    """Construct a PlanPublisher from settings, or None when unconfigured.
+def build_file_publisher(settings: Any) -> FilePublisher | None:
+    """Construct a FilePublisher from settings, or None when unconfigured.
 
     All four of endpoint, bucket, access key, and secret key must be present;
-    otherwise the publisher is None and the plan feature degrades to
+    otherwise the publisher is None and the file-sharing feature degrades to
     Postgres-only serving.
     """
     if not (
@@ -131,7 +131,7 @@ def build_plan_publisher(settings: Any) -> PlanPublisher | None:
         and settings.object_storage_secret_key
     ):
         return None
-    return PlanPublisher(
+    return FilePublisher(
         endpoint=settings.object_storage_endpoint,
         bucket=settings.object_storage_bucket,
         access_key=settings.object_storage_access_key,
