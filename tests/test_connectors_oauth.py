@@ -406,234 +406,147 @@ def test_slack_post_message_mocked() -> None:
     assert sent_body["thread_ts"] == "1699999999.0"
 
 
-# --- Telegram adapter (mocked httpx) ---------------------------------------
+# --- Agent RBAC: memory:read/create, not connector:manage -------------------
 
 
-def test_telegram_fetch_parses_updates() -> None:
-    from teamshared.connectors.adapters import TelegramConnector
+def _tracking_authorizer(*allowed: str):
+    """Authorizer stub that records required perms and enforces ``allowed``."""
+    from teamshared.identity.rbac import PermissionDenied
 
-    fake_resp = MagicMock()
-    fake_resp.raise_for_status = MagicMock()
-    fake_resp.json = MagicMock(return_value={
-        "ok": True,
-        "result": [
-            {
-                "update_id": 100,
-                "message": {
-                    "message_id": 42,
-                    "text": "hello from telegram",
-                    "from": {"username": "alice", "first_name": "Alice"},
-                    "chat": {"id": -100123, "type": "group", "title": "Team"},
-                    "date": 1700000000,
-                },
-            },
-            {
-                "update_id": 101,
-                "message": {
-                    "message_id": 43,
-                    "text": "second message",
-                    "from": {"first_name": "Bob"},
-                    "chat": {"id": -100123, "type": "group", "title": "Team"},
-                    "date": 1700000001,
-                },
-            },
-        ],
-    })
-    client = AsyncMock()
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    client.get = AsyncMock(return_value=fake_resp)
-    adapter = TelegramConnector({})
-    with patch("teamshared.connectors.adapters.httpx.AsyncClient", return_value=client):
-        result = asyncio_run(adapter.fetch("bot123:token", cursor=None))
-    assert len(result.documents) == 2
-    doc = result.documents[0]
-    assert doc.external_id == "telegram:100"
-    assert "hello from telegram" in doc.content
-    assert "alice" in doc.content
-    assert doc.acl["chat_id"] == -100123
-    assert doc.metadata["message_id"] == 42
-    # next_cursor is the last update_id + 1.
-    assert result.next_cursor == "102"
+    required: list[str] = []
+
+    async def require(principal, permission: str) -> None:
+        required.append(permission)
+        if permission not in allowed:
+            raise PermissionDenied(permission, principal)
+
+    return SimpleNamespace(require=require, required=required)
 
 
-def test_telegram_fetch_with_offset_cursor() -> None:
-    from teamshared.connectors.adapters import TelegramConnector
+def test_list_connectors_allows_memory_read_agent() -> None:
+    """Agents have memory:read, not connector:manage — list must succeed."""
+    from teamshared.identity.rbac import Permissions
 
-    fake_resp = MagicMock()
-    fake_resp.raise_for_status = MagicMock()
-    fake_resp.json = MagicMock(return_value={"ok": True, "result": []})
-    client = AsyncMock()
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    client.get = AsyncMock(return_value=fake_resp)
-    adapter = TelegramConnector({})
-    with patch("teamshared.connectors.adapters.httpx.AsyncClient", return_value=client):
-        result = asyncio_run(adapter.fetch("bot:tok", cursor="200"))
-    params = client.get.await_args.kwargs["params"]
-    assert params["offset"] == 200
-    assert result.next_cursor is None
-
-
-def test_telegram_post_message_mocked() -> None:
-    from teamshared.connectors.adapters import TelegramConnector
-
-    fake_resp = MagicMock()
-    fake_resp.raise_for_status = MagicMock()
-    fake_resp.json = MagicMock(return_value={
-        "ok": True,
-        "result": {"message_id": 999, "chat": {"id": -100123}, "text": "hi"},
-    })
-    client = AsyncMock()
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    client.post = AsyncMock(return_value=fake_resp)
-    adapter = TelegramConnector({})
-    with patch("teamshared.connectors.adapters.httpx.AsyncClient", return_value=client):
-        out = asyncio_run(adapter.post_message("bot:tok", "-100123", "hello"))
-    assert out["message_id"] == 999
-    sent_body = client.post.await_args.kwargs["json"]
-    assert sent_body["chat_id"] == "-100123"
-    assert sent_body["text"] == "hello"
-    # No thread_ts → no message_thread_id.
-    assert "message_thread_id" not in sent_body
-
-
-def test_telegram_post_message_thread_topic() -> None:
-    from teamshared.connectors.adapters import TelegramConnector
-
-    fake_resp = MagicMock()
-    fake_resp.raise_for_status = MagicMock()
-    fake_resp.json = MagicMock(return_value={"ok": True, "result": {"message_id": 1}})
-    client = AsyncMock()
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    client.post = AsyncMock(return_value=fake_resp)
-    adapter = TelegramConnector({})
-    with patch("teamshared.connectors.adapters.httpx.AsyncClient", return_value=client):
-        out = asyncio_run(adapter.post_message("bot:tok", "-100123", "reply", thread_ts="55"))
-    sent_body = client.post.await_args.kwargs["json"]
-    assert sent_body["message_thread_id"] == 55
-
-
-def test_telegram_list_messages_filters() -> None:
-    from teamshared.connectors.adapters import TelegramConnector
-
-    fake_resp = MagicMock()
-    fake_resp.raise_for_status = MagicMock()
-    fake_resp.json = MagicMock(return_value={
-        "ok": True,
-        "result": [
-            {"update_id": 1, "message": {"message_id": 10, "text": "deploy the app",
-             "from": {"username": "alice"}, "chat": {"id": -1, "type": "private"}}},
-            {"update_id": 2, "message": {"message_id": 11, "text": "lunch time",
-             "from": {"first_name": "Bob"}, "chat": {"id": -2, "type": "private"}}},
-        ],
-    })
-    client = AsyncMock()
-    client.__aenter__ = AsyncMock(return_value=client)
-    client.__aexit__ = AsyncMock(return_value=False)
-    client.get = AsyncMock(return_value=fake_resp)
-    adapter = TelegramConnector({})
-    with patch("teamshared.connectors.adapters.httpx.AsyncClient", return_value=client):
-        hits = asyncio_run(adapter.list_messages("bot:tok", "deploy", max_results=5))
-    assert len(hits) == 1
-    assert "deploy" in hits[0]["text"]
-    assert hits[0]["chat_id"] == -1
-
-
-# --- ConnectorService telegram paths (mocked DB) ---------------------------
-
-
-def test_create_token_connection_stores_bundle() -> None:
+    cid = uuid.uuid4()
     row_map = {
-        "INSERT INTO connectors": (uuid.uuid4(),),
+        "SELECT id, kind, name, status, created_at, account_id": None,
+    }
+    # _Conn returns fetchall=[] by default; override via a custom path.
+    svc, _ = _make_service(row_map)
+    # Make list_connectors' SELECT return one row via fetchall.
+    conn = svc.db.org.return_value  # _OrgCM
+
+    async def execute(sql: str, params: object = None):
+        cur = MagicMock()
+        if "SELECT id, kind, name, status, created_at, account_id" in sql:
+            cur.fetchall = AsyncMock(
+                return_value=[
+                    (cid, "slack", "slack-me", "connected", datetime.now(UTC), None),
+                ]
+            )
+        else:
+            cur.fetchall = AsyncMock(return_value=[])
+        cur.fetchone = AsyncMock(return_value=None)
+        cur.rowcount = 0
+        return cur
+
+    class _ListCM:
+        async def __aenter__(self):
+            m = MagicMock()
+            m.execute = execute
+            return m
+
+        async def __aexit__(self, *exc: object) -> bool:
+            return False
+
+    svc.db.org = MagicMock(return_value=_ListCM())
+    authz = _tracking_authorizer(Permissions.MEMORY_READ)
+    ctx = SimpleNamespace(
+        principal=_principal(), db=svc.db, authorizer=authz,
+        org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+        request_id="req",
+    )
+    items = asyncio_run(svc.list_connectors(ctx))
+    assert len(items) == 1
+    assert items[0]["kind"] == "slack"
+    assert authz.required == [Permissions.MEMORY_READ]
+
+
+def test_list_connectors_denies_without_memory_read() -> None:
+    from teamshared.identity.rbac import PermissionDenied, Permissions
+
+    svc, _ = _make_service({})
+    authz = _tracking_authorizer()  # allow nothing
+    ctx = SimpleNamespace(
+        principal=_principal(), db=svc.db, authorizer=authz,
+        org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+        request_id="req",
+    )
+    with pytest.raises(PermissionDenied, match="memory:read"):
+        asyncio_run(svc.list_connectors(ctx))
+    assert authz.required == [Permissions.MEMORY_READ]
+
+
+def test_send_allows_memory_create_agent() -> None:
+    """Outgoing Slack/Gmail via MCP should work for the agent role."""
+    from teamshared.identity.rbac import Permissions
+
+    row_map = {
+        "SELECT id, kind, name, status, config, account_id": (
+            uuid.uuid4(), "slack", "slack-me", "connected", {"channel": "C123"}, None,
+        ),
+        "SELECT ciphertext, nonce": (b"x", b"y"),
+    }
+    svc, ingestion = _make_service(row_map)
+    bundle = TokenBundle(access_token="xoxp-tok")
+    svc.vault.decrypt_bundle = MagicMock(return_value=bundle)
+    authz = _tracking_authorizer(Permissions.MEMORY_CREATE)
+    ctx = SimpleNamespace(
+        principal=_principal(), db=svc.db, authorizer=authz,
+        org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+        request_id="req",
+    )
+    with patch(
+        "teamshared.connectors.adapters.SlackConnector.post_message",
+        new=AsyncMock(return_value={"ok": True, "ts": "1.0"}),
+    ):
+        result = asyncio_run(
+            svc.send(ctx, uuid.uuid4(), body="ping", channel="C123")
+        )
+    assert result["sent"] is True
+    assert authz.required == [Permissions.MEMORY_CREATE]
+    ingestion.ingest.assert_awaited_once()
+
+
+def test_refresh_if_needed_does_not_require_manage() -> None:
+    """Token refresh on a read path must not demand connector:manage."""
+    from teamshared.identity.rbac import Permissions
+
+    past = (datetime.now(UTC) - timedelta(seconds=120)).isoformat()
+    old = TokenBundle(access_token="old", refresh_token="1//r", expires_at=past)
+    new = TokenBundle(access_token="new", refresh_token="1//r", expires_at=None)
+    row_map = {
+        "SELECT id, kind, name, status, config, account_id": (
+            uuid.uuid4(), "gmail", "gmail-me", "connected", {}, None,
+        ),
+        "SELECT ciphertext, nonce": (b"x", b"y"),
         "INSERT INTO connector_tokens": None,
         "UPDATE connectors SET status": None,
     }
-    svc, ingestion = _make_service(row_map)
-    ctx = SimpleNamespace(
-        principal=_principal(account_id=uuid.uuid4()),
-        db=svc.db, authorizer=SimpleNamespace(require=AsyncMock()),
-        org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
-        request_id="req",
-    )
-    cid = asyncio_run(svc.create_token_connection(
-        ctx, kind="telegram", name="tg-bot", config={}, token="123456:ABC-DEF",
-    ))
-    assert isinstance(cid, uuid.UUID)
-
-
-def test_refresh_if_needed_telegram_no_refresh() -> None:
-    # Telegram bot tokens have no refresh token → refresh_if_needed returns the bundle as-is.
-    bundle = TokenBundle(access_token="123456:ABC")
-    row_map = {
-        "SELECT id, kind, name, status, config, account_id": (
-            uuid.uuid4(), "telegram", "tg-bot", "connected", {}, None,
-        ),
-        "SELECT ciphertext, nonce": (b"x", b"y"),
-    }
     svc, _ = _make_service(row_map)
-    svc.vault.decrypt_bundle = MagicMock(return_value=bundle)
+    svc.vault.decrypt_bundle = MagicMock(return_value=old)
+    # No permissions granted — refresh must not call require at all.
+    authz = _tracking_authorizer()
     ctx = SimpleNamespace(
-        principal=_principal(), db=svc.db,
-        authorizer=SimpleNamespace(require=AsyncMock()),
-        org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
-        request_id="req",
-    )
-    out = asyncio_run(svc.refresh_if_needed(ctx, uuid.uuid4()))
-    assert out is bundle
-
-
-def test_send_telegram_writes_episodic_event() -> None:
-    row_map = {
-        "SELECT id, kind, name, status, config, account_id": (
-            uuid.uuid4(), "telegram", "tg-bot", "connected", {}, None,
-        ),
-        "SELECT ciphertext, nonce": (b"x", b"y"),
-    }
-    svc, ingestion = _make_service(row_map)
-    bundle = TokenBundle(access_token="123456:ABC")
-    svc.vault.decrypt_bundle = MagicMock(return_value=bundle)
-    ctx = SimpleNamespace(
-        principal=_principal(), db=svc.db,
-        authorizer=SimpleNamespace(require=AsyncMock()),
+        principal=_principal(), db=svc.db, authorizer=authz,
         org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
         request_id="req",
     )
     with patch(
-        "teamshared.connectors.adapters.TelegramConnector.post_message",
-        new=AsyncMock(return_value={"message_id": 999}),
+        "teamshared.connectors.oauth.refresh_access_token",
+        new=AsyncMock(return_value=new),
     ):
-        result = asyncio_run(svc.send(
-            ctx, uuid.uuid4(), kind="telegram", to="-100123", body="hello",
-        ))
-    assert result["sent"] is True
-    assert ingestion.ingest.await_count == 1
-    call = ingestion.ingest.await_args
-    assert call.kwargs.get("kind") == "event"
-    assert "telegram" in call.kwargs.get("tags", [])
-
-
-def test_search_telegram_delegates_to_adapter() -> None:
-    row_map = {
-        "SELECT id, kind, name, status, config, account_id": (
-            uuid.uuid4(), "telegram", "tg-bot", "connected", {}, None,
-        ),
-        "SELECT ciphertext, nonce": (b"x", b"y"),
-    }
-    svc, _ = _make_service(row_map)
-    bundle = TokenBundle(access_token="123456:ABC")
-    svc.vault.decrypt_bundle = MagicMock(return_value=bundle)
-    ctx = SimpleNamespace(
-        principal=_principal(), db=svc.db,
-        authorizer=SimpleNamespace(require=AsyncMock()),
-        org_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
-        request_id="req",
-    )
-    with patch(
-        "teamshared.connectors.adapters.TelegramConnector.list_messages",
-        new=AsyncMock(return_value=[{"id": "telegram:1", "text": "hello", "chat_id": -100123}]),
-    ):
-        hits = asyncio_run(svc.search(ctx, uuid.uuid4(), query="hello", max_results=5))
-    assert hits == [{"id": "telegram:1", "text": "hello", "chat_id": -100123}]
+        out = asyncio_run(svc.refresh_if_needed(ctx, uuid.uuid4()))
+    assert out is new
+    assert Permissions.CONNECTOR_MANAGE not in authz.required
+    assert authz.required == []

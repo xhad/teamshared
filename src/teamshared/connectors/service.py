@@ -96,6 +96,12 @@ class ConnectorService:
     ) -> None:
         """Store a full OAuth token bundle (access + refresh + expiry + scope)."""
         await ctx.authorizer.require(ctx.principal, Permissions.CONNECTOR_MANAGE)
+        await self._persist_token_bundle(ctx, connector_id, bundle)
+
+    async def _persist_token_bundle(
+        self, ctx: RequestContext, connector_id: UUID, bundle: "TokenBundle"
+    ) -> None:
+        """Persist a token bundle with no RBAC check (caller already authorized)."""
         ct, nonce, key_id = self.vault.encrypt_bundle(bundle)
         async with self.db.org(ctx.org_id) as conn:
             await conn.execute(
@@ -158,7 +164,9 @@ class ConnectorService:
         return connector_id
 
     async def list_connectors(self, ctx: RequestContext) -> list[dict[str, Any]]:
-        await ctx.authorizer.require(ctx.principal, Permissions.CONNECTOR_MANAGE)
+        # Discovery for MCP ``integration_list`` / ``integration_search`` — agents
+        # have memory:read, not connector:manage. No secrets are returned.
+        await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_READ)
         async with self.db.org(ctx.org_id) as conn:
             cur = await conn.execute(
                 "SELECT id, kind, name, status, created_at, account_id FROM connectors ORDER BY created_at"
@@ -238,7 +246,9 @@ class ConnectorService:
             kind, refresh_token=bundle.refresh_token,
             client_id=client_id, client_secret=client_secret,
         )
-        await self.store_token_bundle(ctx, connector_id, new_bundle)
+        # Refresh is infrastructure for an already-authorized read/send path;
+        # do not require connector:manage (agents only have memory:*).
+        await self._persist_token_bundle(ctx, connector_id, new_bundle)
         log.info("oauth_token_refreshed", connector_id=str(connector_id), kind=kind)
         return new_bundle
 
@@ -283,7 +293,9 @@ class ConnectorService:
         thread_ts: str | None = None,
     ) -> dict[str, Any]:
         """Send an email (gmail) or post a Slack message. Audited + episodic event."""
-        await ctx.authorizer.require(ctx.principal, Permissions.CONNECTOR_MANAGE)
+        # Outgoing actions are agent-usable (MCP ``integration_send``); keep
+        # connect/disconnect/sync on connector:manage.
+        await ctx.authorizer.require(ctx.principal, Permissions.MEMORY_CREATE)
         conn = await self.get_connector(ctx, connector_id)
         if conn is None:
             raise ValueError("connector not found")
