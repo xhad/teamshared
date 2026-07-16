@@ -16,6 +16,7 @@ nothing) unless the file is published AND active.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from uuid import UUID
 
@@ -24,11 +25,17 @@ from teamshared.tenancy.context import TenantDb
 _FILE_FIELDS = (
     "id", "org_id", "title", "content_format", "visibility", "share_token",
     "current_version", "status", "created_by", "created_at", "updated_at",
+    "slug",
 )
 _FILE_SELECT = (
     "id, org_id, title, content_format, visibility, share_token, "
-    "current_version, status, created_by, created_at, updated_at"
+    "current_version, status, created_by, created_at, updated_at, slug"
 )
+
+
+def _slugify(title: str) -> str:
+    """Lowercase, non-alnum -> '-', trim edges. Matches shared_file_slugify() SQL."""
+    return re.sub(r"[^a-z0-9]+", "-", (title or "").lower()).strip("-")
 
 
 def _file_row(row: tuple[Any, ...]) -> dict[str, Any]:
@@ -209,28 +216,43 @@ class SharedFileStore:
     async def publish(
         self, org_id: UUID, file_id: UUID
     ) -> dict[str, Any]:
-        """Flip visibility to published and stamp a share token (idempotent)."""
+        """Flip visibility to published and stamp a share token + slug (idempotent)."""
         async with self.db.org(org_id) as conn:
             cur = await conn.execute(
-                "SELECT share_token FROM shared_files WHERE id = %s AND status = 'active'",
+                "SELECT share_token, slug, title FROM shared_files "
+                "WHERE id = %s AND status = 'active'",
                 (str(file_id),),
             )
             prow = await cur.fetchone()
             if prow is None:
                 return {}
-            existing_token = prow[0]
-            if existing_token is not None:
-                await conn.execute(
-                    "UPDATE shared_files SET visibility = 'published', updated_at = now() "
-                    "WHERE id = %s",
-                    (str(file_id),),
-                )
-            else:
-                await conn.execute(
-                    "UPDATE shared_files SET visibility = 'published', "
-                    "share_token = gen_random_uuid(), updated_at = now() WHERE id = %s",
-                    (str(file_id),),
-                )
+            existing_token, existing_slug, title = prow[0], prow[1], prow[2]
+
+            sets = ["visibility = 'published'", "updated_at = now()"]
+            params: list[Any] = []
+            if existing_token is None:
+                sets.append("share_token = gen_random_uuid()")
+            if existing_slug is None:
+                base = _slugify(title) or "file"
+                cand: str = base
+                n = 1
+                while True:
+                    cur = await conn.execute(
+                        "SELECT 1 FROM shared_files WHERE slug = %s AND id <> %s",
+                        (cand, str(file_id)),
+                    )
+                    if await cur.fetchone() is None:
+                        break
+                    n += 1
+                    cand = f"{base}-{n}"
+                sets.append("slug = %s")
+                params.append(cand)
+
+            params.append(str(file_id))
+            await conn.execute(
+                f"UPDATE shared_files SET {', '.join(sets)} WHERE id = %s",
+                tuple(params),
+            )
             cur = await conn.execute(
                 f"SELECT {_FILE_SELECT} FROM shared_files WHERE id = %s",
                 (str(file_id),),
@@ -341,6 +363,82 @@ class SharedFileStore:
                 "SELECT version, author_label, created_at "
                 "FROM public_shared_file_versions_list(%s)",
                 (str(share_token),),
+            )
+            rows = await cur.fetchall()
+        return [
+            {"version": int(r[0]), "author_label": r[1], "created_at": r[2]}
+            for r in rows
+        ]
+
+    # --- public read path by slug (SECURITY DEFINER, no org context) -------
+
+    async def get_published_by_slug(self, slug: str) -> dict[str, Any] | None:
+        """Latest version of a published shared file, looked up by slug."""
+        async with self.db.admin() as conn:
+            cur = await conn.execute(
+                "SELECT file_id, org_id, title, content_format, current_version, "
+                "version, content, version_format, author_label, "
+                "version_created, file_created, file_updated, share_token "
+                "FROM public_shared_file_by_slug(%s)",
+                (slug,),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "id": str(row[0]),
+            "org_id": str(row[1]),
+            "title": row[2],
+            "content_format": row[3],
+            "current_version": int(row[4]),
+            "version": int(row[5]),
+            "content": row[6],
+            "version_format": row[7],
+            "author_label": row[8],
+            "version_created_at": row[9],
+            "created_at": row[10],
+            "updated_at": row[11],
+            "share_token": str(row[12]) if row[12] else None,
+        }
+
+    async def get_published_version_by_slug(
+        self, slug: str, version: int
+    ) -> dict[str, Any] | None:
+        """A specific published version, looked up by slug + version."""
+        async with self.db.admin() as conn:
+            cur = await conn.execute(
+                "SELECT file_id, org_id, title, content_format, current_version, "
+                "version, content, version_format, author_label, "
+                "version_created, file_created, file_updated, share_token "
+                "FROM public_shared_file_version_by_slug(%s, %s)",
+                (slug, version),
+            )
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "id": str(row[0]),
+            "org_id": str(row[1]),
+            "title": row[2],
+            "content_format": row[3],
+            "current_version": int(row[4]),
+            "version": int(row[5]),
+            "content": row[6],
+            "version_format": row[7],
+            "author_label": row[8],
+            "version_created_at": row[9],
+            "created_at": row[10],
+            "updated_at": row[11],
+            "share_token": str(row[12]) if row[12] else None,
+        }
+
+    async def list_published_versions_by_slug(self, slug: str) -> list[dict[str, Any]]:
+        """Version numbers + authors for the public version-history sidebar (by slug)."""
+        async with self.db.admin() as conn:
+            cur = await conn.execute(
+                "SELECT version, author_label, created_at "
+                "FROM public_shared_file_versions_list_by_slug(%s)",
+                (slug,),
             )
             rows = await cur.fetchall()
         return [

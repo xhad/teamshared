@@ -15,6 +15,7 @@ executable HTML on the public page.
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
@@ -29,6 +30,14 @@ log = get_logger(__name__)
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
+def _looks_like_uuid(value: str) -> bool:
+    try:
+        UUID(value)
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
 def _render_content(content: str, content_format: str) -> str:
     if content_format == "html":
         return sanitize_html(content)
@@ -41,6 +50,7 @@ async def handle_shared_file_view(request: Request, state: Any) -> Response:
     Optional ``?v={version}`` renders a specific historical version.
     """
     share_token = str(request.path_params["share_token"])
+    is_token = _looks_like_uuid(share_token)
     requested_version: int | None = None
     raw_v = request.query_params.get("v")
     if raw_v:
@@ -49,13 +59,20 @@ async def handle_shared_file_view(request: Request, state: Any) -> Response:
         except ValueError:
             requested_version = None
 
+    store = state.services.shared_files
     try:
         if requested_version is not None:
-            file = await state.services.shared_files.get_published_version(
-                share_token, requested_version
+            file = (
+                await store.get_published_version(share_token, requested_version)
+                if is_token
+                else await store.get_published_version_by_slug(share_token, requested_version)
             )
         else:
-            file = await state.services.shared_files.get_published_by_token(share_token)
+            file = (
+                await store.get_published_by_token(share_token)
+                if is_token
+                else await store.get_published_by_slug(share_token)
+            )
     except Exception as exc:
         log.warning("shared_file_view_failed", share_token=share_token, error=str(exc))
         return HTMLResponse(
@@ -71,7 +88,11 @@ async def handle_shared_file_view(request: Request, state: Any) -> Response:
         )
 
     try:
-        versions = await state.services.shared_files.list_published_versions(share_token)
+        versions = (
+            await store.list_published_versions(share_token)
+            if is_token
+            else await store.list_published_versions_by_slug(share_token)
+        )
     except Exception as exc:
         log.warning("shared_file_versions_failed", share_token=share_token, error=str(exc))
         versions = []
@@ -95,10 +116,14 @@ async def handle_shared_file_view(request: Request, state: Any) -> Response:
     direct_url: str | None = None
     publisher = getattr(state.services, "file_publisher", None)
     if publisher and content_format == "html":
-        try:
-            direct_url = publisher.public_url(share_token)
-        except Exception as exc:  # pragma: no cover - defensive
-            log.warning("shared_file_direct_url_failed", share_token=share_token, error=str(exc))
+        # Bucket keys are the UUID share_token. For slug lookups, the store
+        # returns it; for token lookups, the handle *is* the token.
+        bucket_token = file.get("share_token") if not is_token else share_token
+        if bucket_token:
+            try:
+                direct_url = publisher.public_url(str(bucket_token))
+            except Exception as exc:  # pragma: no cover - defensive
+                log.warning("shared_file_direct_url_failed", share_token=share_token, error=str(exc))
 
     ctx = {
         "file": file,

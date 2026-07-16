@@ -239,7 +239,9 @@ async def handle_shared_file_upload(request: Request, services: Any) -> JSONResp
             pub_row = await services.shared_files.publish(org_id, UUID(str(file["id"])))
             if pub_row:
                 out["share_token"] = pub_row.get("share_token")
-                out["public_url"] = f"/s/{pub_row['share_token']}" if pub_row.get("share_token") else None
+                out["slug"] = pub_row.get("slug")
+                handle = pub_row.get("slug") or pub_row.get("share_token")
+                out["public_url"] = f"/s/{handle}" if handle else None
                 publisher = getattr(services, "file_publisher", None)
                 if publisher and pub_row.get("share_token"):
                     latest = await services.shared_files.get(org_id, UUID(str(file["id"])))

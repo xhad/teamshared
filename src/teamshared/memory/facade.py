@@ -2479,7 +2479,10 @@ class MemoryFacade:
                 latest.get("content_format") or "markdown",
             )
         out = _serialize_file(row)
-        out["public_url"] = f"/s/{row['share_token']}" if row.get("share_token") else None
+        # Prefer the human-readable slug for the public URL; fall back to token.
+        handle = row.get("slug") or row.get("share_token")
+        out["public_url"] = f"/s/{handle}" if handle else None
+        out["slug"] = row.get("slug")
         publisher = self.services.file_publisher
         if publisher and row.get("share_token"):
             direct = publisher.public_url(row["share_token"])

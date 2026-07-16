@@ -140,33 +140,39 @@ def test_update_missing_file_returns_empty() -> None:
 def test_publish_stamps_share_token_when_none() -> None:
     file_id = uuid.uuid4()
     token = uuid.uuid4()
+    slug = "q3-file"
     conn = _Conn([
-        _Cur(one=(None,)),  # SELECT share_token (none yet)
-        _Cur(rowcount=1),  # UPDATE with gen_random_uuid()
+        _Cur(one=(None, None, "Q3 file")),   # SELECT share_token, slug, title (none yet)
+        _Cur(one=None),                       # uniqueness check (no collision)
+        _Cur(rowcount=1),                     # UPDATE with gen_random_uuid() + slug
         _Cur(one=(file_id, ORG, "Q3 file", "markdown", "published", token,
-                  1, "active", "agent", NOW, NOW)),  # SELECT file
+                  1, "active", "agent", NOW, NOW, slug)),  # SELECT file (12 cols)
     ])
     store = SharedFileStore(_DB(conn))  # type: ignore[arg-type]
     file = asyncio.run(store.publish(ORG, file_id))
     assert file["visibility"] == "published"
     assert file["share_token"] == str(token)
-    # The UPDATE used gen_random_uuid().
-    update_sql = conn.calls[1][0]
+    assert file["slug"] == slug
+    # The UPDATE used gen_random_uuid() and set the slug.
+    update_sql = conn.calls[2][0]
     assert "gen_random_uuid()" in update_sql
+    assert "slug = %s" in update_sql
 
 
 def test_publish_is_idempotent_keeps_existing_token() -> None:
     file_id = uuid.uuid4()
     token = uuid.uuid4()
+    slug = "q3-file"
     conn = _Conn([
-        _Cur(one=(token,)),  # SELECT share_token (already set)
-        _Cur(rowcount=1),  # UPDATE (no gen_random_uuid)
+        _Cur(one=(token, slug, "Q3 file")),  # SELECT share_token, slug, title (both set)
+        _Cur(rowcount=1),                    # UPDATE (no gen_random_uuid, no slug)
         _Cur(one=(file_id, ORG, "Q3 file", "markdown", "published", token,
-                  1, "active", "agent", NOW, NOW)),
+                  1, "active", "agent", NOW, NOW, slug)),  # SELECT file (12 cols)
     ])
     store = SharedFileStore(_DB(conn))  # type: ignore[arg-type]
     file = asyncio.run(store.publish(ORG, file_id))
     assert file["share_token"] == str(token)
+    assert file["slug"] == slug
     # The UPDATE should NOT call gen_random_uuid() when token already exists.
     update_sql = conn.calls[1][0]
     assert "gen_random_uuid()" not in update_sql
