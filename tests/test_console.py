@@ -611,7 +611,8 @@ def test_projects_page_renders(monkeypatch: pytest.MonkeyPatch) -> None:
         assert resp.status_code == 200
         assert "Q3 Launch" in resp.text
         assert "/app/work?project=p1" in resp.text
-        assert "Create project" in resp.text
+        assert "Create project" not in resp.text
+        assert 'name="name"' not in resp.text
     finally:
         clear_state()
 
