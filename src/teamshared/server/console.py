@@ -2265,6 +2265,31 @@ def register_console_routes(
             return RedirectResponse(f"/app/files/{file_id}?flash=error", status_code=303)
         return RedirectResponse("/app/files?flash=archived", status_code=303)
 
+    async def file_version_delete_post(request: Request) -> Response:
+        principal = _session(request)
+        if principal is None:
+            return _redirect_login()
+        form, deny = await _verified_form(request)
+        if deny:
+            return deny
+        file_id = str(request.path_params["file_id"])
+        try:
+            version = int(request.path_params["version"])
+        except (KeyError, ValueError, TypeError):
+            return RedirectResponse(f"/app/files/{file_id}?flash=error", status_code=303)
+        try:
+            result = await get_state().facade.file_version_delete(
+                principal, file_id=file_id, version=version
+            )
+        except Exception as exc:
+            log.warning("file_version_delete_failed", error=str(exc))
+            return RedirectResponse(f"/app/files/{file_id}?flash=error", status_code=303)
+        if not result.get("deleted"):
+            reason = result.get("reason", "not_found")
+            flash = "only_version" if reason == "only_version" else "error"
+            return RedirectResponse(f"/app/files/{file_id}?flash={flash}", status_code=303)
+        return RedirectResponse(f"/app/files/{file_id}?flash=version_deleted", status_code=303)
+
     def _placeholder(active: str, title: str) -> Any:
         async def handler(request: Request) -> Response:
             principal = _session(request)
@@ -2306,6 +2331,7 @@ def register_console_routes(
         Route("/app/files/{file_id}/publish", file_publish_post, methods=["POST"]),
         Route("/app/files/{file_id}/unpublish", file_unpublish_post, methods=["POST"]),
         Route("/app/files/{file_id}/archive", file_archive_post, methods=["POST"]),
+        Route("/app/files/{file_id}/versions/{version}/delete", file_version_delete_post, methods=["POST"]),
         Route("/app/work", work_page, methods=["GET"]),
         Route("/app/work/new", work_new, methods=["GET"]),
         Route("/app/work/save", work_save, methods=["POST"]),

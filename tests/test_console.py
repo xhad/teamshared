@@ -1722,6 +1722,41 @@ def test_file_archive_redirects_to_list() -> None:
     clear_state()
 
 
+def test_file_version_delete_redirects_to_detail() -> None:
+    client, _ = _build()
+    facade = MagicMock()
+    facade.file_version_delete = AsyncMock(return_value={
+        "file_id": "p1", "version": 2, "deleted": True,
+        "current_version_changed": True, "file": {"id": "p1"},
+    })
+    state = _fake_state()
+    state.facade = facade
+    set_state(state)
+    _login(client)
+    resp = _app_post(client, "/app/files/p1/versions/2/delete")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/files/p1?flash=version_deleted"
+    facade.file_version_delete.assert_awaited_once()
+    assert facade.file_version_delete.await_args.kwargs["version"] == 2
+    clear_state()
+
+
+def test_file_version_delete_only_version_redirects_with_flash() -> None:
+    client, _ = _build()
+    facade = MagicMock()
+    facade.file_version_delete = AsyncMock(return_value={
+        "file_id": "p1", "version": 1, "deleted": False, "reason": "only_version",
+    })
+    state = _fake_state()
+    state.facade = facade
+    set_state(state)
+    _login(client)
+    resp = _app_post(client, "/app/files/p1/versions/1/delete")
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/app/files/p1?flash=only_version"
+    clear_state()
+
+
 def test_files_unauthenticated_redirects_to_login() -> None:
     client, _ = _build()
     resp = client.get("/app/files")

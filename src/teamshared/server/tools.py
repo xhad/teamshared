@@ -2349,6 +2349,26 @@ def register_tools(mcp: Any) -> None:
         principal = await _principal()
         return await state.facade.file_archive(principal, file_id=file_id)
 
+    @mcp.tool()
+    async def file_version_delete(
+        file_id: Annotated[str, Field(description="File UUID the version belongs to")],
+        version: Annotated[int, Field(description="Version number to delete", ge=1)],
+    ) -> dict[str, Any]:
+        """Delete a single version of a shared file (destructive, irreversible).
+
+        Refuses to delete the only remaining version. If the deleted version was
+        the current (latest) one, ``current_version`` is bumped back to the new
+        max and -- when the file is published -- the bucket mirror is re-published
+        to that new current version so the public ``/s/{slug}`` route stays
+        consistent. Returns ``deleted``, ``current_version_changed``, and the
+        updated ``file``.
+        """
+        state = get_state()
+        principal = await _principal()
+        return await state.facade.file_version_delete(
+            principal, file_id=file_id, version=version
+        )
+
 
 def _resolve_dependency_ids(
     *,

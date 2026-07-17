@@ -255,3 +255,66 @@ def test_unpublish_flips_visibility_back_to_private() -> None:
     assert file["visibility"] == "private"
     # Token is retained for audit.
     assert file["share_token"] == str(token)
+
+
+def test_delete_version_removes_row_and_keeps_current_when_not_latest() -> None:
+    file_id = uuid.uuid4()
+    conn = _Conn([
+        _Cur(one=(file_id, 3)),               # SELECT id, current_version (active)
+        _Cur(one=(3,)),                        # SELECT COUNT(*) -> 3 versions
+        _Cur(rowcount=1),                      # DELETE v2 (not current)
+        # current_version (3) != deleted (2), so no bump / no re-select of max
+        _Cur(one=(file_id, ORG, "Q3 file", "markdown", "private", None,
+                  3, "active", "agent", NOW, NOW, None)),  # SELECT file
+    ])
+    store = SharedFileStore(_DB(conn))  # type: ignore[arg-type]
+    result = asyncio.run(store.delete_version(ORG, file_id, 2))
+    assert result["deleted"] is True
+    assert result["current_version_changed"] is False
+    assert result["file"]["current_version"] == 3
+    delete_sql, params = conn.calls[2]
+    assert "DELETE FROM shared_file_versions" in delete_sql
+    assert params == (str(file_id), 2)
+
+
+def test_delete_current_version_bumps_current_to_new_max() -> None:
+    file_id = uuid.uuid4()
+    conn = _Conn([
+        _Cur(one=(file_id, 3)),               # SELECT id, current_version (active, current=3)
+        _Cur(one=(3,)),                        # SELECT COUNT(*) -> 3 versions
+        _Cur(rowcount=1),                      # DELETE v3 (== current)
+        _Cur(one=(2,)),                        # SELECT MAX(version) -> 2
+        _Cur(rowcount=1),                      # UPDATE current_version = 2
+        _Cur(one=(file_id, ORG, "Q3 file", "markdown", "private", None,
+                  2, "active", "agent", NOW, NOW, None)),  # SELECT file
+    ])
+    store = SharedFileStore(_DB(conn))  # type: ignore[arg-type]
+    result = asyncio.run(store.delete_version(ORG, file_id, 3))
+    assert result["deleted"] is True
+    assert result["current_version_changed"] is True
+    assert result["file"]["current_version"] == 2
+    update_sql = conn.calls[4][0]
+    assert "current_version = %s" in update_sql
+
+
+def test_delete_version_refuses_only_remaining_version() -> None:
+    file_id = uuid.uuid4()
+    conn = _Conn([
+        _Cur(one=(file_id, 1)),               # SELECT id, current_version (active)
+        _Cur(one=(1,)),                        # SELECT COUNT(*) -> 1 version
+        # refused: no DELETE, no SELECT file
+    ])
+    store = SharedFileStore(_DB(conn))  # type: ignore[arg-type]
+    result = asyncio.run(store.delete_version(ORG, file_id, 1))
+    assert result["deleted"] is False
+    assert result["reason"] == "only_version"
+    # No DELETE statement was issued.
+    assert not any("DELETE FROM" in c[0] for c in conn.calls)
+
+
+def test_delete_version_missing_file_returns_not_found() -> None:
+    conn = _Conn([_Cur(one=None)])  # SELECT id, current_version -> none
+    store = SharedFileStore(_DB(conn))  # type: ignore[arg-type]
+    result = asyncio.run(store.delete_version(ORG, uuid.uuid4(), 2))
+    assert result["deleted"] is False
+    assert result["reason"] == "not_found"

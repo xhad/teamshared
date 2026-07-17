@@ -219,6 +219,9 @@ _CATALOG: list[dict[str, Any]] = [
     {"name": "file_archive", "tier": "extended", "group": "files",
      "summary": "Archive a shared file (retained with history) and clean up its bucket mirror",
      "example": {"file_id": "<uuid>"}},
+    {"name": "file_version_delete", "tier": "extended", "group": "files",
+     "summary": "Delete one version of a shared file (refuses the only version; re-mirrors bucket if current changed)",
+     "example": {"file_id": "<uuid>", "version": 2}},
 ]
 
 _TOOL_RECIPE_HELP = {

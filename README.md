@@ -230,6 +230,7 @@ See **[Context compression](docs/context-compression.md)** for how teamshared re
 | `file_publish`              | Publish a shared file: generate the public `/s/{token}` URL       |
 | `file_unpublish`            | Revoke public access (visibility back to private)             |
 | `file_archive`              | Archive a shared file (retained with history) + clean up bucket mirror |
+| `file_version_delete`       | Delete one version of a shared file (refuses the only version; re-mirrors bucket if current changed) |
 
 ## Integrations
 

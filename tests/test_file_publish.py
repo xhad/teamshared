@@ -255,3 +255,117 @@ def test_serialize_file_adds_public_url_from_slug() -> None:
     assert _serialize_file(private)["public_url"] is None
 
     assert _serialize_file(None) == {}
+
+
+# --- Facade file_version_delete: audit + bucket re-mirror on current change ---
+
+def _facade_for_delete(
+    *,
+    deleted: bool = True,
+    current_version_changed: bool = True,
+    visibility: str = "published",
+    share_token: str = "tok",
+    current_version: int = 2,
+) -> tuple[MemoryFacade, MagicMock]:
+    publisher = MagicMock()
+    publisher.publish_html = AsyncMock()
+
+    shared_files = MagicMock()
+    shared_files.delete_version = AsyncMock(return_value={
+        "deleted": deleted,
+        "current_version_changed": current_version_changed,
+        "reason": None if deleted else "only_version",
+        "file": {
+            "id": str(_FILE_ID),
+            "share_token": share_token,
+            "current_version": current_version,
+            "content_format": "html",
+            "visibility": visibility,
+            "status": "active",
+        },
+    })
+    # fresh fetch after a current-version change (for re-mirror)
+    shared_files.get = AsyncMock(return_value={
+        "id": str(_FILE_ID),
+        "share_token": share_token,
+        "version": current_version,
+        "current_version": current_version,
+        "content": "<h1>newer</h1>",
+        "content_format": "html",
+        "visibility": visibility,
+        "status": "active",
+    })
+
+    audit = MagicMock()
+    audit.record = AsyncMock()
+    services = MagicMock()
+    auth_ctx = MagicMock()
+    auth_ctx.require = AsyncMock()
+    services.authorizer = MagicMock(return_value=auth_ctx)
+    services.audit = audit
+    services.shared_files = shared_files
+    services.file_publisher = publisher
+
+    facade = MemoryFacade(
+        services=services,
+        resolver=MagicMock(),
+        working=MagicMock(),
+        agent_state=MagicMock(),
+        procedural=MagicMock(),
+        skills=MagicMock(),
+        strategic=MagicMock(),
+        graph=None,
+    )
+    return facade, publisher
+
+
+async def test_file_version_delete_remirrors_bucket_when_current_changed_and_published() -> None:
+    facade, publisher = _facade_for_delete(
+        deleted=True, current_version_changed=True, visibility="published"
+    )
+    out = await facade.file_version_delete(_principal(), file_id=str(_FILE_ID), version=2)
+    assert out["deleted"] is True
+    assert out["current_version_changed"] is True
+    # Re-mirror: publish_html called with the fresh current version's content.
+    publisher.publish_html.assert_awaited_once()
+    args = publisher.publish_html.await_args.args
+    assert args[0] == "tok"            # share token
+    assert args[1] == 2               # new current version
+    assert args[2] == "<h1>newer</h1>"  # verbatim html content
+
+
+async def test_file_version_delete_skips_remirror_when_current_unchanged() -> None:
+    facade, publisher = _facade_for_delete(
+        deleted=True, current_version_changed=False, visibility="published"
+    )
+    await facade.file_version_delete(_principal(), file_id=str(_FILE_ID), version=1)
+    publisher.publish_html.assert_not_awaited()
+
+
+async def test_file_version_delete_skips_remirror_when_private() -> None:
+    facade, publisher = _facade_for_delete(
+        deleted=True, current_version_changed=True, visibility="private"
+    )
+    await facade.file_version_delete(_principal(), file_id=str(_FILE_ID), version=2)
+    publisher.publish_html.assert_not_awaited()
+
+
+async def test_file_version_delete_refused_returns_not_deleted_and_no_audit() -> None:
+    facade, publisher = _facade_for_delete(
+        deleted=False, current_version_changed=False
+    )
+    out = await facade.file_version_delete(_principal(), file_id=str(_FILE_ID), version=1)
+    assert out["deleted"] is False
+    assert out["reason"] == "only_version"
+    facade.services.audit.record.assert_not_awaited()
+    publisher.publish_html.assert_not_awaited()
+
+
+async def test_file_version_delete_audit_uses_target_id_and_action() -> None:
+    facade, _ = _facade_for_delete(deleted=True, current_version_changed=False)
+    await facade.file_version_delete(_principal(), file_id=str(_FILE_ID), version=2)
+    kwargs = facade.services.audit.record.await_args.kwargs
+    assert kwargs["action"] == "file.version_delete"
+    assert kwargs["target_id"] == f"{_FILE_ID}#2"
+    assert kwargs["resource_type"] == "file_version"
+    assert "resource_id" not in kwargs

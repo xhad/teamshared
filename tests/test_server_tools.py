@@ -219,6 +219,11 @@ def mcp_with_mocks() -> tuple[FastMCP, ServerState]:
         return_value={"id": "p1", "visibility": "private"}
     )
     facade.file_archive = AsyncMock(return_value={"file_id": "p1", "archived": True})
+    facade.file_version_delete = AsyncMock(return_value={
+        "file_id": "p1", "version": 2, "deleted": True,
+        "current_version_changed": True,
+        "file": {"id": "p1", "current_version": 1},
+    })
 
     settings = MagicMock()
     settings.embed_provider = "openai"
@@ -925,6 +930,18 @@ async def test_file_archive_delegates_to_facade(
     assert data["archived"] is True
     state.facade.file_archive.assert_awaited_once()
     assert state.facade.file_archive.await_args.kwargs["file_id"] == "p1"
+
+
+async def test_file_version_delete_delegates_to_facade(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    data = await _call(mcp, "file_version_delete", file_id="p1", version=2)
+    assert data["deleted"] is True
+    assert data["current_version_changed"] is True
+    state.facade.file_version_delete.assert_awaited_once()
+    assert state.facade.file_version_delete.await_args.kwargs["file_id"] == "p1"
+    assert state.facade.file_version_delete.await_args.kwargs["version"] == 2
 
 
 async def test_file_list_delegates_to_facade(

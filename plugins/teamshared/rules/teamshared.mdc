@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.11.4
+version: 1.11.5
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.11.4 -->
+<!-- teamshared-rule-version: 1.11.5 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -184,6 +184,7 @@ substring and each returned file includes a ready-to-use `public_url` (the
 | Publish / get the public URL | `file_publish(file_id)` → `slug`, `share_token`, `public_url` (`/s/{slug}`) |
 | Revoke public access | `file_unpublish(file_id)` |
 | Archive (retain history) | `file_archive(file_id)` |
+| Delete one version | `file_version_delete(file_id, version)` — refuses the only remaining version; if the deleted version was current, bumps `current_version` back to the new max and re-mirrors the bucket (when published) |
 
 `content_format` is `'markdown'` (rendered through the allowlist sanitizer) or
 `'html'`. **Interactive HTML tools** (charts, sliders, simulations) render
@@ -696,7 +697,7 @@ inbox/channel questions; use `memory_recall` for already-ingested
 
 Connecting accounts is a human console action (`/app/connections`), not an MCP tool.
 
-### `file_create` / `file_upload_request` / `file_update` / `file_get` / `file_list` / `file_publish` / `file_unpublish` / `file_archive`
+### `file_create` / `file_upload_request` / `file_update` / `file_get` / `file_list` / `file_publish` / `file_unpublish` / `file_archive` / `file_version_delete`
 
 Versioned HTML/Markdown shared files stored canonically in Postgres (append-only
 `shared_file_versions`) and mirrored eagerly to an S3-compatible bucket on
@@ -714,6 +715,7 @@ the public `/s/{slug}` URL (UUID `/s/{share_token}` still works as fallback).
 | `file_publish` | Stamp `share_token` + `slug`, flip to published, mirror to bucket; idempotent; returns `public_url` |
 | `file_unpublish` | Visibility back to private (token retained for audit; bucket cleaned) |
 | `file_archive` | Exclude from active lists + public route; retain full history for audit |
+| `file_version_delete` | Delete one version row (destructive). Refuses the only remaining version. If the deleted version was current, bumps `current_version` to the new max and re-mirrors the bucket when published |
 
 | Param | Use |
 |---|---|
@@ -771,6 +773,7 @@ public but gated by that token (no bearer required).
 | Find a shared file's public URL | `file_list(query="<title>")` → `public_url` |
 | Publish a shared file (public URL) | `file_publish` |
 | Archive a shared file (retain history) | `file_archive` |
+| Delete one version of a shared file | `file_version_delete(file_id, version)` |
 
 ## Never
 

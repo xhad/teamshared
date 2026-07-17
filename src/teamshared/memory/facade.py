@@ -2546,6 +2546,46 @@ class MemoryFacade:
                 log.warning("file_bucket_archive_failed", error=str(exc))
         return {"file_id": file_id, "archived": True}
 
+    async def file_version_delete(
+        self, principal: Principal, *, file_id: str, version: int
+    ) -> dict[str, Any]:
+        """Delete a single version row of a shared file.
+
+        Destructive and irreversible. The store refuses to delete the only
+        remaining version. If the deleted version was the current one,
+        ``current_version`` is bumped back to the new max and -- when the file
+        is published -- the bucket mirror is re-published to that new current
+        version so the public ``/s/{slug}`` route stays consistent.
+        """
+        caller_ctx = self._ctx(principal)
+        await caller_ctx.authorizer.require(principal, Permissions.MEMORY_DELETE)
+        result = await self.services.shared_files.delete_version(
+            principal.org_id, UUID(file_id), version
+        )
+        if not result.get("deleted"):
+            return {"file_id": file_id, "version": version, "deleted": False,
+                    "reason": result.get("reason") or "not_found"}
+        await self.services.audit.record(
+            agent=principal.attribution,
+            action="file.version_delete",
+            org_id=principal.org_id,
+            actor_type=principal.type,
+            actor_id=principal.id,
+            resource_type="file_version",
+            target_id=f"{file_id}#{version}",
+            request_id=caller_ctx.request_id,
+        )
+        file_row = result.get("file") or {}
+        if result.get("current_version_changed") and file_row.get("visibility") == "published":
+            fresh = await self.services.shared_files.get(principal.org_id, UUID(file_id))
+            if fresh:
+                await self._publish_to_bucket(
+                    fresh, fresh.get("content", ""), fresh.get("content_format", "markdown")
+                )
+        return {"file_id": file_id, "version": version, "deleted": True,
+                "current_version_changed": bool(result.get("current_version_changed")),
+                "file": _serialize_file(file_row)}
+
     async def _publish_to_bucket(
         self, file_row: dict[str, Any], content: str, content_format: str
     ) -> None:

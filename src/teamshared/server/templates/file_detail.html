@@ -9,6 +9,8 @@
     {% if flash == 'created' %}<div class="flash-ok">File created.</div>{% endif %}
     {% if flash == 'published' %}<div class="flash-ok">File published. Public URL: <a href="/s/{{ file.share_token }}">/s/{{ file.share_token }}</a></div>{% endif %}
     {% if flash == 'unpublished' %}<div class="flash-ok">File unpublished (no longer public).</div>{% endif %}
+    {% if flash == 'version_deleted' %}<div class="flash-ok">Version deleted.</div>{% endif %}
+    {% if flash == 'only_version' %}<div class="unavailable">Can't delete the only remaining version. Archive the file instead.</div>{% endif %}
     {% if flash == 'error' %}<div class="unavailable">Could not complete that action. Please try again.</div>{% endif %}
     {% if note %}<div class="unavailable">{{ note }}</div>{% endif %}
 
@@ -55,6 +57,12 @@
           <strong>v{{ v.version }}</strong>
           &middot; {{ v.author_label or 'unknown' }}
           &middot; {{ dt(v.created_at) }}
+          <form method="post" action="/app/files/{{ file.id }}/versions/{{ v.version }}/delete"
+                style="display:inline; margin-left: .5rem;"
+                onsubmit="return confirm('Delete version {{ v.version }}? This cannot be undone.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
+            <button type="submit" class="ghost" style="font-size: .8rem; padding: .15rem .4rem;">Delete</button>
+          </form>
         </li>
         {% endfor %}
       </ul>

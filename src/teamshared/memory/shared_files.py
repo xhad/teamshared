@@ -298,6 +298,69 @@ class SharedFileStore:
             changed = cur.rowcount > 0
         return changed
 
+    async def delete_version(
+        self, org_id: UUID, file_id: UUID, version: int
+    ) -> dict[str, Any]:
+        """Delete one version row of a shared file.
+
+        Refuses to delete the only remaining version (a file must always have at
+        least one version). If the deleted version was the current (latest) one,
+        ``current_version`` is bumped back to the new MAX(version) among the
+        remaining rows. Returns ``{"deleted", "current_version_changed", "file",
+        "reason"}`` where ``file`` is the updated file row (without content).
+        """
+        async with self.db.org(org_id) as conn:
+            cur = await conn.execute(
+                "SELECT id, current_version FROM shared_files "
+                "WHERE id = %s AND status = 'active'",
+                (str(file_id),),
+            )
+            prow = await cur.fetchone()
+            if prow is None:
+                return {"deleted": False, "current_version_changed": False,
+                        "file": None, "reason": "not_found"}
+            current_version = int(prow[1])
+
+            cur = await conn.execute(
+                "SELECT COUNT(*) FROM shared_file_versions WHERE file_id = %s",
+                (str(file_id),),
+            )
+            count_row = await cur.fetchone()
+            remaining = int(count_row[0]) if count_row else 0
+            if remaining <= 1:
+                return {"deleted": False, "current_version_changed": False,
+                        "file": None, "reason": "only_version"}
+
+            cur = await conn.execute(
+                "DELETE FROM shared_file_versions WHERE file_id = %s AND version = %s",
+                (str(file_id), version),
+            )
+            deleted = cur.rowcount > 0
+            current_version_changed = False
+            if deleted and version == current_version:
+                cur = await conn.execute(
+                    "SELECT COALESCE(MAX(version), 1) FROM shared_file_versions "
+                    "WHERE file_id = %s",
+                    (str(file_id),),
+                )
+                max_row = await cur.fetchone()
+                new_max = int(max_row[0]) if max_row else 1
+                await conn.execute(
+                    "UPDATE shared_files SET current_version = %s, updated_at = now() "
+                    "WHERE id = %s",
+                    (new_max, str(file_id)),
+                )
+                current_version_changed = True
+
+            cur = await conn.execute(
+                f"SELECT {_FILE_SELECT} FROM shared_files WHERE id = %s",
+                (str(file_id),),
+            )
+            prow = await cur.fetchone()
+        file = _file_row(prow) if prow else None
+        return {"deleted": deleted, "current_version_changed": current_version_changed,
+                "file": file, "reason": None if deleted else "version_not_found"}
+
     # --- public read path (SECURITY DEFINER, no org context) -------------
 
     async def get_published_by_token(
