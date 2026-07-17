@@ -220,7 +220,7 @@ async def handle_shared_file_upload(request: Request, services: Any) -> JSONResp
             actor_type=grant.get("principal_type") or "agent",
             actor_id=grant.get("principal_id") or "00000000-0000-0000-0000-000000000000",
             resource_type="file",
-            resource_id=str(file.get("id")),
+            target_id=str(file.get("id")),
         )
     except Exception as exc:  # pragma: no cover - audit best-effort
         log.warning("file_upload_audit_failed", error=str(exc))

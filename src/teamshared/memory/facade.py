@@ -2315,7 +2315,7 @@ class MemoryFacade:
             actor_type=writer.type,
             actor_id=writer.id,
             resource_type="file",
-            resource_id=str(row["id"]),
+            target_id=str(row["id"]),
             request_id=caller_ctx.request_id,
         )
         return _serialize_file(row)
@@ -2422,7 +2422,7 @@ class MemoryFacade:
             actor_type=writer.type,
             actor_id=writer.id,
             resource_type="file",
-            resource_id=file_id,
+            target_id=file_id,
             request_id=caller_ctx.request_id,
             payload={"version": row.get("version")},
         )
@@ -2464,7 +2464,7 @@ class MemoryFacade:
             actor_type=principal.type,
             actor_id=principal.id,
             resource_type="file",
-            resource_id=file_id,
+            target_id=file_id,
             request_id=caller_ctx.request_id,
             payload={"share_token": row.get("share_token")},
         )
@@ -2507,7 +2507,7 @@ class MemoryFacade:
             actor_type=principal.type,
             actor_id=principal.id,
             resource_type="file",
-            resource_id=file_id,
+            target_id=file_id,
             request_id=caller_ctx.request_id,
         )
         publisher = self.services.file_publisher
@@ -2535,7 +2535,7 @@ class MemoryFacade:
             actor_type=principal.type,
             actor_id=principal.id,
             resource_type="file",
-            resource_id=file_id,
+            target_id=file_id,
             request_id=caller_ctx.request_id,
         )
         publisher = self.services.file_publisher

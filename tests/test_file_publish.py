@@ -212,6 +212,17 @@ async def test_file_publish_mirrors_raw_html_verbatim() -> None:
     assert out["public_url_direct"] == "https://files.example.test/tok/index.html"
 
 
+async def test_file_publish_audit_uses_target_id_not_resource_id() -> None:
+    facade, _ = _facade_for_publish(content="<h1>x</h1>", content_format="html")
+    await facade.file_publish(_principal(), file_id=str(_FILE_ID))
+    kwargs = facade.services.audit.record.await_args.kwargs
+    # AuditLog.record() accepts `target_id`, not `resource_id` — passing the
+    # latter raises "unexpected keyword argument 'resource_id'".
+    assert "resource_id" not in kwargs
+    assert kwargs["target_id"] == str(_FILE_ID)
+    assert kwargs["action"] == "file.publish"
+
+
 async def test_file_publish_mirrors_markdown_as_sanitized_html() -> None:
     md = "# Title\n\n[link](javascript:alert(1))\n\n<iframe>x</iframe>"
     facade, publisher = _facade_for_publish(content=md, content_format="markdown")
