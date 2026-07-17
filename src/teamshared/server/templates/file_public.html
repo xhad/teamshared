@@ -59,15 +59,28 @@
     .file-version-toggle { display: none; }
 
     @media (max-width: 768px) {
-      .file-sidebar { position: static; width: 100%; height: auto; max-height: none; }
+      /* Compact sticky top bar instead of a tall dark block. */
+      .file-sidebar {
+        position: sticky; top: 0; width: 100%; height: auto; max-height: none;
+        padding: .5rem .75rem;
+        border-right: 0; border-bottom: 1px solid #1f2a37;
+        z-index: 30;
+      }
+      .file-sidebar .file-brand { margin-bottom: .2rem; }
+      .file-sidebar .file-brand .brand-mark { width: 1.1rem; height: 1.1rem; }
+      .file-sidebar .file-brand span { font-size: .85rem; }
+      .file-sidebar h1 { font-size: .95rem; margin: 0 0 .1rem; line-height: 1.2; }
+      .file-sidebar .file-meta { font-size: .72rem; margin-bottom: .35rem; }
+      .file-sidebar h3 { margin: .25rem 0 .35rem; }
       .file-content { margin-left: 0; }
+      .file-content .file-html { padding: 1.25rem 1rem 3rem; }
       .file-version-toggle {
         display: inline-flex; align-items: center; gap: .35rem;
         background: #1f2a37; border: 1px solid #334155; color: #e5e7eb;
-        border-radius: .375rem; padding: .4rem .6rem; font-size: .85rem;
-        cursor: pointer; margin: .5rem 1rem;
+        border-radius: .375rem; padding: .3rem .5rem; font-size: .78rem;
+        cursor: pointer; margin: 0 0 .25rem;
       }
-      .file-versions { display: none; }
+      .file-versions { display: none; margin: .25rem 0 .5rem; }
       .file-versions.is-open { display: block; }
     }
   </style>
