@@ -897,6 +897,21 @@ async def test_file_upload_request_delegates_to_facade(
     assert kwargs["title"] == "Vault modeller"
     assert kwargs["filename"] == "modeller.html"
     assert kwargs["publish"] is True
+    assert kwargs["file_id"] is None  # create mode by default
+
+
+async def test_file_upload_request_update_mode_passes_file_id(
+    mcp_with_mocks: tuple[FastMCP, ServerState],
+) -> None:
+    mcp, state = mcp_with_mocks
+    await _call(
+        mcp, "file_upload_request",
+        title="ignored", content_format="html", filename="plan.html",
+        publish=False, file_id="p1",
+    )
+    state.facade.file_upload_request.assert_awaited_once()
+    kwargs = state.facade.file_upload_request.await_args.kwargs
+    assert kwargs["file_id"] == "p1"
 
 
 async def test_file_update_delegates_to_facade(

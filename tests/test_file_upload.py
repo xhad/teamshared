@@ -243,3 +243,130 @@ def test_handle_upload_token_is_single_use() -> None:
                        headers={"x-upload-token": grant["token"], "content-type": "text/html"})
     r2 = asyncio.run(handle_shared_file_upload(req2, services))
     assert r2.status_code == 401
+
+
+# --- update mode: file_id in grant appends a new version to an existing file ---
+
+def _services_for_update(*, existing: dict[str, Any] | None = None,
+                        updated: dict[str, Any] | None = None,
+                        fresh: dict[str, Any] | None = None) -> MagicMock:
+    services, _ = _services_with_working()
+    shared_files = MagicMock()
+    shared_files.get = AsyncMock(return_value=fresh or {
+        "id": str(_FILE_ID), "title": "Existing", "content_format": "html",
+        "content": "<script>new</script>", "visibility": "published",
+        "share_token": "tok-share", "slug": "existing-file", "current_version": 2,
+    })
+    shared_files.update = AsyncMock(return_value=updated or {
+        "id": str(_FILE_ID), "title": "Existing", "version": 2,
+        "content_format": "html", "visibility": "published",
+        "share_token": "tok-share", "slug": "existing-file", "current_version": 2,
+    })
+    shared_files.publish = AsyncMock(return_value={
+        "id": str(_FILE_ID), "share_token": "tok-share", "slug": "existing-file",
+        "version": 2, "current_version": 2,
+    })
+    services.shared_files = shared_files
+    audit = MagicMock()
+    audit.record = AsyncMock()
+    services.audit = audit
+    services.file_publisher = None  # no bucket mirror unless a test sets one
+    return services
+
+
+def test_handle_upload_update_appends_version_and_audits() -> None:
+    services = _services_for_update()
+    grant = asyncio.run(mint_upload_grant(
+        services=services, org_id=_ORG, principal_id=_AGENT_ID, principal_type="agent",
+        principal_display="cursor", principal_attribution="cursor",
+        title="ignored in update", content_format="html", filename="plan.html",
+        publish=False, file_id=str(_FILE_ID),
+    ))
+    req = _FakeRequest(
+        token=grant["token"], body=b"<script>v2</script>",
+        headers={"x-upload-token": grant["token"], "x-filename": "plan.html",
+                 "content-type": "text/html; charset=utf-8"},
+    )
+    resp = asyncio.run(handle_shared_file_upload(req, services))
+    assert resp.status_code == 200
+    import json
+    payload = json.loads(resp.body)
+    assert payload["file_id"] == str(_FILE_ID)
+    assert payload["updated"] is True
+    assert payload["version"] == 2
+    # update path calls .update (not .create)
+    services.shared_files.update.assert_awaited_once()
+    services.shared_files.create.assert_not_called()
+    # audited as update_via_upload
+    services.audit.record.assert_awaited_once()
+    assert services.audit.record.await_args.kwargs["action"] == "file.update_via_upload"
+    assert services.audit.record.await_args.kwargs["target_id"] == str(_FILE_ID)
+
+
+def test_handle_upload_update_remirrors_bucket_when_published() -> None:
+    services = _services_for_update()
+    publisher = MagicMock()
+    publisher.publish_html = AsyncMock()
+    publisher.public_url = MagicMock(return_value="https://files.example.test/tok-share/index.html")
+    services.file_publisher = publisher
+
+    grant = asyncio.run(mint_upload_grant(
+        services=services, org_id=_ORG, principal_id=_AGENT_ID, principal_type="agent",
+        principal_display="cursor", principal_attribution="cursor",
+        title="x", content_format="html", filename="plan.html",
+        publish=False, file_id=str(_FILE_ID),
+    ))
+    req = _FakeRequest(
+        token=grant["token"], body=b"<script>v2</script>",
+        headers={"x-upload-token": grant["token"], "content-type": "text/html"},
+    )
+    resp = asyncio.run(handle_shared_file_upload(req, services))
+    assert resp.status_code == 200
+    import json
+    payload = json.loads(resp.body)
+    # published file -> public url + direct url returned, bucket re-mirrored
+    assert payload["public_url"] == "/s/existing-file"
+    assert payload["public_url_direct"] == "https://files.example.test/tok-share/index.html"
+    publisher.publish_html.assert_awaited_once()
+    # mirrored the new current version (2) with the fresh content
+    args = publisher.publish_html.await_args.args
+    assert args[0] == "tok-share"
+    assert args[1] == 2
+    assert args[2] == "<script>new</script>"
+
+
+def test_handle_upload_update_missing_file_returns_404() -> None:
+    services, _ = _services_with_working()
+    shared_files = MagicMock()
+    shared_files.get = AsyncMock(return_value=None)  # file not found / not active
+    services.shared_files = shared_files
+    services.audit = MagicMock()
+    services.audit.record = AsyncMock()
+
+    grant = asyncio.run(mint_upload_grant(
+        services=services, org_id=_ORG, principal_id=_AGENT_ID, principal_type="agent",
+        principal_display="cursor", principal_attribution="cursor",
+        title="x", content_format="html", filename="plan.html",
+        publish=False, file_id=str(_FILE_ID),
+    ))
+    req = _FakeRequest(
+        token=grant["token"], body=b"<p>x</p>",
+        headers={"x-upload-token": grant["token"], "content-type": "text/html"},
+    )
+    resp = asyncio.run(handle_shared_file_upload(req, services))
+    assert resp.status_code == 404
+    services.shared_files.update.assert_not_called()
+    services.audit.record.assert_not_called()
+
+
+def test_mint_upload_grant_stores_file_id_and_mode() -> None:
+    services, _ = _services_with_working()
+    grant = asyncio.run(mint_upload_grant(
+        services=services, org_id=_ORG, principal_id=_AGENT_ID, principal_type="agent",
+        principal_display="cursor", principal_attribution="cursor",
+        title="T", content_format="html", filename="x.html", publish=False,
+        file_id=str(_FILE_ID),
+    ))
+    popped = asyncio.run(services.working.pop_file_upload_grant(grant["token"]))
+    assert popped["file_id"] == str(_FILE_ID)
+    assert popped["mode"] == "update"

@@ -1,12 +1,12 @@
 ---
 description: Use the teamshared MCP server as persistent cross-session memory.
 alwaysApply: true
-version: 1.11.5
+version: 1.11.6
 ---
 
 # teamshared Memory Protocol
 
-<!-- teamshared-rule-version: 1.11.5 -->
+<!-- teamshared-rule-version: 1.11.6 -->
 
 The `teamshared` MCP server is your durable brain across sessions and repos.
 Bearer token sets write attribution; do not pass `agent` unless you intentionally
@@ -168,6 +168,15 @@ their machine, use `file_upload_request` (with `publish=true`) — it mints a
 one-time grant and returns a self-deleting uploader script. For inline content
 (small enough to pass through chat), use `file_create` then `file_publish`.
 
+**Pushing a new version of an already-shared file:** if the new content is
+small, use `file_update(file_id, content)`. If the file is large (a local HTML
+file that won't fit inline in chat JSON — the inline path caps out around
+~10–16 KB), use `file_upload_request(..., file_id=<existing file_id>)` in
+**update mode**: it mints a one-time grant scoped to that file, and the uploader
+script appends the uploaded body as a new version (title/slug/share_token are
+preserved; the bucket mirror is re-published to the new version when the file
+is already published). This is the supported way to push v2+ of a big file.
+
 **Finding an already-shared file's URL:** call
 `file_list(query="<title fragment>")` — it filters by case-insensitive title
 substring and each returned file includes a ready-to-use `public_url` (the
@@ -178,7 +187,8 @@ substring and each returned file includes a ready-to-use `public_url` (the
 |---|---|
 | Create a shared file | `file_create(title, content, content_format='markdown')` |
 | Upload a large local file into a shared file | `file_upload_request(title, content_format='auto', filename?, publish?)` → one-time script |
-| Append a new version | `file_update(file_id, content, content_format?)` |
+| Append a new version (inline, small) | `file_update(file_id, content, content_format?)` |
+| Append a new version (large local file) | `file_upload_request(title, content_format='auto', filename?, publish?, file_id=<existing>)` → one-time script (update mode) |
 | Fetch a shared file (latest version) | `file_get(file_id)` |
 | List / search active shared files | `file_list(limit=100, query?)` → each file has `public_url`, `slug`, `share_token` |
 | Publish / get the public URL | `file_publish(file_id)` → `slug`, `share_token`, `public_url` (`/s/{slug}`) |
@@ -708,7 +718,7 @@ the public `/s/{slug}` URL (UUID `/s/{share_token}` still works as fallback).
 | Tool | When |
 |---|---|
 | `file_create` | New shared file (version 1, private) — inline content (small) |
-| `file_upload_request` | Get a one-time local uploader script for a large local file → `POST /v1/files/upload` creates the shared file |
+| `file_upload_request` | Get a one-time local uploader script for a large local file → `POST /v1/files/upload` creates the shared file. Pass `file_id=` to append a new version to an existing file (update mode) |
 | `file_update` | Append a new version (version = prior max + 1); old versions immutable |
 | `file_get` | Fetch a shared file with its latest version content (includes `public_url`) |
 | `file_list` | Active shared files in the caller's org, newest update first; `query` filters by title substring; each row includes `public_url`, `slug`, `share_token` |

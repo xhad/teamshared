@@ -60,18 +60,25 @@ def sniff_content_format(filename: str | None, content_type: str | None, request
 
 
 def build_upload_script(
-    *, upload_url: str, upload_token: str, filename: str | None, publish: bool
+    *, upload_url: str, upload_token: str, filename: str | None, publish: bool,
+    is_update: bool = False,
 ) -> str:
     """Return a self-contained Python (stdlib-only) uploader script body.
 
     The script reads a local file and POSTs it to ``upload_url`` with the
     one-time ``upload_token``, prints the server response, and deletes itself
-    on success.
+    on success. ``is_update`` only changes the header comment (the server
+    decides create-vs-update from the grant, not the script).
     """
     fname_repr = repr(filename) if filename else "None"
     publish_flag = "true" if publish else "false"
+    purpose = "append a new version to an existing teamshared shared file" if is_update else "create a new teamshared shared file"
     return f"""#!/usr/bin/env python3
-\"\"\"One-time teamshared file uploader (auto-generated). Self-deletes on success.\"\"\"
+\"\"\"One-time teamshared file uploader (auto-generated). Self-deletes on success.
+
+Purpose: {purpose}. Reads a local file, POSTs it to teamshared with the embedded
+one-time token, prints the server response, and removes itself on success.
+\"\"\"
 import os, sys, urllib.request, urllib.error
 
 UPLOAD_URL = {upload_url!r}
@@ -141,9 +148,16 @@ async def mint_upload_grant(
     content_format: str,
     filename: str | None,
     publish: bool,
+    file_id: str | None = None,
     ttl: int = _GRANT_TTL_SECONDS,
 ) -> dict[str, Any]:
-    """Mint a single-use upload grant and return the token + ttl."""
+    """Mint a single-use upload grant and return the token + ttl.
+
+    When ``file_id`` is provided the grant is in **update mode**: the uploaded
+    body is appended as a new version to that existing shared file (instead of
+    creating a new file). The grant stores ``file_id`` so the stateless upload
+    handler knows which path to take.
+    """
     token = secrets.token_urlsafe(32)
     payload = {
         "org_id": str(org_id),
@@ -155,6 +169,8 @@ async def mint_upload_grant(
         "content_format": content_format,
         "filename": filename,
         "publish": bool(publish),
+        "file_id": file_id,
+        "mode": "update" if file_id else "create",
     }
     await services.working.set_file_upload_grant(token, payload, ttl=ttl)
     return {"token": token, "ttl": ttl}
@@ -199,6 +215,17 @@ async def handle_shared_file_upload(request: Request, services: Any) -> JSONResp
         return JSONResponse({"error": {"code": "bad_grant", "message": "grant is corrupt"}}, status_code=500)
 
     author_label = grant.get("principal_display") or grant.get("principal_attribution") or "agent"
+
+    file_id_str = grant.get("file_id")
+    if file_id_str:
+        return await _handle_upload_update(services, grant, org_id, file_id_str, content, fmt, author_label)
+    return await _handle_upload_create(services, grant, org_id, content, fmt, title, author_label)
+
+
+async def _handle_upload_create(
+    services: Any, grant: dict[str, Any], org_id: UUID, content: str, fmt: str,
+    title: str, author_label: str,
+) -> JSONResponse:
     try:
         file = await services.shared_files.create(
             org_id,
@@ -255,6 +282,80 @@ async def handle_shared_file_upload(request: Request, services: Any) -> JSONResp
             out["publish_error"] = str(exc)
 
     return JSONResponse(out, status_code=201)
+
+
+async def _handle_upload_update(
+    services: Any, grant: dict[str, Any], org_id: UUID, file_id_str: str,
+    content: str, fmt: str, author_label: str,
+) -> JSONResponse:
+    """Append the uploaded body as a new version to an existing shared file."""
+    try:
+        file_id = UUID(file_id_str)
+    except ValueError:
+        return JSONResponse({"error": {"code": "bad_grant", "message": "grant file_id is corrupt"}}, status_code=500)
+
+    # Verify the file exists + is active in this org (RLS-scoped read).
+    existing = await services.shared_files.get(org_id, file_id)
+    if not existing:
+        return JSONResponse(
+            {"error": {"code": "not_found", "message": "file not found or not active"}},
+            status_code=404,
+        )
+
+    try:
+        file = await services.shared_files.update(
+            org_id, file_id,
+            content=content,
+            content_format=fmt,
+            editor_label=author_label,
+        )
+    except Exception as exc:
+        log.warning("file_upload_update_failed", error=str(exc))
+        return JSONResponse({"error": {"code": "update_failed", "message": str(exc)}}, status_code=500)
+
+    try:
+        await services.audit.record(
+            agent=grant.get("principal_attribution") or author_label,
+            action="file.update_via_upload",
+            org_id=org_id,
+            actor_type=grant.get("principal_type") or "agent",
+            actor_id=grant.get("principal_id") or "00000000-0000-0000-0000-000000000000",
+            resource_type="file",
+            target_id=str(file.get("id")),
+        )
+    except Exception as exc:  # pragma: no cover - audit best-effort
+        log.warning("file_upload_audit_failed", error=str(exc))
+
+    out: dict[str, Any] = {
+        "file_id": str(file.get("id")),
+        "title": file.get("title"),
+        "content_format": fmt,
+        "version": file.get("version"),
+        "updated": True,
+    }
+
+    # Honor an explicit publish request (idempotent if already published).
+    if grant.get("publish"):
+        try:
+            await services.shared_files.publish(org_id, file_id)
+        except Exception as exc:
+            log.warning("file_upload_publish_failed", error=str(exc))
+
+    # Re-mirror the bucket to the new current version when the file is published.
+    fresh = await services.shared_files.get(org_id, file_id)
+    if fresh and fresh.get("visibility") == "published" and fresh.get("share_token"):
+        out["share_token"] = fresh.get("share_token")
+        out["slug"] = fresh.get("slug")
+        handle = fresh.get("slug") or fresh.get("share_token")
+        out["public_url"] = f"/s/{handle}" if handle else None
+        await _mirror_to_bucket(services, fresh, fresh)
+        publisher = getattr(services, "file_publisher", None)
+        if publisher:
+            direct = publisher.public_url(fresh["share_token"])
+            if direct:
+                out["public_url_direct"] = direct
+
+    return JSONResponse(out, status_code=200)
 
 
 async def _mirror_to_bucket(services: Any, row: dict[str, Any], latest: dict[str, Any]) -> None:

@@ -223,7 +223,7 @@ See **[Context compression](docs/context-compression.md)** for how teamshared re
 | `integration_read`          | Fetch one message/thread (also ingests it for future recall) |
 | `integration_send`          | Send an email or Slack message (audited + episodic)          |
 | `file_create`               | Create a versioned HTML/Markdown shared file (private by default) |
-| `file_upload_request`       | Get a one-time local uploader script to push a large local file into a shared file |
+| `file_upload_request`       | Get a one-time local uploader script to push a large local file into a shared file (create), or append a new version to an existing file (`file_id=`) |
 | `file_update`               | Append a new version to a shared file (immutable history)            |
 | `file_get`                  | Fetch a shared file with its latest version content                  |
 | `file_list`                 | List active shared files in the caller's org                         |

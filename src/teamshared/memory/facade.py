@@ -2329,6 +2329,7 @@ class MemoryFacade:
         filename: str | None = None,
         publish: bool = False,
         upload_base_url: str | None = None,
+        file_id: str | None = None,
         agent_override: str | None = None,
     ) -> dict[str, Any]:
         """Mint a one-time upload grant and return a self-deleting local script.
@@ -2338,6 +2339,12 @@ class MemoryFacade:
         ``/v1/files/upload`` with the one-time token; the handler creates the
         shared file (and optionally publishes it). This bypasses chat-JSON size
         limits for large local HTML/Markdown files.
+
+        When ``file_id`` is provided the upload is in **update mode**: the
+        uploaded body is appended as a new version to that existing shared file
+        (the title is ignored; the existing file's title/slug/share_token are
+        preserved). This is the supported way to push a new version of a large
+        file that doesn't fit inline in ``file_update``.
         """
         from teamshared.server.shared_files_upload import build_upload_script, mint_upload_grant
 
@@ -2346,7 +2353,11 @@ class MemoryFacade:
             principal, agent_override, operation="file_upload_request",
             request_id=caller_ctx.request_id,
         )
-        await caller_ctx.authorizer.require(writer, Permissions.MEMORY_CREATE)
+        # Update mode needs MEMORY_UPDATE (it mutates an existing file); create
+        # mode needs MEMORY_CREATE. The grant authorized the operation at mint
+        # time, so the stateless upload handler doesn't re-check.
+        permission = Permissions.MEMORY_UPDATE if file_id else Permissions.MEMORY_CREATE
+        await caller_ctx.authorizer.require(writer, permission)
         grant = await mint_upload_grant(
             services=self.services,
             org_id=principal.org_id,
@@ -2358,6 +2369,7 @@ class MemoryFacade:
             content_format=content_format,
             filename=filename,
             publish=publish,
+            file_id=file_id,
         )
         await self.services.audit.record(
             agent=writer.attribution,
@@ -2367,7 +2379,11 @@ class MemoryFacade:
             actor_id=writer.id,
             resource_type="file",
             request_id=caller_ctx.request_id,
-            payload={"publish": bool(publish), "filename": filename},
+            payload={
+                "publish": bool(publish), "filename": filename,
+                "mode": "update" if file_id else "create",
+                "file_id": file_id,
+            },
         )
         base = (upload_base_url or "").rstrip("/")
         upload_url = f"{base}/v1/files/upload" if base else "/v1/files/upload"
@@ -2376,6 +2392,7 @@ class MemoryFacade:
             upload_token=grant["token"],
             filename=filename,
             publish=publish,
+            is_update=bool(file_id),
         )
         return {
             "upload_url": upload_url,
@@ -2383,11 +2400,14 @@ class MemoryFacade:
             "expires_in_seconds": grant["ttl"],
             "content_format": content_format,
             "publish": bool(publish),
+            "mode": "update" if file_id else "create",
+            "file_id": file_id,
             "script": script,
             "instructions": (
                 "Save the script to a file (e.g. upload.py), then run: "
                 "python3 upload.py /path/to/your/file.html  — it POSTs the file "
                 "to teamshared and self-deletes on success."
+                + (" (This appends a new version to the existing file.)" if file_id else "")
             ),
         }
 

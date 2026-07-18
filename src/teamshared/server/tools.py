@@ -2215,7 +2215,7 @@ def register_tools(mcp: Any) -> None:
 
     @mcp.tool()
     async def file_upload_request(
-        title: Annotated[str, Field(description="File title for the uploaded file")],
+        title: Annotated[str, Field(description="File title (used only when creating a new file; ignored in update mode)")],
         content_format: Annotated[
             str,
             Field(description="'html', 'markdown', or 'auto' (sniff from the file extension)"),
@@ -2225,8 +2225,12 @@ def register_tools(mcp: Any) -> None:
             Field(description="Optional filename (used for format sniffing and as the script's default path)"),
         ] = None,
         publish: Annotated[
-            bool, Field(description="If true, the uploaded file is published immediately (returns public URLs)")
+            bool, Field(description="If true, the file is published immediately (returns public URLs). In update mode this is idempotent if already published.")
         ] = False,
+        file_id: Annotated[
+            str | None,
+            Field(description="Existing file UUID to append a new version to (update mode). Omit to create a new file."),
+        ] = None,
         upload_base_url: Annotated[
             str | None,
             Field(description="Optional server origin (e.g. https://teamshared.com). Defaults to settings.public_url."),
@@ -2236,12 +2240,18 @@ def register_tools(mcp: Any) -> None:
         """Get a one-time uploader script to push a local file into a shared file.
 
         For large local HTML/Markdown files that don't fit inline in
-        ``file_create``. Returns ``upload_url``, ``upload_token``, an
+        ``file_create``/``file_update``. Returns ``upload_url``, ``upload_token``, an
         ``expires_in_seconds`` TTL, and a self-deleting Python ``script``.
         Save the script to disk and run ``python3 upload.py /path/to/file``;
         it reads the file, POSTs it to the server with the one-time token,
         prints the resulting file id (and public URL if ``publish=true``), and
         deletes itself on success. The token is single-use and expires in ~10 min.
+
+        **Update mode:** pass ``file_id`` to append the uploaded body as a new
+        version to an existing shared file (the title is ignored; the existing
+        file's title/slug/share_token are preserved, and the bucket mirror is
+        re-published to the new version when the file is already published).
+        This is the supported way to push a new version of a large file.
         """
         state = get_state()
         principal = await _principal()
@@ -2253,6 +2263,7 @@ def register_tools(mcp: Any) -> None:
             filename=filename,
             publish=publish,
             upload_base_url=base,
+            file_id=file_id,
             agent_override=agent,
         )
 
